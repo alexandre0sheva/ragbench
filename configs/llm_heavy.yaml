@@ -1,0 +1,35 @@
+run:
+  name: llm_heavy_demo
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: llm_heavy
+    name: llm_heavy_default
+    chunker:
+      type: token
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: chroma
+      top_k: 5
+      per_query_top_k: 10
+      reranker: local_relevance
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-5.4-mini
+    llm_features:
+      enable_llm_ingestion: false
+      enable_query_rewrite: true
+      enable_llm_rerank: false
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: gpt-5.4-nano
+  max_questions: null
+  max_workers: 4

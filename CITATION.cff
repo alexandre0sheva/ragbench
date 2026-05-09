@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use RAGBench in research or applied evaluation work, please cite it using this metadata."
+title: "RAGBench: Evaluation-first RAG Benchmark Framework"
+version: "0.1.0"
+date-released: "2026-04-27"
+license: MIT
+authors:
+  - name: "RAGBench Contributors"
+repository-code: "https://github.com/alexandre0sheva/ragbench"
+

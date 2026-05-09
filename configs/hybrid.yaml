@@ -1,0 +1,34 @@
+run:
+  name: hybrid_demo
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: hybrid
+    name: hybrid_default
+    chunker:
+      type: token
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: chroma
+      bm25_top_k: 20
+      vector_top_k: 20
+      final_top_k: 5
+      rrf_k: 60
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-5.4-nano
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: gpt-5.4-nano
+  max_questions: null
+  max_workers: 4
