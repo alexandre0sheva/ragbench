@@ -14,16 +14,32 @@ import yaml
 from ragbench.config.loader import load_config, load_config_dict
 from ragbench.config.schema import ExperimentConfig, SystemConfig
 from ragbench.datasets.loader import load_dataset
+from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import load_documents
 from ragbench.evaluation.answer_judge import AnswerJudge
 from ragbench.evaluation.failure_analysis import classify_failure
 from ragbench.evaluation.retrieval_metrics import compute_retrieval_metrics
+from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.rag_systems import create_rag_system
 from ragbench.rag_systems.base import BaseRAGSystem
 from ragbench.reporting.html_report import write_html_report
 from ragbench.reporting.markdown_report import write_failures, write_leaderboard, write_qrels_audit
 from ragbench.utils.jsonl import write_jsonl
 from ragbench.utils.text import truncate, unique_preserve_order
+
+
+class ProgressListener:
+    """No-op progress hooks; the CLI subclasses this to drive a live display."""
+
+    def run_started(self, num_systems: int, num_questions: int) -> None: ...
+
+    def system_started(self, name: str, index: int, total: int) -> None: ...
+
+    def ingestion_finished(self, name: str, num_chunks: int, latency_ms: float) -> None: ...
+
+    def question_finished(self, name: str, done: int, total: int) -> None: ...
+
+    def system_finished(self, name: str, wall_time_ms: float) -> None: ...
 
 
 class BenchmarkEvaluator:
@@ -38,11 +54,18 @@ class BenchmarkEvaluator:
     output rows is preserved regardless of completion order.
     """
 
-    def __init__(self, config_path: Path, force_mock: bool = False, max_workers: int | None = None):
+    def __init__(
+        self,
+        config_path: Path,
+        force_mock: bool = False,
+        max_workers: int | None = None,
+        progress: ProgressListener | None = None,
+    ):
         self.config_path = config_path
         self.config: ExperimentConfig = load_config(config_path)
         self.raw_config = load_config_dict(config_path)
         self.force_mock = force_mock
+        self.progress = progress or ProgressListener()
         configured_workers = int(max_workers if max_workers is not None else self.config.evaluation.max_workers)
         self.max_workers = max(1, configured_workers)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -54,9 +77,13 @@ class BenchmarkEvaluator:
         run_start = perf_counter()
         self.output_dir.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(self.config_path, self.output_dir / "config.yaml")
+        EMBEDDING_CACHE.clear()
+        EMBEDDING_CACHE.enabled = self.config.evaluation.embedding_cache
         documents = load_documents(self.config.dataset.documents_path)
         dataset = load_dataset(self.config.dataset.questions_path, self.config.dataset.qrels_path)
+        self.dataset_warnings = validate_dataset(documents, dataset)
         questions = dataset.questions[: self.config.evaluation.max_questions] if self.config.evaluation.max_questions else dataset.questions
+        self.progress.run_started(len(self.config.systems), len(questions))
         judge = AnswerJudge(
             model_name=self.config.evaluation.judge_model,
             enabled=self.config.evaluation.judge_enabled,
@@ -70,12 +97,14 @@ class BenchmarkEvaluator:
         ingestion_rows: list[dict[str, Any]] = []
         system_runtime_rows: list[dict[str, Any]] = []
 
-        for system_config in self.config.systems:
+        for system_index, system_config in enumerate(self.config.systems, start=1):
             system_start = perf_counter()
+            self.progress.system_started(system_config.resolved_name, system_index, len(self.config.systems))
             system = create_rag_system(system_config, force_mock=self.force_mock)
             ingest_start = perf_counter()
             ingestion = system.ingest(documents)
             ingestion_wall_time_ms = (perf_counter() - ingest_start) * 1000
+            self.progress.ingestion_finished(system.name, ingestion.num_chunks, ingestion_wall_time_ms)
             ingestion_rows.append(
                 {
                     "system": system.name,
@@ -95,17 +124,19 @@ class BenchmarkEvaluator:
                 retrieval_rows.append(result["retrieval_row"])
                 answer_rows.append(result["answer_row"])
                 cost_rows.append(result["cost_row"])
+            system_wall_time_ms = (perf_counter() - system_start) * 1000
             system_runtime_rows.append(
                 {
                     "system": system.name,
                     "system_type": system_config.type,
                     "ingestion_wall_time_ms": ingestion_wall_time_ms,
                     "question_wall_time_ms": question_wall_time_ms,
-                    "system_wall_time_ms": (perf_counter() - system_start) * 1000,
+                    "system_wall_time_ms": system_wall_time_ms,
                     "num_questions": len(questions),
                     "max_workers": self.max_workers,
                 }
             )
+            self.progress.system_finished(system.name, system_wall_time_ms)
 
         run_wall_time_ms = (perf_counter() - run_start) * 1000
         self._write_outputs(per_question_rows, retrieval_rows, answer_rows, cost_rows, ingestion_rows, system_runtime_rows, run_wall_time_ms)
@@ -120,10 +151,11 @@ class BenchmarkEvaluator:
         judge: AnswerJudge,
     ) -> list[dict[str, Any]]:
         if self.max_workers == 1 or len(questions) <= 1:
-            return [
-                self._evaluate_single_question(system, system_config, question, qrels_by_question.get(question.id, {}), judge)
-                for question in questions
-            ]
+            results = []
+            for done, question in enumerate(questions, start=1):
+                results.append(self._evaluate_single_question(system, system_config, question, qrels_by_question.get(question.id, {}), judge))
+                self.progress.question_finished(system.name, done, len(questions))
+            return results
 
         ordered_results: list[dict[str, Any] | None] = [None] * len(questions)
         with ThreadPoolExecutor(max_workers=self.max_workers, thread_name_prefix=f"ragbench-{system.name}") as executor:
@@ -138,8 +170,9 @@ class BenchmarkEvaluator:
                 ): idx
                 for idx, question in enumerate(questions)
             }
-            for future in as_completed(futures):
+            for done, future in enumerate(as_completed(futures), start=1):
                 ordered_results[futures[future]] = future.result()
+                self.progress.question_finished(system.name, done, len(questions))
         return [result for result in ordered_results if result is not None]
 
     def _evaluate_single_question(
@@ -272,6 +305,8 @@ class BenchmarkEvaluator:
                     "max_workers": self.max_workers,
                     "num_systems": len(self.config.systems),
                     "num_question_rows": len(per_question_rows),
+                    "embedding_cache": EMBEDDING_CACHE.stats(),
+                    "dataset_warnings": getattr(self, "dataset_warnings", []),
                     "outputs": {
                         "leaderboard": "leaderboard.md",
                         "report": "report.html",
@@ -287,18 +322,41 @@ class BenchmarkEvaluator:
         per_question_df = pd.DataFrame(per_question_rows)
         if not per_question_df.empty:
             classified_failures_df = per_question_df[per_question_df["failure_type"] != "no_failure"]
-            failures_df = classified_failures_df.groupby(["system", "failure_type"], as_index=False).size()
+            failures_df = classified_failures_df.groupby(["system", "failure_type"], as_index=False).size().rename(columns={"size": "count"})
         else:
             failures_df = pd.DataFrame()
         write_html_report(
             self.output_dir / "report.html",
             run_id=self.run_id,
-            leaderboard_html=summary_df.to_html(index=False, float_format=lambda x: f"{x:.4f}"),
-            category_html=category_df.to_html(index=False, float_format=lambda x: f"{x:.3f}") if not category_df.empty else "<p>No category data.</p>",
-            cost_html=cost_df.to_html(index=False, float_format=lambda x: f"{x:.6f}"),
-            failures_html=failures_df.to_html(index=False) if not failures_df.empty else "<p>No failures.</p>",
+            summary_rows=summary_rows,
+            category_rows=category_df.to_dict("records") if not category_df.empty else [],
+            cost_rows=self._build_cost_summary(ingestion_rows, cost_rows),
+            failure_rows=failures_df.to_dict("records") if not failures_df.empty else [],
             config_text=yaml.safe_dump(self.raw_config, sort_keys=False),
+            run_meta={
+                "num_systems": len(self.config.systems),
+                "num_questions": len({row["question_id"] for row in per_question_rows}) if per_question_rows else 0,
+                "run_wall_time_ms": run_wall_time_ms,
+                "cache_hits": EMBEDDING_CACHE.stats()["hits"],
+                "cache_saved_usd": EMBEDDING_CACHE.stats()["saved_cost_usd"],
+            },
         )
+
+    @staticmethod
+    def _build_cost_summary(ingestion_rows: list[dict[str, Any]], cost_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        summary: dict[str, dict[str, float]] = {}
+        for row in ingestion_rows:
+            entry = summary.setdefault(row["system"], {"ingestion_cost": 0.0, "query_cost": 0.0, "judge_cost": 0.0, "total_cost": 0.0})
+            entry["ingestion_cost"] += float(row.get("total_cost", 0.0))
+            entry["total_cost"] += float(row.get("total_cost", 0.0))
+        for row in cost_rows:
+            entry = summary.setdefault(row["system"], {"ingestion_cost": 0.0, "query_cost": 0.0, "judge_cost": 0.0, "total_cost": 0.0})
+            judge = float(row.get("judge_cost", 0.0))
+            total = float(row.get("total_cost", 0.0))
+            entry["judge_cost"] += judge
+            entry["query_cost"] += total - judge
+            entry["total_cost"] += total
+        return [{"system": system, **costs} for system, costs in summary.items()]
 
     def _build_qrels_audit(self, per_question_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         audit_rows: list[dict[str, Any]] = []
@@ -362,10 +420,15 @@ class BenchmarkEvaluator:
         return rows
 
 
-def run_benchmark(config_path: Path, force_mock: bool = False, max_workers: int | None = None) -> Path:
+def run_benchmark(
+    config_path: Path,
+    force_mock: bool = False,
+    max_workers: int | None = None,
+    progress: ProgressListener | None = None,
+) -> Path:
     """Convenience wrapper: build a `BenchmarkEvaluator` and run it.
 
     Returns the timestamped output directory containing leaderboard, reports,
     and per-question results.
     """
-    return BenchmarkEvaluator(config_path, force_mock=force_mock, max_workers=max_workers).run()
+    return BenchmarkEvaluator(config_path, force_mock=force_mock, max_workers=max_workers, progress=progress).run()

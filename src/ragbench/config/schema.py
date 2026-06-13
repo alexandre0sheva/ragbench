@@ -38,6 +38,9 @@ class EvaluationConfig(BaseModel):
     judge_model: str = "gpt-5.4-nano"
     max_questions: int | None = None
     max_workers: int = 4
+    # Share corpus embeddings across systems in one run. Hits are still charged
+    # to each system at standalone prices; real savings appear in run_summary.
+    embedding_cache: bool = True
 
 
 class ExperimentConfig(BaseModel):

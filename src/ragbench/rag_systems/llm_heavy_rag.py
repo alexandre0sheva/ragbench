@@ -24,7 +24,8 @@ class LLMHeavyRAG(BaseRAGSystem):
             collection_name=self.name,
             persist_directory=config.retrieval.get("persist_directory"),
         )
-        self.reranker = create_reranker(config.retrieval.get("reranker", "simple_keyword_overlap"), llm=self.llm)
+        reranker_name = "llm" if config.llm_features.get("enable_llm_rerank", False) else config.retrieval.get("reranker", "simple_keyword_overlap")
+        self.reranker = create_reranker(reranker_name, llm=self.llm)
         self.original_text_by_chunk_id: dict[str, str] = {}
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
@@ -90,9 +91,7 @@ class LLMHeavyRAG(BaseRAGSystem):
             candidates = sorted(by_id.values(), key=lambda item: item.score, reverse=True)
             for rank, chunk in enumerate(candidates, start=1):
                 chunk.rank = rank
-            reranker_name = "llm" if features.get("enable_llm_rerank", False) else retrieval_cfg.get("reranker", "simple_keyword_overlap")
-            reranker = create_reranker(reranker_name, llm=self.llm)
-            reranked = reranker.rerank(question, candidates, final_top_k)
+            reranked = self.reranker.rerank(question, candidates, final_top_k)
             retrieval_cost = retrieval_cost.plus(reranked.cost)
         return RetrievalResult(
             question=question,

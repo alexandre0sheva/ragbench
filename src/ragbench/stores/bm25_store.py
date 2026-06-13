@@ -44,11 +44,13 @@ class BM25Store:
     def __init__(self):
         self.chunks: list[TextChunk] = []
         self.tokenized: list[list[str]] = []
+        self.token_sets: list[set[str]] = []
         self.index = None
 
     def build(self, chunks: list[TextChunk]) -> None:
         self.chunks = chunks
         self.tokenized = [tokenize(chunk.text) for chunk in chunks]
+        self.token_sets = [set(tokens) for tokens in self.tokenized]
         try:
             from rank_bm25 import BM25Okapi
 
@@ -60,7 +62,19 @@ class BM25Store:
         with timer() as t:
             query_tokens = tokenize(query)
             scores = list(self.index.get_scores(query_tokens)) if self.index else []
-            ranked = sorted(enumerate(scores), key=lambda item: item[1], reverse=True)[:top_k]
+            # Drop chunks that share no term with the query instead of padding
+            # results with lexical noise. Score alone can't tell: BM25Okapi IDF
+            # is 0 for a term present in half of a tiny corpus.
+            query_token_set = set(query_tokens)
+            ranked = sorted(
+                (
+                    (idx, score)
+                    for idx, score in enumerate(scores)
+                    if query_token_set.intersection(self.token_sets[idx])
+                ),
+                key=lambda item: item[1],
+                reverse=True,
+            )[:top_k]
             chunks = [
                 RetrievedChunk(
                     chunk_id=self.chunks[idx].chunk_id,

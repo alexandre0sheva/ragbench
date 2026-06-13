@@ -67,6 +67,42 @@ systems:
       embedding: text-embedding-3-small
       generator: gpt-5.4-nano
 
+  - type: hybrid_rerank
+    name: hybrid_rerank_default
+    chunker:
+      type: token
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: chroma
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-5.4-nano
+
+  - type: hyde
+    name: hyde_default
+    chunker:
+      type: token
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: chroma
+      top_k: 5
+      probe_top_k: 10
+      fuse_with_question: true
+      rrf_k: 60
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-5.4-nano
+
   - type: parent_doc
     name: parent_doc_default
     chunker:

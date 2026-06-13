@@ -6,7 +6,7 @@ from pathlib import Path
 from ragbench.documents.schema import Document
 from ragbench.utils.ids import stable_doc_id
 
-SUPPORTED_EXTENSIONS = {".txt", ".md", ".markdown", ".html", ".htm"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".markdown", ".html", ".htm", ".rst", ".pdf"}
 
 
 def _extract_title(path: Path, text: str) -> str:
@@ -28,6 +28,18 @@ def _html_to_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _pdf_to_text(path: Path) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:
+        raise ImportError(
+            f"PDF support requires the optional dependency pypdf. Install it with `pip install 'ragbench[pdf]'` to load {path.name}."
+        ) from exc
+    reader = PdfReader(str(path))
+    pages = [page.extract_text() or "" for page in reader.pages]
+    return "\n\n".join(page.strip() for page in pages if page.strip())
+
+
 def load_documents(path: Path) -> list[Document]:
     if not path.exists():
         raise FileNotFoundError(f"Documents path not found: {path}")
@@ -39,8 +51,12 @@ def load_documents(path: Path) -> list[Document]:
         root = path
     documents: list[Document] = []
     for file_path in files:
-        raw = file_path.read_text(encoding="utf-8")
-        text = _html_to_text(raw) if file_path.suffix.lower() in {".html", ".htm"} else raw
+        if file_path.suffix.lower() == ".pdf":
+            raw = ""
+            text = _pdf_to_text(file_path)
+        else:
+            raw = file_path.read_text(encoding="utf-8")
+            text = _html_to_text(raw) if file_path.suffix.lower() in {".html", ".htm"} else raw
         documents.append(
             Document(
                 doc_id=stable_doc_id(file_path, root),

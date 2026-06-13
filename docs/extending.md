@@ -19,7 +19,7 @@ class MyRAGSystem(BaseRAGSystem):
     """One-line description of the strategy."""
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
-        # build whatever indexes you need; track cost via self.cost_tracker
+        # build whatever indexes you need; report cost on IngestionResult.cost
         ...
 
     def fetch_context(
@@ -40,13 +40,15 @@ class MyRAGSystem(BaseRAGSystem):
 Add an import + entry in `src/ragbench/rag_systems/__init__.py` so the config loader can resolve it by name:
 
 ```python
-from .my_rag import MyRAGSystem
+from ragbench.rag_systems.my_rag import MyRAGSystem
 
-REGISTRY = {
+SYSTEM_REGISTRY = {
     ...,
     "my_rag": MyRAGSystem,
 }
 ```
+
+Keep the system **dataset-agnostic and mock-safe**: it must work on any user-supplied corpus and run without an API key (use `create_llm` / `create_embedding_model` with `force_mock`, as the built-in systems do). `HyDERAG` (`hyde_rag.py`) is a compact example of a system that adds an LLM step while staying mock-safe.
 
 ## 4. Add a config
 

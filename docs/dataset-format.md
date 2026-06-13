@@ -4,15 +4,20 @@ RAGBench evaluates retrieval at the document level. Do not add static `relevant_
 
 ## Documents
 
-Put `.md` or `.txt` files in a directory:
+Put `.md`, `.txt`, `.rst`, `.html`, or `.pdf` files in a directory (PDF requires the optional extra: `pip install 'ragbench[pdf]'`):
 
 ```text
 docs/
   doc_001.md
   doc_002.md
+  contract.pdf
 ```
 
 Document IDs are stable. Files named like `doc_001.md` use the stem as the document ID. Other files receive deterministic hash-based IDs.
+
+## Validation
+
+`ragbench inspect-dataset` checks the dataset before you spend money on a run. It flags duplicate question ids, questions or qrels referencing documents that are not on disk, qrels for unknown question ids, `relevant_doc_ids` missing from the qrels file, and documents with empty text. The same warnings are embedded in each run's `run_summary.json`.
 
 ## Questions
 

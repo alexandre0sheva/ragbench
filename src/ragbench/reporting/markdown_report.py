@@ -21,8 +21,10 @@ BEST_FOR = {
     "bm25": "Cheap lexical baseline",
     "vector": "Semantic baseline",
     "hybrid": "Balanced lexical + semantic search",
+    "hybrid_rerank": "Recall of hybrid plus rerank precision",
     "rerank": "Higher precision retrieval",
     "parent_doc": "Small-to-big context",
+    "hyde": "Short or vague questions",
     "llm_heavy": "Quality-oriented expensive pipeline",
 }
 

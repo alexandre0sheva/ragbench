@@ -37,6 +37,8 @@ class MockLLM(LLM):
         prompt = "\n".join(m.get("content", "") for m in messages)
         if kwargs.get("json_mode"):
             text = json.dumps({"score": 3, "reasoning": "Mock JSON response."})
+        elif "hypothetical passage" in prompt.lower():
+            text = self._hypothetical_from_prompt(prompt)
         elif "Rewrite the question" in prompt or "search queries" in prompt:
             question = prompt.strip().splitlines()[-1]
             text = json.dumps({"queries": [question]})
@@ -47,6 +49,16 @@ class MockLLM(LLM):
         prompt_tokens = estimate_tokens(prompt, self.model_name)
         completion_tokens = estimate_tokens(text, self.model_name)
         return LLMResult(text=text, model=self.model_name, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=CostBreakdown())
+
+    @staticmethod
+    def _hypothetical_from_prompt(prompt: str) -> str:
+        # Echo the question's content words as a pseudo-passage so HyDE's
+        # search probe stays on-topic for the hashing embedding model.
+        question_match = re.search(r"Question:\s*(.*?)\s*$", prompt, flags=re.S | re.I)
+        question = question_match.group(1) if question_match else prompt
+        words = [t for t in tokenize(question) if len(t) > 2]
+        topic = " ".join(words) or question
+        return f"{topic}. This passage describes {topic} in detail. Reference information about {topic}."
 
     @staticmethod
     def _summarize(text: str) -> str:

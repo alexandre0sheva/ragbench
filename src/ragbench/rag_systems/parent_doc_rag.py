@@ -71,16 +71,20 @@ class ParentDocumentRAG(BaseRAGSystem):
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
         top_k_children = int(self.config.retrieval.get("top_k_children", 8))
         top_k_parents = top_k or int(self.config.retrieval.get("top_k_parents", 4))
+        # How child scores roll up to their parent: `max` keeps the single best
+        # match, `sum` rewards parents hit by several children, `mean` averages.
+        aggregation = str(self.config.retrieval.get("parent_score_aggregation", "max")).lower()
         with timer() as t:
             child_result = self.child_store.search(question, top_k=top_k_children)
-            parent_scores: dict[str, float] = {}
+            child_scores: dict[str, list[float]] = {}
             parent_children: dict[str, list[str]] = {}
             for child in child_result.chunks:
                 parent_id = child.metadata.get("parent_chunk_id")
                 if not parent_id:
                     continue
-                parent_scores[parent_id] = max(parent_scores.get(parent_id, float("-inf")), child.score)
+                child_scores.setdefault(parent_id, []).append(child.score)
                 parent_children.setdefault(parent_id, []).append(child.chunk_id)
+            parent_scores = {parent_id: _aggregate(scores, aggregation) for parent_id, scores in child_scores.items()}
             ordered = sorted(parent_scores, key=lambda pid: parent_scores[pid], reverse=True)[:top_k_parents]
             chunks: list[RetrievedChunk] = []
             for rank, parent_id in enumerate(ordered, start=1):
@@ -102,5 +106,13 @@ class ParentDocumentRAG(BaseRAGSystem):
             chunks=chunks,
             latency_ms=t.elapsed_ms,
             cost=child_result.cost,
-            metadata={"retriever": "parent_doc", "top_k_children": top_k_children},
+            metadata={"retriever": "parent_doc", "top_k_children": top_k_children, "parent_score_aggregation": aggregation},
         )
+
+
+def _aggregate(scores: list[float], aggregation: str) -> float:
+    if aggregation == "sum":
+        return sum(scores)
+    if aggregation == "mean":
+        return sum(scores) / len(scores)
+    return max(scores)

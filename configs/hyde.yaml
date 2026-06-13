@@ -1,0 +1,32 @@
+run:
+  name: hyde_demo
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: hyde
+    name: hyde_default
+    chunker:
+      type: token
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: chroma
+      top_k: 5
+      probe_top_k: 10
+      fuse_with_question: true
+      rrf_k: 60
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-5.4-nano
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: gpt-5.4-nano
+  max_questions: null
+  max_workers: 4

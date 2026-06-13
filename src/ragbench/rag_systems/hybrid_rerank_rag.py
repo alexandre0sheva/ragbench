@@ -5,6 +5,7 @@ from ragbench.documents.chunkers import create_chunker
 from ragbench.documents.schema import Document
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.embeddings import create_embedding_model
+from ragbench.models.rerankers import create_reranker
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult
 from ragbench.stores.bm25_store import BM25Store
 from ragbench.stores.hybrid_store import reciprocal_rank_fusion
@@ -13,7 +14,13 @@ from ragbench.utils.query_planning import generate_query_variants
 from ragbench.utils.timing import timer
 
 
-class HybridRAG(BaseRAGSystem):
+class HybridRerankRAG(BaseRAGSystem):
+    """Hybrid BM25 + vector retrieval fused with RRF, then reranked.
+
+    Combines the recall of hybrid retrieval with the precision of a reranking
+    pass — in practice one of the strongest non-LLM retrieval pipelines.
+    """
+
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
         self.chunker = create_chunker(config.chunker)
@@ -25,6 +32,7 @@ class HybridRAG(BaseRAGSystem):
             collection_name=self.name,
             persist_directory=config.retrieval.get("persist_directory"),
         )
+        self.reranker = create_reranker(config.retrieval.get("reranker", "local_relevance"), llm=self.llm)
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
         with timer() as t:
@@ -44,6 +52,7 @@ class HybridRAG(BaseRAGSystem):
         cfg = self.config.retrieval
         bm25_top_k = int(cfg.get("bm25_top_k", 20))
         vector_top_k = int(cfg.get("vector_top_k", 20))
+        candidate_top_k = int(cfg.get("candidate_top_k", 30))
         final_top_k = top_k or int(cfg.get("final_top_k", cfg.get("top_k", 5)))
         rrf_k = int(cfg.get("rrf_k", 60))
         bm25_weight = float(cfg.get("bm25_weight", 1.0))
@@ -64,11 +73,17 @@ class HybridRAG(BaseRAGSystem):
                 weights.extend([bm25_weight, vector_weight])
                 pair_cost = bm25_result.cost.plus(vector_result.cost)
                 cost = pair_cost if cost is None else cost.plus(pair_cost)
-            fused = reciprocal_rank_fusion(rankings, top_k=final_top_k, rrf_k=rrf_k, weights=weights)
+            candidates = reciprocal_rank_fusion(rankings, top_k=candidate_top_k, rrf_k=rrf_k, weights=weights)
+            reranked = self.reranker.rerank(question, candidates, final_top_k)
         return RetrievalResult(
             question=question,
-            chunks=fused,
+            chunks=reranked.chunks,
             latency_ms=t.elapsed_ms,
-            cost=cost or CostBreakdown(),
-            metadata={"retriever": "hybrid_rrf", "rrf_k": rrf_k, "queries": queries, "bm25_weight": bm25_weight, "vector_weight": vector_weight},
+            cost=(cost or CostBreakdown()).plus(reranked.cost),
+            metadata={
+                "retriever": "hybrid_rrf_rerank",
+                "reranker": getattr(self.reranker, "name", "unknown"),
+                "rrf_k": rrf_k,
+                "queries": queries,
+            },
         )

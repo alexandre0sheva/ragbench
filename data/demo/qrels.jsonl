@@ -52,3 +52,9 @@
 {"query_id": "q_038", "doc_id": "doc_002", "relevance": 3}
 {"query_id": "q_039", "doc_id": "doc_004", "relevance": 3}
 {"query_id": "q_040", "doc_id": "doc_011", "relevance": 3}
+{"query_id": "q_046", "doc_id": "doc_003", "relevance": 3}
+{"query_id": "q_046", "doc_id": "doc_021", "relevance": 2}
+{"query_id": "q_047", "doc_id": "doc_002", "relevance": 3}
+{"query_id": "q_048", "doc_id": "doc_004", "relevance": 3}
+{"query_id": "q_049", "doc_id": "doc_013", "relevance": 3}
+{"query_id": "q_050", "doc_id": "doc_016", "relevance": 3}

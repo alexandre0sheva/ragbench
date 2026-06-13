@@ -4,6 +4,8 @@ from ragbench.config.schema import SystemConfig
 from ragbench.rag_systems.base import BaseRAGSystem
 from ragbench.rag_systems.bm25_rag import BM25RAG
 from ragbench.rag_systems.hybrid_rag import HybridRAG
+from ragbench.rag_systems.hybrid_rerank_rag import HybridRerankRAG
+from ragbench.rag_systems.hyde_rag import HyDERAG
 from ragbench.rag_systems.llm_heavy_rag import LLMHeavyRAG
 from ragbench.rag_systems.parent_doc_rag import ParentDocumentRAG
 from ragbench.rag_systems.rerank_rag import RerankRAG
@@ -13,8 +15,10 @@ SYSTEM_REGISTRY: dict[str, type[BaseRAGSystem]] = {
     "bm25": BM25RAG,
     "vector": VectorRAG,
     "hybrid": HybridRAG,
+    "hybrid_rerank": HybridRerankRAG,
     "rerank": RerankRAG,
     "parent_doc": ParentDocumentRAG,
+    "hyde": HyDERAG,
     "llm_heavy": LLMHeavyRAG,
 }
 

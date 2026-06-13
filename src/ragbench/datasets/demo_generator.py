@@ -275,6 +275,13 @@ DEMO_QUESTIONS: list[dict[str, Any]] = [
     q("q_043", "Which cloud provider hosts HarborShield AI?", "The provided documents do not identify the cloud provider hosting HarborShield AI.", [], [], "not_in_context", answer_type="unanswerable"),
     q("q_044", "What was ClaimPilot's accuracy score in 2022?", "The provided documents do not report a 2022 ClaimPilot accuracy score.", [], [], "not_in_context", answer_type="unanswerable"),
     q("q_045", "Which office is Priya Desai based in?", "The provided documents name Priya Desai as the Meridian account sponsor but do not state her office location.", ["Priya Desai"], [], "not_in_context", answer_type="unanswerable"),
+    # Paraphrase questions deliberately avoid the documents' vocabulary so
+    # they reward semantic retrieval over exact-term matching.
+    q("q_046", "Which tool helps a claims handler judge how serious an incoming loss report is?", "ClaimPilot classifies severity for incoming loss notices.", ["ClaimPilot"], ["doc_003", "doc_021"], "paraphrase", difficulty="medium"),
+    q("q_047", "A ship insurer receives a stack of paperwork from an intermediary. Which tool gives a first read on the risk?", "HarborShield AI reviews marine cargo submissions and produces a first-pass risk memo.", ["HarborShield AI"], ["doc_002"], "paraphrase", difficulty="medium"),
+    q("q_048", "Which offering lets leadership see how their book of business performs across different geographies?", "Aurora Risk Suite provides portfolio analytics comparing quote conversion, expected loss, and renewal exposure across regions.", ["Aurora Risk Suite"], ["doc_004"], "paraphrase", difficulty="medium"),
+    q("q_049", "How fast must the support team get back to a customer whose system is completely down?", "Severity 1 issues require customer acknowledgement within 30 minutes.", ["30 minutes"], ["doc_013"], "paraphrase", difficulty="medium"),
+    q("q_050", "How long does the company keep the original files that intermediaries send in?", "Raw uploaded broker packets are retained for 90 days unless a customer contract requires shorter retention.", ["90 days"], ["doc_016"], "paraphrase", difficulty="medium"),
 ]
 
 

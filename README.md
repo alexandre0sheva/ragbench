@@ -6,13 +6,13 @@
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Typed](https://img.shields.io/badge/typed-PEP%20561-informational.svg)](https://peps.python.org/pep-0561/)
 
-**RAGBench is an evaluation-first benchmark harness for Retrieval-Augmented Generation.** Run six retrieval architectures — BM25, vector, hybrid, rerank, parent-document, LLM-heavy — against the same dataset and questions. Get a leaderboard of retrieval quality, answer quality, faithfulness, latency, and cost.
+**RAGBench is an evaluation-first benchmark harness for Retrieval-Augmented Generation.** Run eight retrieval architectures — BM25, vector, hybrid, hybrid + rerank, rerank, parent-document, HyDE, LLM-heavy — against the same dataset and questions. Get a leaderboard of retrieval quality, answer quality, faithfulness, latency, and cost.
 
 It is not a demo chatbot. It answers a single question: *which RAG approach gives the best quality, cost, and speed tradeoff for **my** documents and **my** questions?*
 
 ## Results at a glance
 
-Latest run on the bundled demo dataset (16 documents, 30 questions across 10 categories):
+Example live run on the bundled demo dataset (numbers below are from a v0.1.0 run with the six original systems on the earlier 45-question dataset; the bundled dataset now has 22 documents and 50 questions across 11 categories — run `ragbench compare --config configs/all.yaml` to produce fresh numbers for all eight systems):
 
 | System | Recall@5 | MRR@10 | nDCG@10 | Answer | Faithfulness | $/Q | Latency | Best for |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
@@ -94,10 +94,14 @@ flowchart LR
 | --- | --- | --- |
 | `bm25` | Lexical BM25 over chunks | Cheap baseline and exact-term matching |
 | `vector` | Chroma-backed embedding search with cosine similarity | Semantic baseline |
-| `hybrid` | BM25 + vector with Reciprocal Rank Fusion | Balanced lexical + semantic retrieval |
+| `hybrid` | BM25 + vector with (optionally weighted) Reciprocal Rank Fusion | Balanced lexical + semantic retrieval |
+| `hybrid_rerank` | Hybrid RRF retrieval followed by a reranking pass | Recall of hybrid plus rerank precision |
 | `rerank` | Vector retrieval followed by reranking | Higher precision context selection |
-| `parent_doc` | Retrieve small child chunks, answer from larger parent chunks | Better answer context with precise retrieval |
+| `parent_doc` | Retrieve small child chunks, answer from larger parent chunks (`max`/`sum`/`mean` score roll-up) | Better answer context with precise retrieval |
+| `hyde` | Hypothetical Document Embeddings: LLM writes a hypothetical answer used as the search probe | Short or vaguely-worded questions |
 | `llm_heavy` | LLM-driven ingestion metadata, query rewrite, and reranking | Higher-cost quality-oriented experiments |
+
+All systems implement the same `BaseRAGSystem` interface and run on any user-supplied dataset — point any config at your own `docs/` + `questions.jsonl` and every approach above is directly comparable on your data.
 
 ## Metrics
 
@@ -109,7 +113,11 @@ Retrieval is evaluated at the **document level** because chunks are generated dy
 
 ## Outputs
 
+While a benchmark runs, the CLI shows live per-system progress (ingestion, then a question-by-question bar) and finishes with a leaderboard table in the terminal, with the best value in each column highlighted.
+
 Each run writes a timestamped directory containing `leaderboard.md`, `report.html`, `metrics_summary.csv`, `per_question_results.jsonl`, `retrieval_metrics.csv`, `answer_metrics.csv`, `cost_breakdown.csv`, `failures.md`, `qrels_audit.md`, `system_runtime.csv`, and `run_summary.json`.
+
+`report.html` is a self-contained page (no CDN, works offline) with winner summary cards, a sortable leaderboard, comparison bar charts, per-category quality, cost breakdown, and failure analysis. It adapts to light and dark mode.
 
 `qrels_audit.md` is a dataset-quality aid: it surfaces cases where a system was judged to answer well but retrieved documents were not labeled relevant. Treat those rows as candidates for human review, not automatic ground-truth edits.
 
@@ -119,12 +127,21 @@ Each run writes a timestamped directory containing `leaderboard.md`, `report.htm
 my_dataset/
   docs/
     policy.md
+    contract.pdf
     product_notes.md
   questions.jsonl
   qrels.jsonl   # optional — graded relevance
 ```
 
-Point a config at it (copy any of `configs/*.yaml`) and run `ragbench compare --config my_config.yaml`.
+Documents can be `.md`, `.txt`, `.rst`, `.html`, or `.pdf` (PDF needs the optional extra: `pip install 'ragbench[pdf]'`). Point a config at the dataset (copy any of `configs/*.yaml`) and run `ragbench compare --config my_config.yaml`.
+
+Before running, sanity-check the dataset — `inspect-dataset` validates qrels coverage, missing document references, duplicate ids, and empty documents:
+
+```bash
+ragbench inspect-dataset --docs my_dataset/docs \
+    --questions my_dataset/questions.jsonl \
+    --qrels my_dataset/qrels.jsonl
+```
 
 See [docs/dataset-format.md](docs/dataset-format.md) for the schema reference.
 
@@ -136,6 +153,13 @@ evaluation:
 ```
 
 Or via CLI: `ragbench compare --config configs/all.yaml --max-workers 8`. Higher values reduce wall time for live LLM runs but may hit provider rate limits. Use `--max-workers 1` for fully sequential execution.
+
+## Embedding cache
+
+Systems in one comparison run embed the same corpus, so RAGBench shares corpus embeddings across systems via an in-process cache (on by default, `evaluation.embedding_cache: false` to disable). Two fairness rules keep the comparison honest:
+
+- **Cost stays standalone.** A cache hit is still charged to the requesting system at normal prices, so per-system `$/Q` and ingestion cost reflect what that system would cost deployed alone. The *actual* API savings are reported separately in `run_summary.json` and the console summary.
+- **Query embeddings are never cached.** Per-question latency is measured fresh for every system regardless of run order.
 
 ## Documentation
 

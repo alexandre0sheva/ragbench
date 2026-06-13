@@ -125,7 +125,9 @@ class VectorStore:
         if self.vectors is None:
             return []
         scores = self.vectors @ query_vec
-        top_indices = np.argsort(scores)[::-1][:top_k]
+        k = min(top_k, len(scores))
+        candidate_indices = np.argpartition(scores, -k)[-k:]
+        top_indices = candidate_indices[np.argsort(scores[candidate_indices])[::-1]]
         return [
             RetrievedChunk(
                 chunk_id=self.chunks[int(idx)].chunk_id,
