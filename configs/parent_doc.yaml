@@ -16,16 +16,16 @@ systems:
       parent_chunk_size: 1000
       parent_chunk_overlap: 150
     retrieval:
-      vector_store: chroma
+      vector_store: numpy
       top_k_children: 8
       top_k_parents: 4
     models:
       embedding: text-embedding-3-small
-      generator: gpt-5.4-nano
+      generator: gpt-6-luna
 
 evaluation:
   k_values: [1, 3, 5, 10]
   judge_enabled: true
-  judge_model: gpt-5.4-nano
+  judge_model: gpt-6-luna
   max_questions: null
   max_workers: 4

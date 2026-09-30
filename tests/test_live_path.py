@@ -7,6 +7,7 @@ obviously not real and nothing leaves localhost.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shutil
@@ -20,15 +21,18 @@ import yaml
 from fake_openai_server import FakeOpenAIServer
 
 ROOT = Path(__file__).resolve().parents[1]
+# Chroma is an optional extra. When it is installed the run exercises it: worker threads importing it lazily next to live
+# requests is what once broke the real SDK, so that path stays covered where it can be.
+VECTOR_STORE = "chroma" if importlib.util.find_spec("chromadb") else "numpy"
 
 
 def _config(work: Path) -> Path:
     shutil.copytree(ROOT / "data" / "demo", work / "demo")
     systems = [
         {"type": "bm25", "name": "bm25", "chunker": {"type": "token", "chunk_size": 450, "chunk_overlap": 70}, "retrieval": {"top_k": 5}},
-        {"type": "vector", "name": "vector", "retrieval": {"vector_store": "chroma", "top_k": 5}},
-        {"type": "hybrid_rerank", "name": "hybrid_rerank", "retrieval": {"vector_store": "chroma", "final_top_k": 5}},
-        {"type": "hyde", "name": "hyde", "retrieval": {"vector_store": "chroma", "top_k": 5}},
+        {"type": "vector", "name": "vector", "retrieval": {"vector_store": VECTOR_STORE, "top_k": 5}},
+        {"type": "hybrid_rerank", "name": "hybrid_rerank", "retrieval": {"vector_store": VECTOR_STORE, "final_top_k": 5}},
+        {"type": "hyde", "name": "hyde", "retrieval": {"vector_store": VECTOR_STORE, "top_k": 5}},
     ]
     config = {
         "run": {"name": "live_path", "output_dir": str(work / "results")},
@@ -91,3 +95,44 @@ def test_live_run_with_parallel_systems_retries_caches_and_probes(tmp_path):
     # Live runs get a clean one-at-a-time latency measurement.
     assert (summary["latency_source"] == "probe").all() and run1["execution"]["probe_calls"] == 8
     assert run1["execution"]["system_workers"] == 4 and run1["cache"]["real_spend_usd"] > 0
+
+
+def test_live_run_through_an_openai_compatible_endpoint_needs_no_openai_key(tmp_path):
+    """A config that uses only `providers:` endpoints is a live run even with no OPENAI_API_KEY / ANTHROPIC_API_KEY at all."""
+    shutil.copytree(ROOT / "data" / "demo", tmp_path / "demo")
+    models = {"generator": "openai_compatible:fake/chat-model", "embedding": "openai_compatible:fake/embed-model"}
+    with FakeOpenAIServer() as server:
+        config = {
+            "run": {"name": "compat_live", "output_dir": str(tmp_path / "results")},
+            "dataset": {
+                "documents_path": str(tmp_path / "demo" / "docs"),
+                "questions_path": str(tmp_path / "demo" / "questions.jsonl"),
+                "qrels_path": str(tmp_path / "demo" / "qrels.jsonl"),
+            },
+            "providers": {"fake": {"base_url": server.base_url, "limits": {"max_concurrent_requests": 3}}},
+            "systems": [
+                {"type": "bm25", "name": "bm25", "models": models},
+                {"type": "vector", "name": "vector", "models": models, "retrieval": {"vector_store": "numpy", "top_k": 5}},
+            ],
+            "evaluation": {"max_questions": 6, "max_workers": 4, "judge_model": "openai_compatible:fake/judge-model", "latency_probe_questions": 1},
+            "pricing": {"openai_compatible:fake/chat-model": {"input": 1.0, "output": 2.0}},
+        }
+        path = tmp_path / "compat.yaml"
+        path.write_text(yaml.safe_dump(config), encoding="utf-8")
+        env = {**os.environ, "OPENAI_API_KEY": "", "ANTHROPIC_API_KEY": "", "RAGBENCH_CACHE_DIR": str(tmp_path / "cache")}
+        env.pop("OPENAI_BASE_URL", None)
+        done = subprocess.run(
+            [sys.executable, "-m", "ragbench.cli", "compare", "--config", str(path)], env=env, cwd=tmp_path, capture_output=True, text=True, timeout=240
+        )
+        stats = dict(server.stats)
+
+    assert done.returncode == 0, f"{done.stdout[-1500:]}\n{done.stderr[-1500:]}"
+    out = sorted((tmp_path / "results").iterdir())[-1]
+    run = json.loads((out / "run_summary.json").read_text())
+    assert run["mode"] == "live" and run["num_errors"] == 0
+    assert "openai_compatible:fake/chat-model" in run["models_used"] and run["unknown_priced_models"] == []
+    assert stats["/v1/chat/completions"] > 6 and stats["/v1/embeddings"] > 0, "traffic must have reached the endpoint over real HTTP"
+    summary = pd.read_csv(out / "metrics_summary.csv").set_index("system")
+    assert (summary["n_ok"] == 6).all() and (summary["answer_score"] > 3.9).all()
+    assert (summary["avg_cost_per_question"] > 0).all(), "the `pricing:` override prices the endpoint model"
+    assert (summary["latency_source"] == "probe").all()

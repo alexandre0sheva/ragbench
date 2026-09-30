@@ -42,7 +42,6 @@ dependencies = [
   "openai>=3.22",
   "jinja2>=3.1.6",
   "markdown>=3.11",
-  "chromadb>=1.5",
 ]
 
 [project.urls]
@@ -62,6 +61,17 @@ dev = [
   "types-Markdown>=3.10",
 ]
 pdf = ["pypdf>=6.19"]
+docx = ["python-docx>=1.2"]
+anthropic = ["anthropic>=1.10"]
+# Vector backends (`retrieval.vector_store`); the default, `numpy`, needs none of them.
+chroma = ["chromadb>=1.5"]
+# faiss-cpu ships no macOS wheel for Python 3.14 yet (Linux and Python <=3.13 are fine).
+faiss = ["faiss-cpu>=1.10"]
+qdrant = ["qdrant-client>=1.19"]
+# Local embeddings (`local:<hf-model>`).
+local = ["sentence-transformers>=6.1"]
+# Cross-encoder reranker (`reranker: cross_encoder`); the same library as `local`, listed separately so each use case reads naturally.
+rerank = ["sentence-transformers>=6.1"]
 
 [project.scripts]
 ragbench = "ragbench.cli:app"
@@ -101,5 +111,5 @@ disallow_untyped_defs = false
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["chromadb.*", "rank_bm25.*", "tiktoken.*"]
+module = ["chromadb.*", "faiss.*", "qdrant_client.*", "rank_bm25.*", "tiktoken.*"]
 ignore_missing_imports = true

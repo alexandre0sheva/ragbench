@@ -1,4 +1,4 @@
-"""Named-component registries: the single place that knows which systems, chunkers and rerankers exist.
+"""Named-component registries: the single place that knows which systems, chunkers, rerankers and vector backends exist.
 
 Built-ins register themselves with `@SYSTEMS.register("name")` when their module is imported; third-party
 packages can contribute components through entry points (see `Registry.load_entry_points`).
@@ -10,12 +10,18 @@ import difflib
 import logging
 from collections.abc import Callable, Iterator
 from importlib import metadata
+from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 if TYPE_CHECKING:
     from ragbench.documents.chunkers import BaseChunker
+    from ragbench.documents.loaders.registry import LoadContext
+    from ragbench.documents.schema import Document
+    from ragbench.models.embeddings import EmbeddingModel
+    from ragbench.models.llms import LLM
     from ragbench.models.rerankers import Reranker
     from ragbench.rag_systems.base import BaseRAGSystem
+    from ragbench.stores.index import VectorIndex
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +71,10 @@ class Registry(Generic[T]):
         """Canonical names in registration order (aliases excluded)."""
         return list(self._items)
 
+    def all_names(self) -> list[str]:
+        """Canonical names followed by every alias."""
+        return [*self._items, *self._aliases]
+
     def items(self) -> Iterator[tuple[str, T]]:
         return iter(self._items.items())
 
@@ -101,4 +111,12 @@ class Registry(Generic[T]):
 SYSTEMS: Registry[type[BaseRAGSystem]] = Registry("RAG system")
 CHUNKERS: Registry[type[BaseChunker]] = Registry("chunker")
 RERANKERS: Registry[type[Reranker]] = Registry("reranker")
-# EMBEDDERS / LLM_PROVIDERS are added in Task 8, VECTOR_BACKENDS in Task 10, TOOLS in Task 18.
+# Provider factories: `factory(model, *, providers) -> LLM | EmbeddingModel`, where `model` is the ref without its provider prefix
+# and `providers` maps endpoint names to their `providers:` config. Registered by `ragbench.models.providers`.
+LLM_PROVIDERS: Registry[Callable[..., LLM]] = Registry("chat model provider")
+EMBEDDERS: Registry[Callable[..., EmbeddingModel]] = Registry("embedding provider")
+# Document loaders, keyed by file extension (`.pdf`): `loader(path, context) -> list[Document]`. Registered by `ragbench.documents.loaders`.
+LOADERS: Registry[Callable[[Path, LoadContext], list[Document]]] = Registry("document loader")
+# Vector index backends (`vector_store:`); classes taking `(collection_name=, persist_directory=)`. Registered by `ragbench.stores.index`.
+VECTOR_BACKENDS: Registry[type[VectorIndex]] = Registry("vector backend")
+# TOOLS is added in Task 18.

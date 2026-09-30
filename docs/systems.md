@@ -25,9 +25,13 @@ All systems except `parent_doc` use this `chunker:` section:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `type` | `str` | `token` | Chunker name: `token`/`word`, `fixed_char`, or `markdown`. |
-| `chunk_size` | `int` | unset | Chunk size: words for `token`/`markdown`, characters for `fixed_char`. Default: 500 (`token`, `markdown`) or 1200 (`fixed_char`). |
-| `chunk_overlap` | `int` | unset | Overlap between consecutive chunks, same unit as `chunk_size`. Default: 80 (`token`, `markdown`) or 150 (`fixed_char`). |
+| `type` | `str` | `token` | Chunker: `token` (real model tokens), `word` (whitespace words), `fixed_char`, `recursive`, `sentence`, `semantic`, or `markdown`. |
+| `chunk_size` | `int` | unset | Maximum chunk size. Unit: tokens (`token`, `recursive`, `sentence`, `semantic`, `markdown`), words (`word`) or characters (`fixed_char`). Default: 500 (1200 for `fixed_char`). |
+| `chunk_overlap` | `int` | unset | Overlap between consecutive chunks, in the unit of `chunk_size`; `sentence` and `semantic` count sentences instead. Default: 80 (150 for `fixed_char`, 1 for `sentence`, 0 for `semantic`). |
+| `min_chunk_size` | `int` | unset | `recursive`, `sentence`, `semantic`, `markdown`: fold chunks (for `markdown`, sections) smaller than this many tokens into a neighbour while the result fits `chunk_size`. Default: 50 for `markdown`, off otherwise. |
+| `prefix_title` | `bool` | `false` | Prepend the document title to every chunk's text, so it is embedded and searched with the chunk. |
+| `prefix_heading` | `bool` | unset | `markdown` only: prepend the heading breadcrumb (`Guide > Returns`) to every chunk's text. |
+| `breakpoint_percentile` | `float` | unset | `semantic` only: start a new chunk where the distance between consecutive sentences exceeds this percentile of the document's distances. Default: 90. |
 
 ## `bm25`
 
@@ -56,8 +60,8 @@ Best for: Balanced lexical + semantic retrieval. Cost: low; latency: fast.
 | `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
 | `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
 | `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
-| `vector_store` | `chroma` \| `in_memory` | `chroma` | Vector backend. `chroma` falls back to exact in-memory search if Chroma cannot be used. |
-| `persist_directory` | `str` | unset | Directory for a persistent Chroma store (default: ephemeral). |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
 | `bm25_top_k` | `int` | `20` | BM25 candidates per query (raised to the retrieval depth if smaller). |
 | `vector_top_k` | `int` | `20` | Vector candidates per query (raised to the retrieval depth if smaller). |
 | `bm25_weight` | `float` | `1.0` | Weight of the BM25 ranking in weighted RRF; raise it to favor lexical evidence. |
@@ -78,14 +82,15 @@ Best for: Recall of hybrid plus rerank precision. Cost: low; latency: fast.
 | `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
 | `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
 | `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
-| `vector_store` | `chroma` \| `in_memory` | `chroma` | Vector backend. `chroma` falls back to exact in-memory search if Chroma cannot be used. |
-| `persist_directory` | `str` | unset | Directory for a persistent Chroma store (default: ephemeral). |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
 | `bm25_top_k` | `int` | `20` | BM25 candidates per query (raised to the retrieval depth if smaller). |
 | `vector_top_k` | `int` | `20` | Vector candidates per query (raised to the retrieval depth if smaller). |
 | `bm25_weight` | `float` | `1.0` | Weight of the BM25 ranking in weighted RRF; raise it to favor lexical evidence. |
 | `vector_weight` | `float` | `1.0` | Weight of the vector ranking in weighted RRF; raise it to favor semantic evidence. |
+| `reranker_model` | `str` | unset | Hugging Face model for `reranker: cross_encoder` (default `BAAI/bge-reranker-base`). Needs `pip install 'ragbench[rerank]'`. |
 | `candidate_top_k` | `int` | `30` | Fused candidates handed to the reranker (raised to the retrieval depth if smaller). |
-| `reranker` | `str` | `local_relevance` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), or `llm`. |
+| `reranker` | `str` | `local_relevance` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`. |
 
 ## `parent_doc`
 
@@ -97,8 +102,8 @@ Best for: Better answer context with precise retrieval. Cost: low; latency: fast
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `vector_store` | `chroma` \| `in_memory` | `chroma` | Vector backend. `chroma` falls back to exact in-memory search if Chroma cannot be used. |
-| `persist_directory` | `str` | unset | Directory for a persistent Chroma store (default: ephemeral). |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
 | `top_k_children` | `int` | `8` | Child chunks searched (raised to twice the parent depth if smaller). |
 | `top_k_parents` | `int` | `4` | Parent chunks returned; also how many the generator reads. |
 | `parent_score_aggregation` | `max` \| `sum` \| `mean` | `max` | How child scores roll up to their parent: `max` keeps the best match, `sum` rewards parents hit by several children, `mean` averages. |
@@ -126,14 +131,15 @@ Best for: Higher precision context selection. Cost: low; latency: fast.
 | `max_query_variants` | `int` | `4` | Maximum number of query variants when `multi_query` is on. |
 | `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
 | `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
-| `vector_store` | `chroma` \| `in_memory` | `chroma` | Vector backend. `chroma` falls back to exact in-memory search if Chroma cannot be used. |
-| `persist_directory` | `str` | unset | Directory for a persistent Chroma store (default: ephemeral). |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `reranker_model` | `str` | unset | Hugging Face model for `reranker: cross_encoder` (default `BAAI/bge-reranker-base`). Needs `pip install 'ragbench[rerank]'`. |
 | `candidate_top_k` | `int` | `30` | Vector candidates handed to the reranker (raised to the retrieval depth if smaller). |
-| `reranker` | `str` | `simple_keyword_overlap` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), or `llm`. |
+| `reranker` | `str` | `simple_keyword_overlap` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`. |
 
 ## `vector`
 
-**Vector.** Embedding search with cosine similarity (Chroma-backed, exact in-memory fallback).
+**Vector.** Embedding search with cosine similarity over a pluggable vector backend (exact NumPy by default).
 
 Best for: Semantic baseline. Cost: low; latency: fast.
 
@@ -142,8 +148,8 @@ Best for: Semantic baseline. Cost: low; latency: fast.
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
-| `vector_store` | `chroma` \| `in_memory` | `chroma` | Vector backend. `chroma` falls back to exact in-memory search if Chroma cannot be used. |
-| `persist_directory` | `str` | unset | Directory for a persistent Chroma store (default: ephemeral). |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
 
 ## `hyde`
 
@@ -157,8 +163,8 @@ Best for: Short or vaguely-worded questions. Cost: medium; latency: medium.
 | --- | --- | --- | --- |
 | `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
 | `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
-| `vector_store` | `chroma` \| `in_memory` | `chroma` | Vector backend. `chroma` falls back to exact in-memory search if Chroma cannot be used. |
-| `persist_directory` | `str` | unset | Directory for a persistent Chroma store (default: ephemeral). |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
 | `probe_top_k` | `int` | unset | Results fetched per ranking before fusion. Default: twice the retrieval depth, at least 10. |
 | `fuse_with_question` | `bool` | `true` | Fuse the hypothetical-document ranking with the raw-question ranking via RRF. |
 
@@ -173,10 +179,11 @@ Best for: Higher-cost, quality-oriented experiments. Cost: high; latency: slow.
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
 | `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
-| `vector_store` | `chroma` \| `in_memory` | `chroma` | Vector backend. `chroma` falls back to exact in-memory search if Chroma cannot be used. |
-| `persist_directory` | `str` | unset | Directory for a persistent Chroma store (default: ephemeral). |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `reranker_model` | `str` | unset | Hugging Face model for `reranker: cross_encoder` (default `BAAI/bge-reranker-base`). Needs `pip install 'ragbench[rerank]'`. |
 | `per_query_top_k` | `int` | `10` | Candidates per rewritten query (raised to the retrieval depth if smaller). |
-| `reranker` | `str` | `simple_keyword_overlap` | Reranker used when `llm_features.enable_llm_rerank` is off. |
+| `reranker` | `str` | `simple_keyword_overlap` | Reranker used when `llm_features.enable_llm_rerank` is off: `simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`. |
 
 `llm_features:` options
 

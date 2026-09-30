@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated, ClassVar, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 def _known_reranker(name: str) -> str:
@@ -20,6 +20,17 @@ def _known_reranker(name: str) -> str:
 
 
 RerankerName = Annotated[str, AfterValidator(_known_reranker)]
+
+
+def _known_backend(name: str) -> str:
+    import ragbench.stores.index  # noqa: F401  (registers the built-in vector backends)
+    from ragbench.registry import VECTOR_BACKENDS
+
+    VECTOR_BACKENDS.get(name)  # raises UnknownComponentError (a ValueError) with a did-you-mean hint
+    return name
+
+
+VectorBackendName = Annotated[str, AfterValidator(_known_backend)]
 
 
 class BaseOptions(BaseModel):
@@ -77,10 +88,25 @@ class FinalTopKOptions(BaseOptions):
 
 
 class VectorOptions(BaseOptions):
-    vector_store: Literal["chroma", "in_memory"] = Field(
-        default="chroma", description="Vector backend. `chroma` falls back to exact in-memory search if Chroma cannot be used."
+    vector_store: VectorBackendName = Field(
+        default="numpy",
+        description=(
+            "Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, "
+            "`chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. "
+            "A missing library is an error, never a silent fallback."
+        ),
     )
-    persist_directory: str | None = Field(default=None, description="Directory for a persistent Chroma store (default: ephemeral).")
+    persist_directory: str | None = Field(default=None, description="Directory for a persistent store (`chroma`, `qdrant`). Default: in memory.")
+
+    @model_validator(mode="after")
+    def _persist_directory_needs_a_persistent_backend(self) -> VectorOptions:
+        import ragbench.stores.index  # noqa: F401
+        from ragbench.registry import VECTOR_BACKENDS
+
+        if self.persist_directory is not None and not VECTOR_BACKENDS.get(self.vector_store).persistent:
+            persistent = ", ".join(name for name, cls in VECTOR_BACKENDS.items() if cls.persistent)
+            raise ValueError(f"persist_directory only applies to the persistent backends ({persistent}), not '{self.vector_store}'")
+        return self
 
 
 class FusionOptions(BaseOptions):
@@ -107,14 +133,36 @@ class HybridOptions(VectorOptions, FinalTopKOptions, FusionOptions, MultiQueryOp
     vector_weight: float = Field(default=1.0, ge=0, description="Weight of the vector ranking in weighted RRF; raise it to favor semantic evidence.")
 
 
-class HybridRerankOptions(HybridOptions):
+class RerankerModelOptions(BaseOptions):
+    """`reranker_model` for systems with a `reranker` option."""
+
+    reranker_model: str | None = Field(
+        default=None,
+        description="Hugging Face model for `reranker: cross_encoder` (default `BAAI/bge-reranker-base`). Needs `pip install 'ragbench[rerank]'`.",
+    )
+
+    @model_validator(mode="after")
+    def _model_needs_a_reranker_that_loads_one(self) -> RerankerModelOptions:
+        import ragbench.models.rerankers  # noqa: F401  (registers the built-in rerankers)
+        from ragbench.registry import RERANKERS
+
+        name = getattr(self, "reranker", None)
+        if self.reranker_model is not None and name is not None and not getattr(RERANKERS.get(name), "takes_model", False):
+            raise ValueError(f"reranker_model only applies to rerankers that load a model (cross_encoder), not '{name}'")
+        return self
+
+
+_RERANKER_NAMES = "`simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`."
+
+
+class HybridRerankOptions(RerankerModelOptions, HybridOptions):
     candidate_top_k: int = Field(default=30, ge=1, description="Fused candidates handed to the reranker (raised to the retrieval depth if smaller).")
-    reranker: RerankerName = Field(default="local_relevance", description="`simple_keyword_overlap`, `local_relevance` (TF-IDF), or `llm`.")
+    reranker: RerankerName = Field(default="local_relevance", description=_RERANKER_NAMES)
 
 
-class RerankOptions(VectorOptions, FinalTopKOptions, MultiQueryOptions):
+class RerankOptions(RerankerModelOptions, VectorOptions, FinalTopKOptions, MultiQueryOptions):
     candidate_top_k: int = Field(default=30, ge=1, description="Vector candidates handed to the reranker (raised to the retrieval depth if smaller).")
-    reranker: RerankerName = Field(default="simple_keyword_overlap", description="`simple_keyword_overlap`, `local_relevance` (TF-IDF), or `llm`.")
+    reranker: RerankerName = Field(default="simple_keyword_overlap", description=_RERANKER_NAMES)
 
 
 class ParentDocOptions(VectorOptions):
@@ -140,9 +188,9 @@ class HyDEOptions(VectorOptions, TopKOptions, FusionOptions):
     fuse_with_question: bool = Field(default=True, description="Fuse the hypothetical-document ranking with the raw-question ranking via RRF.")
 
 
-class LLMHeavyOptions(VectorOptions, TopKOptions):
+class LLMHeavyOptions(RerankerModelOptions, VectorOptions, TopKOptions):
     per_query_top_k: int = Field(default=10, ge=1, description="Candidates per rewritten query (raised to the retrieval depth if smaller).")
-    reranker: RerankerName = Field(default="simple_keyword_overlap", description="Reranker used when `llm_features.enable_llm_rerank` is off.")
+    reranker: RerankerName = Field(default="simple_keyword_overlap", description="Reranker used when `llm_features.enable_llm_rerank` is off: " + _RERANKER_NAMES)
 
 
 class LLMHeavyFeatures(BaseModel):

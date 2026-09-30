@@ -19,7 +19,7 @@ from ragbench.config.loader import load_config, load_config_dict
 from ragbench.config.schema import ExperimentConfig, SystemConfig
 from ragbench.datasets.loader import load_dataset
 from ragbench.datasets.validation import validate_dataset
-from ragbench.documents.loaders import load_documents
+from ragbench.documents.loaders import load_dataset_documents
 from ragbench.evaluation.answer_judge import AnswerJudge
 from ragbench.evaluation.failure_analysis import classify_failure
 from ragbench.evaluation.manifest import build_manifest, dataset_hash, utc_now_iso
@@ -27,10 +27,12 @@ from ragbench.evaluation.retrieval_metrics import compute_retrieval_metrics
 from ragbench.models import cost as pricing
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.embeddings import EMBEDDING_CACHE
+from ragbench.models.errors import ModelInitError
+from ragbench.models.refs import missing_credentials, resolve_run_mode, warm_up_modules
 from ragbench.rag_systems import create_rag_system
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
 from ragbench.rag_systems.trace import STAGE_KEYS, UNTRACKED, mean_by_stage, stage_costs, step_to_dict
-from ragbench.registry import SYSTEMS
+from ragbench.registry import SYSTEMS, VECTOR_BACKENDS
 from ragbench.reporting.html_report import write_html_report
 from ragbench.reporting.markdown_report import write_failures, write_leaderboard, write_qrels_audit
 from ragbench.reporting.notices import build_notices
@@ -46,7 +48,6 @@ from ragbench.runtime import (
     warm_up_imports,
 )
 from ragbench.runtime.progress import ProgressListener
-from ragbench.utils.env import has_openai_key
 from ragbench.utils.jsonl import write_jsonl
 from ragbench.utils.text import truncate, unique_preserve_order
 
@@ -93,11 +94,15 @@ class BenchmarkEvaluator:
         self.use_cache = use_cache
         self.config: ExperimentConfig = load_config(config_path)
         self.raw_config = load_config_dict(config_path)
-        self.force_mock = force_mock
-        self.mode = "mock" if force_mock or not has_openai_key() else "live"
+        # Live when any model the config calls can be reached (a key for a hosted API, or a local / endpoint model).
+        self.mode = resolve_run_mode(self.config, force_mock)
+        self.force_mock = force_mock or self.mode == "mock"
+        # A live run must not quietly mix real and mock models (e.g. a Claude generator with no OpenAI key for the judge).
+        self.credential_problems = missing_credentials(self.config) if self.mode == "live" else []
         self.models_used: set[str] = set()
         self.started_utc = utc_now_iso()
         self.dataset_digest = ""
+        self.document_warnings: list[str] = []  # files skipped or decoded with a fallback while loading the corpus
         self.cache_runtime: CacheRuntime | None = None
         self.cache_reason: str | None = None
         # Systems and questions run on worker threads; serializing the hooks means listeners need no locking of their own.
@@ -119,11 +124,17 @@ class BenchmarkEvaluator:
 
     def run(self) -> Path:
         """Execute the configured benchmark and return the output directory path."""
+        if self.credential_problems:
+            raise ModelInitError("Cannot start a live run: " + "; ".join(self.credential_problems) + ". Set them, pass --mock, or change the model refs.")
         pricing.clear_pricing_overrides()
         pricing.reset_unknown_priced_models()
         pricing.register_pricing({model: price.model_dump() for model, price in self.config.pricing.items()})
         self.cache_runtime = self._open_cache()
-        runtime = RuntimeContext(ingest_workers=self.config.evaluation.ingest_workers, limiters=build_limiters(self.config.limits))
+        runtime = RuntimeContext(
+            ingest_workers=self.config.evaluation.ingest_workers,
+            limiters=build_limiters(self.config.limits, self.config.providers),
+            providers=self.config.providers,
+        )
         try:
             with activate_cache(self.cache_runtime), activate_runtime(runtime):
                 return self._run()
@@ -156,7 +167,7 @@ class BenchmarkEvaluator:
         shutil.copyfile(self.config_path, self.output_dir / "config.yaml")
         EMBEDDING_CACHE.clear()
         EMBEDDING_CACHE.enabled = self.config.evaluation.embedding_cache
-        documents = load_documents(self.config.dataset.documents_path)
+        documents = load_dataset_documents(self.config.dataset, warnings=self.document_warnings)
         dataset = load_dataset(self.config.dataset.questions_path, self.config.dataset.qrels_path)
         self.dataset_warnings = validate_dataset(documents, dataset)
         self.dataset_digest = dataset_hash(documents, self.config.dataset.questions_path, self.config.dataset.qrels_path)
@@ -205,9 +216,24 @@ class BenchmarkEvaluator:
         for system_config in self.config.systems:
             spec = getattr(SYSTEMS.mapping.get(system_config.type), "spec", None)
             if spec is not None and "vector_store" in spec.options.model_fields:
-                if system_config.retrieval.get("vector_store", spec.options.model_fields["vector_store"].default) == "chroma":
-                    modules.append("chromadb")
-                    break
+                backend = system_config.retrieval.get("vector_store", spec.options.model_fields["vector_store"].default)
+                modules.extend(module for module in VECTOR_BACKENDS.get(backend).import_modules if module not in modules)
+        if self.mode == "live":  # mock runs never load a reranking model
+            modules.extend(self._reranker_modules())
+        return [*modules, *warm_up_modules(self.config)]
+
+    def _reranker_modules(self) -> list[str]:
+        """Libraries the configured rerankers import lazily (e.g. sentence-transformers for `cross_encoder`)."""
+        import ragbench.models.rerankers  # noqa: F401  (registers the built-in rerankers)
+        from ragbench.registry import RERANKERS
+
+        modules: list[str] = []
+        for system_config in self.config.systems:
+            spec = getattr(SYSTEMS.mapping.get(system_config.type), "spec", None)
+            if spec is None or "reranker" not in spec.options.model_fields:
+                continue
+            name = system_config.retrieval.get("reranker", spec.options.model_fields["reranker"].default)
+            modules.extend(module for module in getattr(RERANKERS.get(name), "import_modules", ()) if module not in modules)
         return modules
 
     def _should_probe(self, questions: list) -> bool:
@@ -495,6 +521,7 @@ class BenchmarkEvaluator:
                     "embedding_cache": EMBEDDING_CACHE.stats(),
                     "cache": cache_summary,
                     "dataset_warnings": getattr(self, "dataset_warnings", []),
+                    "document_warnings": self.document_warnings,
                     "outputs": {
                         "leaderboard": "leaderboard.md",
                         "report": "report.html",
@@ -676,6 +703,9 @@ def _model_names(system: BaseRAGSystem) -> set[str]:
     embedding_model = getattr(system, "embedding_model", None)
     if embedding_model is not None:
         names.add(embedding_model.model_name)
+    chunker_embedder = getattr(getattr(system, "chunker", None), "embedder", None)  # a `semantic` chunker embeds sentences
+    if chunker_embedder is not None:
+        names.add(chunker_embedder.model_name)
     return names
 
 

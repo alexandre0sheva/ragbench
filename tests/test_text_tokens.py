@@ -8,7 +8,7 @@ from ragbench.utils import text
 def test_estimate_tokens_never_raises_for_unknown_models():
     text._get_encoding.cache_clear()
 
-    assert text.estimate_tokens("hello brave new world", "gpt-5.4-nano") >= 4
+    assert text.estimate_tokens("hello brave new world", "gpt-6-luna") >= 4
 
 
 def test_encoding_lookup_is_cached_per_model(monkeypatch):
@@ -23,7 +23,7 @@ def test_encoding_lookup_is_cached_per_model(monkeypatch):
     monkeypatch.setattr(tiktoken, "encoding_for_model", counting)
 
     for _ in range(25):
-        text.estimate_tokens("some text to count", "gpt-4o-mini")
+        text.estimate_tokens("some text to count", "gpt-6-luna")
 
     assert calls["n"] == 1
     text._get_encoding.cache_clear()
@@ -39,8 +39,8 @@ def test_unknown_model_falls_back_to_default_encoding_without_repeated_failures(
 
     monkeypatch.setattr(tiktoken, "encoding_for_model", failing)
 
-    first = text.estimate_tokens("one two three four five", "gpt-5.4-nano")
-    second = text.estimate_tokens("one two three four five", "gpt-5.4-nano")
+    first = text.estimate_tokens("one two three four five", "gpt-6-luna")
+    second = text.estimate_tokens("one two three four five", "gpt-6-luna")
 
     assert first == second and first > 0
     assert calls["n"] == 1

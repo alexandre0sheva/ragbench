@@ -8,6 +8,7 @@ import yaml
 from ragbench.evaluation.evaluator import run_benchmark
 from ragbench.models import embeddings, llms
 from ragbench.models.errors import ModelInitError
+from ragbench.models.providers import openai as openai_provider
 from ragbench.reporting.html_report import write_html_report
 from ragbench.reporting.markdown_report import write_leaderboard
 
@@ -52,9 +53,9 @@ def test_pricing_overrides_do_not_leak_between_runs(tmp_path, monkeypatch):
     from ragbench.models import cost
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    run_benchmark(_config(tmp_path, {"pricing": {"gpt-5.4-nano": {"input": 99.0, "output": 0.0}}}), force_mock=True)
+    run_benchmark(_config(tmp_path, {"pricing": {"gpt-6-luna": {"input": 99.0, "output": 0.0}}}), force_mock=True)
 
-    assert cost.estimate_model_cost("gpt-5.4-nano", 1_000_000, 0) == 0.20
+    assert cost.estimate_model_cost("gpt-6-luna", 1_000_000, 0) == 0.10
 
 
 def test_reports_warn_about_unknown_priced_models(tmp_path):
@@ -84,24 +85,22 @@ def test_live_key_with_failing_client_raises_instead_of_silently_mocking(monkeyp
     def boom(*_args, **_kwargs):
         raise RuntimeError("client init failed")
 
-    monkeypatch.setattr(llms, "OpenAILLM", boom)
-    monkeypatch.setattr(embeddings, "OpenAIEmbeddingModel", boom)
+    monkeypatch.setattr(openai_provider, "OpenAILLM", boom)
+    monkeypatch.setattr(openai_provider, "OpenAIEmbeddingModel", boom)
 
     with pytest.raises(ModelInitError):
-        llms.create_llm("gpt-5.4-nano")
+        llms.create_llm("gpt-6-luna")
     with pytest.raises(ModelInitError):
         embeddings.create_embedding_model("text-embedding-3-small")
 
     # Explicit opt-outs keep working.
-    assert llms.create_llm("gpt-5.4-nano", force_mock=True).model_name == "mock-llm"
-    assert llms.create_llm("gpt-5.4-nano", strict=False).model_name == "mock-llm"
+    assert llms.create_llm("gpt-6-luna", force_mock=True).model_name == "mock-llm"
+    assert llms.create_llm("gpt-6-luna", strict=False).model_name == "mock-llm"
     assert embeddings.create_embedding_model("x", strict=False).model_name == "hashing-embedding"
 
 
 def test_no_key_means_mock_without_error(monkeypatch):
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.setattr("ragbench.models.llms.has_openai_key", lambda: False)
-    monkeypatch.setattr("ragbench.models.embeddings.has_openai_key", lambda: False)
+    monkeypatch.setenv("OPENAI_API_KEY", "")  # empty counts as set, so the repo's real .env key is never loaded
 
-    assert llms.create_llm("gpt-5.4-nano").model_name == "mock-llm"
+    assert llms.create_llm("gpt-6-luna").model_name == "mock-llm"
     assert embeddings.create_embedding_model("text-embedding-3-small").model_name == "hashing-embedding"

@@ -6,29 +6,44 @@ from pathlib import Path
 from typing import Any
 
 import typer
+import yaml
 from pydantic import ValidationError
 from rich.console import Console
+from rich.markup import escape
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from ragbench import __version__
+from ragbench.config.loader import load_config
 from ragbench.datasets.demo_generator import write_demo_dataset
 from ragbench.datasets.loader import load_dataset
 from ragbench.datasets.validation import validate_dataset
-from ragbench.documents.loaders import load_documents
+from ragbench.documents.loaders import DocumentLoadError, load_documents
+from ragbench.documents.preview import DEFAULT_MIN_TOKENS, chunk_stats, stats_as_dict
+from ragbench.documents.tokenizer import count_tokens
 from ragbench.evaluation.evaluator import BenchmarkRunError, ProgressListener, run_benchmark
+from ragbench.models.errors import MissingExtraError, ModelInitError
+from ragbench.models.refs import resolve_run_mode
 from ragbench.reporting.columns import format_value, is_missing, leaderboard_columns
-from ragbench.utils.env import has_openai_key, load_project_env
+from ragbench.utils.env import load_project_env
 
 app = typer.Typer(help="RAGBench: evaluation-first RAG benchmark framework.")
 console = Console()
 
 
-def _mock_warning(force_mock: bool = False) -> None:
+def _mock_warning(config: Path, force_mock: bool = False) -> None:
     if force_mock:
         console.print("[yellow]Forced mock mode enabled. Scores are for pipeline validation only.[/yellow]")
-    elif not has_openai_key():
-        console.print("[yellow]No OpenAI API key found. Running in mock mode. Scores are for pipeline validation only.[/yellow]")
+        return
+    try:
+        mock = resolve_run_mode(load_config(config), force_mock=False) == "mock"
+    except Exception:
+        return  # an unreadable or invalid config is reported by the run itself
+    if mock:
+        console.print(
+            "[yellow]No API key found for the configured models (OPENAI_API_KEY / ANTHROPIC_API_KEY). Running in mock mode. "
+            "Scores are for pipeline validation only.[/yellow]"
+        )
 
 
 class _RichProgress(ProgressListener):
@@ -65,7 +80,7 @@ def _execute_benchmark(
     config: Path, mock: bool, max_workers: int | None, done_message: str, use_cache: bool = True, system_workers: int | None = None
 ) -> None:
     load_project_env(config)
-    _mock_warning(force_mock=mock)
+    _mock_warning(config, force_mock=mock)
     progress = Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -88,8 +103,8 @@ def _execute_benchmark(
             where = ".".join(str(part) for part in error["loc"])
             console.print(f"  [red]•[/red] {where + ': ' if where else ''}{str(error['msg']).removeprefix('Value error, ')}", soft_wrap=True)
         raise typer.Exit(2) from exc
-    except FileNotFoundError as exc:
-        console.print(f"[red]{exc}[/red]")
+    except (FileNotFoundError, DocumentLoadError, ModelInitError, MissingExtraError) as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")  # messages name extras like ragbench[anthropic], which Rich would read as markup
         raise typer.Exit(2) from exc
     _print_run_summary(output_dir)
     console.print(f"[green]{done_message}[/green] Results: [bold]{output_dir}[/bold]")
@@ -183,9 +198,20 @@ def inspect_dataset(
     docs: Path = typer.Option(..., "--docs", help="Document folder."),
     questions: Path = typer.Option(..., "--questions", help="Questions JSONL file."),
     qrels: Path | None = typer.Option(None, "--qrels", help="Optional qrels JSONL file."),
+    include: list[str] | None = typer.Option(None, "--include", help="Only load files matching this glob (repeatable)."),
+    exclude: list[str] | None = typer.Option(None, "--exclude", help="Skip files matching this glob (repeatable)."),
+    on_error: str = typer.Option("raise", "--on-error", help="`raise` (fail on a file that cannot be loaded) or `skip` (warn and go on)."),
 ) -> None:
     """Show dataset counts, categories, answerability, and qrels coverage."""
-    documents = load_documents(docs)
+    if on_error not in ("raise", "skip"):
+        console.print("[red]--on-error must be 'raise' or 'skip'.[/red]")
+        raise typer.Exit(2)
+    load_warnings: list[str] = []
+    try:
+        documents = load_documents(docs, include=include, exclude=exclude, on_error=on_error, warnings=load_warnings)  # type: ignore[arg-type]
+    except (DocumentLoadError, ValueError, FileNotFoundError, MissingExtraError) as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(2) from exc
     dataset = load_dataset(questions, qrels)
     categories: dict[str, int] = {}
     for question in dataset.questions:
@@ -207,6 +233,10 @@ def inspect_dataset(
     for category, count in sorted(categories.items()):
         cat_table.add_row(category, str(count))
     console.print(cat_table)
+    if load_warnings:
+        console.print(f"[yellow]{len(load_warnings)} document loading warning(s):[/yellow]")
+        for message in load_warnings:
+            console.print(f"  [yellow]•[/yellow] {escape(message)}", soft_wrap=True)
     warnings = validate_dataset(documents, dataset)
     if warnings:
         console.print(f"[yellow]Found {len(warnings)} dataset issue(s):[/yellow]")
@@ -214,6 +244,102 @@ def inspect_dataset(
             console.print(f"  [yellow]•[/yellow] {warning}")
     else:
         console.print("[green]No dataset issues found.[/green]")
+
+
+def parse_chunker_spec(text: str) -> dict[str, Any]:
+    """`--chunker` value: a YAML or JSON mapping such as `{type: markdown, chunk_size: 300}`; empty means all defaults."""
+    parsed = yaml.safe_load(text) if text.strip() else {}
+    parsed = {} if parsed is None else parsed
+    if not isinstance(parsed, dict):
+        raise ValueError(f"--chunker must be a YAML/JSON mapping like '{{type: markdown}}', got: {text!r}")
+    return parsed
+
+
+@app.command("chunk-preview")
+def chunk_preview(
+    docs: Path = typer.Option(..., "--docs", help="Document file or folder."),
+    chunker: str = typer.Option("{}", "--chunker", help="Chunker section as YAML or JSON, e.g. '{type: markdown, chunk_size: 300}'."),
+    doc: str | None = typer.Option(None, "--doc", help="Only this document id."),
+    limit: int = typer.Option(5, "--limit", "-n", min=0, help="How many chunks to show."),
+    as_json: bool = typer.Option(False, "--json", help="Print machine-readable JSON instead of tables."),
+    mock: bool = typer.Option(False, "--mock", help="Use mock hashing embeddings for chunkers that embed text (`semantic`)."),
+    embedding_model: str | None = typer.Option(None, "--embedding-model", help="Embedding model ref for `semantic` (default: the benchmark default)."),
+) -> None:
+    """Show how a chunker cuts your documents: size statistics plus the first chunks. Nothing is indexed or paid for (except `semantic`'s sentence embeddings)."""
+    from ragbench.config.schema import ChunkerConfig
+    from ragbench.rag_systems.components import build_chunker, chunk_documents
+
+    load_project_env(docs)
+    try:
+        spec = parse_chunker_spec(chunker)
+        config = ChunkerConfig.model_validate(spec)
+        documents = load_documents(docs)
+        if doc is not None:
+            documents = [d for d in documents if d.doc_id == doc]
+            if not documents:
+                known = ", ".join(d.doc_id for d in load_documents(docs)[:10])
+                raise ValueError(f"No document with id {doc!r} under {docs} (first ids: {known})")
+        models = {"embedding": embedding_model} if embedding_model else {}
+        chunks, cost = chunk_documents(build_chunker(config, models=models, force_mock=mock), documents)
+    except ValidationError as exc:
+        console.print("[red]Invalid --chunker:[/red]")
+        for error in exc.errors():
+            where = ".".join(str(part) for part in error["loc"])
+            console.print(f"  [red]•[/red] {escape(where + ': ' if where else '')}{escape(str(error['msg']).removeprefix('Value error, '))}", soft_wrap=True)
+        raise typer.Exit(2) from exc
+    except (ValueError, FileNotFoundError, ModelInitError, MissingExtraError, yaml.YAMLError) as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(2) from exc
+
+    threshold = config_min_tokens(config)
+    stats = chunk_stats(chunks, documents=len(documents), threshold_tokens=threshold)
+    shown = chunks[:limit]
+    if as_json:
+        payload = {
+            "chunker": config.model_dump(exclude_none=True),
+            "stats": stats_as_dict(stats),
+            "embedding_cost_usd": cost.total_cost,
+            "chunks": [
+                {"chunk_id": c.chunk_id, "doc_id": c.doc_id, "tokens": count_tokens(c.text), "text": c.text, "metadata": c.metadata} for c in shown
+            ],
+        }
+        typer.echo(json.dumps(payload, ensure_ascii=False, default=str, indent=2))
+        return
+
+    table = Table(title=f"Chunking: {config.type}")
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+    table.add_row("Documents", str(stats.documents))
+    table.add_row("Chunks", str(stats.chunks))
+    table.add_row(f"Tokens per chunk ({stats.tokenizer})", f"mean {stats.mean_tokens:.0f} · median {stats.median_tokens:.0f} · p95 {stats.p95_tokens:.0f} · max {stats.max_tokens}")
+    table.add_row(f"Chunks under {stats.threshold_tokens} tokens", f"{stats.percent_below_threshold:.1f}%")
+    if cost.total_cost:
+        table.add_row("Embedding cost", f"${cost.total_cost:.4f}")
+    console.print(table)
+    if shown:
+        chunk_table = Table(title=f"First {len(shown)} chunk(s)")
+        for column in ("#", "Doc", "Tokens", "Section"):
+            chunk_table.add_column(column)
+        chunk_table.add_column("Text")
+        for chunk in shown:
+            path = chunk.metadata.get("heading_path")
+            chunk_table.add_row(
+                str(chunk.metadata["chunk_index"]),
+                chunk.doc_id,
+                str(count_tokens(chunk.text)),
+                " > ".join(path) if path else "",
+                escape(" ".join(chunk.text.split())[:160]),
+            )
+        console.print(chunk_table)
+
+
+def config_min_tokens(config: Any) -> int:
+    """The "small chunk" threshold for the preview: the chunker's `min_chunk_size` (or its class default), else 50 tokens."""
+    from ragbench.registry import CHUNKERS
+
+    if config.min_chunk_size is not None:
+        return int(config.min_chunk_size)
+    return int(CHUNKERS.get(config.type).default_min_chunk_size or DEFAULT_MIN_TOKENS)
 
 
 @app.command("list-systems")

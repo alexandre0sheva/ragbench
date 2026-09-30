@@ -33,6 +33,10 @@ class ModelInitError(RagbenchModelError):
     """A real (non-mock) client could not be constructed even though credentials are present."""
 
 
+class MissingExtraError(ImportError):
+    """An optional SDK is not installed; the message names the extra (`pip install 'ragbench[anthropic]'`) that provides it."""
+
+
 def _retry_after_seconds(exc: Any) -> float | None:
     headers = getattr(getattr(exc, "response", None), "headers", None)
     if not headers:
@@ -46,22 +50,36 @@ def _retry_after_seconds(exc: Any) -> float | None:
         return None
 
 
+def _translate_sdk_exception(exc: Exception, sdk: Any) -> Exception:
+    """Shared by SDKs with the openai/anthropic exception layout (`RateLimitError`, `APIStatusError`, ...)."""
+    if isinstance(exc, RagbenchModelError):
+        return exc
+    message = str(exc)
+    if isinstance(exc, sdk.RateLimitError):
+        error: RagbenchModelError = RateLimitError(message, retry_after=_retry_after_seconds(exc))
+    elif isinstance(exc, sdk.APITimeoutError | sdk.APIConnectionError | sdk.InternalServerError):
+        error = TransientModelError(message)
+    elif isinstance(exc, sdk.APIStatusError):
+        error = TransientModelError(message) if exc.status_code in (408, 409) or exc.status_code >= 500 else PermanentModelError(message)
+    else:
+        return exc
+    error.__cause__ = exc
+    return error
+
+
 def translate_openai_exception(exc: Exception) -> Exception:
     """Map an OpenAI SDK exception onto the taxonomy; anything else is returned unchanged."""
     try:
         import openai
     except ImportError:  # pragma: no cover - openai is a core dependency
         return exc
-    if isinstance(exc, RagbenchModelError):
-        return exc
-    message = str(exc)
-    if isinstance(exc, openai.RateLimitError):
-        error: RagbenchModelError = RateLimitError(message, retry_after=_retry_after_seconds(exc))
-    elif isinstance(exc, openai.APITimeoutError | openai.APIConnectionError | openai.InternalServerError):
-        error = TransientModelError(message)
-    elif isinstance(exc, openai.APIStatusError):
-        error = TransientModelError(message) if exc.status_code in (408, 409) or exc.status_code >= 500 else PermanentModelError(message)
-    else:
-        return exc
-    error.__cause__ = exc
-    return error
+    return _translate_sdk_exception(exc, openai)
+
+
+def translate_anthropic_exception(exc: Exception) -> Exception:
+    """Map an Anthropic SDK exception (HTTP 529 "overloaded" included) onto the taxonomy; anything else is returned unchanged."""
+    try:
+        import anthropic
+    except ImportError:
+        return exc  # the optional extra is absent, so no SDK exception can have been raised
+    return _translate_sdk_exception(exc, anthropic)

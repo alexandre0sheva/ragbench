@@ -22,10 +22,10 @@ def test_mock_mode_can_run_without_openai_key(tmp_path, monkeypatch):
                 "name": "vector_mock",
                 "chunker": {"type": "token", "chunk_size": 50, "chunk_overlap": 0},
                 "retrieval": {"top_k": 2},
-                "models": {"embedding": "text-embedding-3-small", "generator": "gpt-5.4-nano"},
+                "models": {"embedding": "text-embedding-3-small", "generator": "gpt-6-luna"},
             }
         ],
-        "evaluation": {"k_values": [1, 3, 5], "judge_enabled": True, "judge_model": "gpt-5.4-nano", "max_questions": 1},
+        "evaluation": {"k_values": [1, 3, 5], "judge_enabled": True, "judge_model": "gpt-6-luna", "max_questions": 1},
     }
     config_path = tmp_path / "config.yaml"
     config_path.write_text(yaml.safe_dump(config), encoding="utf-8")

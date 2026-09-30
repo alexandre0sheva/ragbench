@@ -6,24 +6,14 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, Field
 
 from ragbench.config.schema import SystemConfig
-from ragbench.documents.schema import Document
+from ragbench.documents.schema import Document, RetrievedChunk
 from ragbench.models.cost import CostBreakdown
+from ragbench.models.defaults import DEFAULT_GENERATOR_MODEL
 from ragbench.models.llms import LLM, create_llm
 from ragbench.rag_systems.options import BaseOptions, PermissiveOptions
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.rag_systems.trace import Step, Tracer, activate, current_tracer, reconcile_steps
 from ragbench.utils.timing import timer
-
-
-class RetrievedChunk(BaseModel):
-    """A single chunk returned by a RAG system's retrieval step."""
-
-    chunk_id: str
-    doc_id: str
-    text: str
-    score: float
-    rank: int
-    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class RetrievalResult(BaseModel):
@@ -95,7 +85,7 @@ class BaseRAGSystem(ABC):
         self.name = config.resolved_name
         self.force_mock = force_mock
         self.options = (self.spec.options if self.spec is not None else PermissiveOptions).model_validate(config.retrieval)
-        self.llm: LLM = create_llm(config.models.get("generator", "gpt-5.4-nano"), force_mock=force_mock)
+        self.llm: LLM = create_llm(config.models.get("generator", DEFAULT_GENERATOR_MODEL), force_mock=force_mock)
 
     @abstractmethod
     def ingest(self, documents: list[Document]) -> IngestionResult:

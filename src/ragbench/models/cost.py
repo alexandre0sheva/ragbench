@@ -8,21 +8,43 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # ISO date the price table below was last reviewed. Bump it whenever you touch the table.
-PRICING_AS_OF = "2026-06-12"
+PRICING_AS_OF = "2026-10-01"
 
-# Approximate USD prices per 1M tokens. Pricing changes; update this registry
+# Approximate USD prices per 1M tokens (standard tier). Pricing changes; update this registry
 # (or override per run with the `pricing:` config section) before using RAGBench
 # for budgeting or procurement decisions.
+#
+# Sources, fetched 2026-10-01 (re-verify the whole table with docs/release-checklist.md before a release):
+#   OpenAI    https://developers.openai.com/api/docs/pricing  and the per-model pages under /api/docs/models/
+#   Anthropic https://platform.claude.com/docs/en/about-claude/pricing  and /docs/en/about-claude/models/overview
+#
+# Policy: only currently served models, newest generation per tier (plus the previous generation only while it is still the
+# cheaper choice). Dated snapshots are covered by prefix matching, so they need no rows. Cached-input and batch discounts
+# are not modelled: every token is billed at the standard input/output rate.
 MODEL_PRICING_USD_PER_1M: dict[str, dict[str, float]] = {
+    # OpenAI chat: flagship / balanced / cheap. GPT-6 has no mid "terra" model; gpt-6.1-sol ($2/$10) undercuts gpt-5.6-terra ($2/$12).
+    "gpt-6-astra": {"input": 10.00, "output": 50.00},
+    "gpt-6.1-sol": {"input": 2.00, "output": 10.00},
+    "gpt-6-luna": {"input": 0.10, "output": 0.50},
+    # OpenAI embeddings (no newer generation has been released).
     "text-embedding-3-small": {"input": 0.02, "output": 0.0},
     "text-embedding-3-large": {"input": 0.13, "output": 0.0},
-    "gpt-5.4-nano": {"input": 0.20, "output": 1.25},
-    "gpt-5.4-mini": {"input": 0.75, "output": 4.50},
-    "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "gpt-4o": {"input": 2.50, "output": 10.00},
+    # Anthropic. claude-haiku-4-5 is still the current Haiku; Anthropic's retirement commitment for it is "not sooner than 2026-10-15".
+    "claude-fable-5-1": {"input": 10.00, "output": 50.00},
+    "claude-opus-5-5": {"input": 4.00, "output": 20.00},
+    "claude-sonnet-5-5": {"input": 2.00, "output": 10.00},
+    "claude-haiku-4-5": {"input": 1.00, "output": 5.00},
     "mock-llm": {"input": 0.0, "output": 0.0},
     "hashing-embedding": {"input": 0.0, "output": 0.0},
 }
+
+# Models that still have a price row but are deprecated or superseded. Must stay empty: delete such rows instead
+# (enforced by tests/test_cost_tracker.py; the set exists to document the rule).
+DEPRECATED_MODELS: frozenset[str] = frozenset()
+
+# Refs with these prefixes are not in the table above: local models are free, and an OpenAI-compatible endpoint's prices are
+# unknown, so it costs $0 unless `pricing:` has a row for it (keyed by the full ref, `<endpoint>/<model>`, or `<model>`).
+FREE_BY_DEFAULT_PREFIXES = ("local:", "openai_compatible:")
 
 
 class CostBreakdown(BaseModel):
@@ -98,15 +120,37 @@ def reset_unknown_priced_models() -> None:
         _unknown_priced_models.clear()
 
 
-def _lookup_pricing(model: str) -> dict[str, float] | None:
+def _match(table: dict[str, dict[str, float]], model: str) -> dict[str, float] | None:
     # Exact match first, then the longest registered name that prefixes a dated snapshot
-    # (e.g. "gpt-4o-mini-2024-07-18" -> "gpt-4o-mini"). Overrides beat the built-in table.
+    # (e.g. "claude-haiku-4-5-20251001" -> "claude-haiku-4-5").
+    if model in table:
+        return table[model]
+    candidates = [name for name in table if model.startswith(name + "-")]
+    return table[max(candidates, key=len)] if candidates else None
+
+
+def _lookup_pricing(model: str) -> dict[str, float] | None:
+    """Price row for `model` (a bare name or a `provider:model` ref), or None. Overrides beat the built-in table."""
+    if model.startswith(FREE_BY_DEFAULT_PREFIXES):
+        names = [model]
+        if model.startswith("openai_compatible:"):
+            endpoint_model = model.split(":", 1)[1]
+            names += [endpoint_model, endpoint_model.partition("/")[2]]
+        # Only overrides apply: the OpenAI table must not price a proxy's or local server's model of the same name.
+        for name in names:
+            hit = _match(_pricing_overrides, name)
+            if hit is not None:
+                return hit
+        return {"input": 0.0, "output": 0.0}
+    names = [model]
+    provider, _, bare = model.partition(":")
+    if bare and provider in ("openai", "anthropic"):
+        names.append(bare)
     for table in (_pricing_overrides, MODEL_PRICING_USD_PER_1M):
-        if model in table:
-            return table[model]
-        candidates = [name for name in table if model.startswith(name + "-")]
-        if candidates:
-            return table[max(candidates, key=len)]
+        for name in names:
+            hit = _match(table, name)
+            if hit is not None:
+                return hit
     return None
 
 

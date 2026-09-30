@@ -4,20 +4,25 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from ragbench.models.cost import CostBreakdown, estimate_model_cost
-from ragbench.models.errors import ModelInitError, translate_openai_exception
-from ragbench.models.retry import call_with_retry
-from ragbench.runtime.context import limiter_for
-from ragbench.utils.env import has_openai_key
+from ragbench.models.cost import CostBreakdown
+from ragbench.models.defaults import DEFAULT_GENERATOR_MODEL
+from ragbench.models.errors import ModelInitError
+from ragbench.models.refs import parse_model_ref, provider_reachable
 from ragbench.utils.text import estimate_tokens, tokenize
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT_S = 120.0
+__all__ = ["LLM", "LLMResult", "MockLLM", "ToolCall", "create_llm", "parse_model_ref"]
+
+
+@dataclass
+class ToolCall:
+    id: str
+    name: str
+    arguments: dict[str, Any]
 
 
 @dataclass
@@ -27,17 +32,46 @@ class LLMResult:
     prompt_tokens: int
     completion_tokens: int
     cost: CostBreakdown
+    # Tools the model asked to call. Feed the turn back with `assistant_message()` plus one `role: "tool"` message per call.
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    finish_reason: str | None = None  # "stop" | "length" | "tool_calls" | provider-specific
     raw: Any | None = None
     # Wall-clock time of the underlying call; for a cache hit, the time the original call took (replayed).
     latency_ms: float | None = None
     cached: bool = False
 
+    def assistant_message(self) -> dict[str, Any]:
+        """This turn as a chat message (OpenAI shape: tool-call arguments are a JSON string), ready to append to `messages`."""
+        message: dict[str, Any] = {"role": "assistant", "content": self.text or None}
+        if self.tool_calls:
+            message["tool_calls"] = [
+                {"id": call.id, "type": "function", "function": {"name": call.name, "arguments": json.dumps(call.arguments)}}
+                for call in self.tool_calls
+            ]
+        return message
+
 
 class LLM(ABC):
     model_name: str
+    # Identifies the backing service in persistent cache keys (two providers may serve the same model name).
+    provider: str = "openai"
 
     @abstractmethod
-    def generate(self, messages: list[dict[str, str]], **kwargs: Any) -> LLMResult:
+    def generate(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        json_mode: bool = False,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> LLMResult:
+        """One chat completion.
+
+        `messages` are OpenAI-style chat messages; they may include `{"role": "assistant", "tool_calls": [...]}` and
+        `{"role": "tool", "tool_call_id": ..., "content": ...}`. `tools` is a list of OpenAI function schemas
+        (`{"type": "function", "function": {"name", "description", "parameters"}}`); providers translate as needed.
+        """
         raise NotImplementedError
 
 
@@ -45,9 +79,18 @@ class MockLLM(LLM):
     def __init__(self):
         self.model_name = "mock-llm"
 
-    def generate(self, messages: list[dict[str, str]], **kwargs: Any) -> LLMResult:
-        prompt = "\n".join(m.get("content", "") for m in messages)
-        if kwargs.get("json_mode"):
+    def generate(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        temperature: float = 0.0,
+        max_tokens: int | None = None,
+        json_mode: bool = False,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> LLMResult:
+        # `tools` is accepted and ignored: the mock never calls one (Task 18 adds a scripted policy).
+        prompt = "\n".join(m.get("content") or "" for m in messages)
+        if json_mode:
             text = json.dumps({"score": 3, "reasoning": "Mock JSON response."})
         elif "hypothetical passage" in prompt.lower():
             text = self._hypothetical_from_prompt(prompt)
@@ -60,7 +103,9 @@ class MockLLM(LLM):
             text = self._answer_from_prompt(prompt)
         prompt_tokens = estimate_tokens(prompt, self.model_name)
         completion_tokens = estimate_tokens(text, self.model_name)
-        return LLMResult(text=text, model=self.model_name, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=CostBreakdown())
+        return LLMResult(
+            text=text, model=self.model_name, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=CostBreakdown(), finish_reason="stop"
+        )
 
     @staticmethod
     def _hypothetical_from_prompt(prompt: str) -> str:
@@ -99,175 +144,35 @@ class MockLLM(LLM):
         return answer[:1200]
 
 
-@dataclass(frozen=True)
-class ModelCapabilities:
-    """Request parameters a model family accepts. Unknown models are assumed to accept everything."""
+def create_llm(
+    model_name: str | None = None, force_mock: bool = False, strict: bool = True, providers: dict[str, Any] | None = None
+) -> LLM:
+    """Build the (cache-wrapped) chat model for a model ref such as `gpt-6-luna` or `anthropic:claude-haiku-4-5`.
 
-    temperature: bool = True
-
-
-# Matched by prefix. Reasoning families reject `temperature`. For models not listed here, a
-# rejected `temperature` is detected from the API error and remembered per client instance.
-MODEL_CAPABILITIES: dict[str, ModelCapabilities] = {
-    "o1": ModelCapabilities(temperature=False),
-    "o3": ModelCapabilities(temperature=False),
-    "o4": ModelCapabilities(temperature=False),
-}
-
-
-def model_capabilities(model: str) -> ModelCapabilities:
-    matches = [prefix for prefix in MODEL_CAPABILITIES if model.startswith(prefix)]
-    return MODEL_CAPABILITIES[max(matches, key=len)] if matches else ModelCapabilities()
-
-
-def _error_text(exc: Exception) -> str:
-    return f"{getattr(exc, 'message', '')} {exc}".lower()
-
-
-def _is_endpoint_unsupported(exc: Exception) -> bool:
-    """True only when the API says this model cannot be used with Chat Completions."""
-    import openai
-
-    if not isinstance(exc, openai.BadRequestError | openai.NotFoundError):
-        return False
-    text = _error_text(exc)
-    return "v1/responses" in text or "not a chat model" in text or "not supported in the v1/chat/completions" in text
-
-
-def _is_temperature_rejected(exc: Exception) -> bool:
-    import openai
-
-    return isinstance(exc, openai.BadRequestError) and "temperature" in _error_text(exc)
-
-
-class OpenAILLM(LLM):
-    """OpenAI chat model. Retries/timeouts are owned here (the SDK's own retries are disabled)."""
-
-    def __init__(self, model_name: str = "gpt-5.4-nano", client: Any | None = None, timeout: float = DEFAULT_TIMEOUT_S):
-        self.model_name = model_name
-        self._send_temperature = model_capabilities(model_name).temperature
-        if client is None:
-            from openai import OpenAI
-
-            client = OpenAI(timeout=timeout, max_retries=0)
-        self.client = client
-
-    def generate(self, messages: list[dict[str, str]], **kwargs: Any) -> LLMResult:
-        limiter = limiter_for("openai")
-        estimated_tokens = 0
-        if limiter is not None and limiter.limits_tokens:
-            estimated_tokens = sum(estimate_tokens(m.get("content", ""), self.model_name) for m in messages) + int(kwargs.get("max_tokens") or 0)
-
-        def attempt() -> LLMResult:
-            # Every attempt, retries included, is one request against the provider's limits.
-            with limiter.acquire(estimated_tokens) if limiter is not None else nullcontext():
-                return self._attempt(messages, **kwargs)
-
-        return call_with_retry(attempt)
-
-    def _attempt(self, messages: list[dict[str, str]], **kwargs: Any) -> LLMResult:
-        try:
-            return self._generate_chat_completions(messages, **kwargs)
-        except Exception as exc:
-            # Only a model that cannot use Chat Completions may move to the Responses API;
-            # any other failure must not trigger a second (billable) request.
-            if _is_endpoint_unsupported(exc) and getattr(self.client, "responses", None) is not None:
-                try:
-                    return self._generate_responses(messages, **kwargs)
-                except Exception as fallback_exc:
-                    raise translate_openai_exception(fallback_exc) from fallback_exc
-            translated = translate_openai_exception(exc)
-            if translated is exc:
-                raise
-            raise translated from exc
-
-    def _create_chat(self, params: dict[str, Any]) -> Any:
-        if self._send_temperature and "temperature" in params:
-            try:
-                return self.client.chat.completions.create(**params)
-            except Exception as exc:
-                if not _is_temperature_rejected(exc):
-                    raise
-                self._send_temperature = False
-                logger.info("Model %s rejected `temperature`; omitting it from now on.", self.model_name)
-        params = {key: value for key, value in params.items() if key != "temperature"}
-        return self.client.chat.completions.create(**params)
-
-    def _generate_chat_completions(self, messages: list[dict[str, str]], **kwargs: Any) -> LLMResult:
-        params: dict[str, Any] = {"model": self.model_name, "messages": messages, "temperature": kwargs.get("temperature", 0)}
-        if kwargs.get("json_mode"):
-            params["response_format"] = {"type": "json_object"}
-        if kwargs.get("max_tokens"):
-            params["max_completion_tokens"] = kwargs["max_tokens"]
-        response = self._create_chat(params)
-        text = response.choices[0].message.content or ""
-        prompt_tokens = int(response.usage.prompt_tokens) if response.usage else sum(estimate_tokens(m["content"], self.model_name) for m in messages)
-        completion_tokens = int(response.usage.completion_tokens) if response.usage else estimate_tokens(text, self.model_name)
-        return LLMResult(
-            text=text,
-            model=self.model_name,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            cost=CostBreakdown(
-                llm_prompt_tokens=prompt_tokens,
-                llm_completion_tokens=completion_tokens,
-                llm_cost=estimate_model_cost(self.model_name, prompt_tokens, completion_tokens),
-            ),
-            raw=response,
-        )
-
-    def _generate_responses(self, messages: list[dict[str, str]], **kwargs: Any) -> LLMResult:
-        system_messages = [m.get("content", "") for m in messages if m.get("role") == "system"]
-        input_messages = [m for m in messages if m.get("role") != "system"]
-        if kwargs.get("json_mode"):
-            system_messages.append("Return JSON only.")
-        params: dict[str, Any] = {
-            "model": self.model_name,
-            "input": input_messages,
-            "instructions": "\n\n".join(system_messages) or None,
-        }
-        if self._send_temperature:
-            params["temperature"] = kwargs.get("temperature", 0)
-        if kwargs.get("max_tokens"):
-            params["max_output_tokens"] = kwargs["max_tokens"]
-        response = self.client.responses.create(**params)
-        text = getattr(response, "output_text", "") or ""
-        usage = getattr(response, "usage", None)
-        prompt_tokens = int(getattr(usage, "input_tokens", 0) or 0) if usage else 0
-        completion_tokens = int(getattr(usage, "output_tokens", 0) or 0) if usage else 0
-        if not prompt_tokens:
-            prompt_tokens = sum(estimate_tokens(m.get("content", ""), self.model_name) for m in messages)
-        if not completion_tokens:
-            completion_tokens = estimate_tokens(text, self.model_name)
-        return LLMResult(
-            text=text,
-            model=self.model_name,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            cost=CostBreakdown(
-                llm_prompt_tokens=prompt_tokens,
-                llm_completion_tokens=completion_tokens,
-                llm_cost=estimate_model_cost(self.model_name, prompt_tokens, completion_tokens),
-            ),
-            raw=response,
-        )
-
-
-def create_llm(model_name: str | None = None, force_mock: bool = False, strict: bool = True) -> LLM:
-    """Build the generator LLM.
-
-    No API key (or `force_mock`) selects the mock. With a key present a failing client
-    constructor raises `ModelInitError` (`strict=True`, default) instead of silently
-    producing mock scores; pass `strict=False` to restore the old fall-back-to-mock behaviour.
+    `force_mock`, or a hosted provider (OpenAI, Anthropic) whose API key is not set, selects the mock. With credentials
+    present a failing client constructor raises `ModelInitError` (`strict=True`, default) instead of silently producing
+    mock scores; pass `strict=False` to restore the old fall-back-to-mock behaviour. A missing optional SDK raises
+    `ImportError` naming the extra to install. `providers` maps `providers:` endpoint names to their config; when omitted
+    the active run's endpoints are used.
     """
-    if force_mock or not has_openai_key():
+    import ragbench.models.providers  # noqa: F401  (registers the built-in providers)
+    from ragbench.registry import LLM_PROVIDERS
+    from ragbench.runtime.context import current_runtime
+
+    ref = model_name or DEFAULT_GENERATOR_MODEL
+    provider, model = parse_model_ref(ref)
+    if force_mock or not provider_reachable(provider):
         return MockLLM()
+    factory = LLM_PROVIDERS.get(provider)
+    endpoints = providers if providers is not None else current_runtime().providers
     try:
         from ragbench.models.cached import CachedLLM
 
-        return CachedLLM(OpenAILLM(model_name or "gpt-5.4-nano"))
+        return CachedLLM(factory(model, providers=endpoints))
+    except ImportError:
+        raise  # the message already names the extra to install
     except Exception as exc:
         if strict:
-            raise ModelInitError(f"Could not create the OpenAI client for {model_name!r} although OPENAI_API_KEY is set: {exc}") from exc
-        logger.warning("OpenAI client init failed (%s); falling back to the mock LLM.", exc)
+            raise ModelInitError(f"Could not create the {provider} client for {ref!r}: {exc}") from exc
+        logger.warning("%s client init failed (%s); falling back to the mock LLM.", provider, exc)
         return MockLLM()

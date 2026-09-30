@@ -89,6 +89,6 @@ def test_builtin_registries_are_populated():
     from ragbench.registry import CHUNKERS, RERANKERS, SYSTEMS
 
     assert {"bm25", "vector", "hybrid", "hybrid_rerank", "rerank", "parent_doc", "hyde", "llm_heavy"} <= set(SYSTEMS.names())
-    assert {"fixed_char", "token", "markdown"} <= set(CHUNKERS.names())
-    assert CHUNKERS.get("word") is CHUNKERS.get("token") and CHUNKERS.get("md") is CHUNKERS.get("markdown")
+    assert {"fixed_char", "word", "token", "recursive", "sentence", "semantic", "markdown"} <= set(CHUNKERS.names())
+    assert CHUNKERS.get("word") is not CHUNKERS.get("token") and CHUNKERS.get("md") is CHUNKERS.get("markdown")
     assert {"simple_keyword_overlap", "local_relevance", "llm"} <= set(RERANKERS.names())

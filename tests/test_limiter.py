@@ -9,8 +9,7 @@ import pytest
 
 from ragbench.config.schema import LimitsConfig
 from ragbench.models import retry as retry_module
-from ragbench.models.embeddings import OpenAIEmbeddingModel
-from ragbench.models.llms import OpenAILLM
+from ragbench.models.providers.openai import OpenAIEmbeddingModel, OpenAILLM
 from ragbench.runtime import (
     RateLimiter,
     RuntimeContext,
@@ -118,7 +117,8 @@ def test_limiter_without_limits_never_waits_and_reports_what_it_needs():
 def test_build_limiters_from_config_and_runtime_context():
     assert build_limiters(LimitsConfig()) == {}
     limiters = build_limiters(LimitsConfig(max_concurrent_requests=2, requests_per_minute=60))
-    assert set(limiters) == {"openai"}
+    assert set(limiters) == {"openai", "anthropic"}, "hosted APIs have independent rate limits, so each gets its own limiter"
+    assert limiters["openai"] is not limiters["anthropic"]
     assert current_runtime().ingest_workers == 1 and limiter_for("openai") is None
     with activate_runtime(RuntimeContext(ingest_workers=6, limiters=limiters)):
         assert current_runtime().ingest_workers == 6 and limiter_for("openai") is limiters["openai"] and limiter_for("other") is None
@@ -175,7 +175,7 @@ def test_every_llm_attempt_including_retries_goes_through_the_limiter(monkeypatc
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     with activate_runtime(RuntimeContext(limiters={"openai": limiter})):  # type: ignore[dict-item]
-        OpenAILLM("gpt-5.4-nano", client=client).generate([{"role": "user", "content": "hello there"}], max_tokens=50)
+        OpenAILLM("gpt-6-luna", client=client).generate([{"role": "user", "content": "hello there"}], max_tokens=50)
 
     assert calls["n"] == 2 and len(limiter.acquired) == 2
     assert limiter.acquired[0] >= 50  # prompt estimate plus the requested completion tokens
@@ -246,3 +246,18 @@ def test_ordered_parallel_map_raises_the_first_error_and_stops_starting_new_work
         ordered_parallel_map(fn, range(40), workers=2)
 
     assert len(started) < 40
+
+
+def test_endpoints_get_their_own_limiters_and_the_flat_limits_do_not_apply_to_them():
+    from ragbench.config.schema import ProviderConfig
+
+    providers = {
+        "ollama": ProviderConfig(base_url="http://localhost:11434/v1", limits=LimitsConfig(max_concurrent_requests=1)),
+        "vllm": ProviderConfig(base_url="http://localhost:8000/v1"),
+    }
+
+    limiters = build_limiters(LimitsConfig(requests_per_minute=60), providers)
+
+    assert set(limiters) == {"openai", "anthropic", "openai_compatible:ollama"}
+    assert limiters["openai_compatible:ollama"].requests_per_minute is None and limiters["openai"].requests_per_minute == 60
+    assert set(build_limiters(LimitsConfig(), providers)) == {"openai_compatible:ollama"}

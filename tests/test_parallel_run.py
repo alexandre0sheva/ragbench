@@ -51,7 +51,7 @@ def _all_systems_config(tmp_path: Path, **evaluation: object) -> Path:
     demo = tmp_path / "demo"
     shutil.copytree(ROOT / "data" / "demo", demo)
     raw = (ROOT / "configs" / "all.yaml").read_text(encoding="utf-8")
-    text = raw.replace("data/demo", str(demo)).replace("output_dir: results", f"output_dir: {tmp_path / 'results'}").replace("vector_store: chroma", "vector_store: in_memory")
+    text = raw.replace("data/demo", str(demo)).replace("output_dir: results", f"output_dir: {tmp_path / 'results'}")
     path = tmp_path / "all.yaml"
     path.write_text(text, encoding="utf-8")
     if evaluation:
@@ -383,7 +383,8 @@ def test_modules_to_warm_up_include_chromadb_only_when_a_system_uses_it(tmp_path
         return BenchmarkEvaluator(config, force_mock=True)._modules_to_warm_up()
 
     assert modules([{"type": "bm25", "name": "a"}, {"type": "vector", "name": "b", "retrieval": {"vector_store": "in_memory"}}]) == ["httpx", "openai"]
-    assert modules([{"type": "bm25", "name": "a"}, {"type": "hybrid", "name": "b"}]) == ["httpx", "openai", "chromadb"]  # hybrid defaults to chroma
+    assert modules([{"type": "bm25", "name": "a"}, {"type": "hybrid", "name": "b"}]) == ["httpx", "openai"]  # hybrid defaults to numpy
+    assert modules([{"type": "bm25", "name": "a"}, {"type": "hybrid", "name": "b", "retrieval": {"vector_store": "chroma"}}]) == ["httpx", "openai", "chromadb"]
     assert modules([{"type": "fake_ranked", "name": "a", "retrieval": {"top_k": 3}}]) == ["httpx", "openai"]  # spec-less custom systems
 
 

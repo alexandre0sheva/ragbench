@@ -9,9 +9,9 @@ from pydantic import BaseModel, Field
 
 from ragbench.datasets.schema import Question
 from ragbench.models.cost import CostBreakdown
-from ragbench.models.llms import LLM, create_llm
+from ragbench.models.defaults import DEFAULT_JUDGE_MODEL
+from ragbench.models.llms import LLM, MockLLM, create_llm
 from ragbench.rag_systems.base import RetrievedChunk
-from ragbench.utils.env import has_openai_key
 from ragbench.utils.text import normalize_text, tokenize
 
 logger = logging.getLogger(__name__)
@@ -48,10 +48,12 @@ class AnswerJudge:
     always produces scores. The fallback is recorded in `metadata["judge"]`.
     """
 
-    def __init__(self, model_name: str = "gpt-5.4-nano", enabled: bool = True, force_mock: bool = False):
+    def __init__(self, model_name: str = DEFAULT_JUDGE_MODEL, enabled: bool = True, force_mock: bool = False):
         self.enabled = enabled
-        self.force_mock = force_mock or not has_openai_key()
-        self.llm: LLM = create_llm(model_name, force_mock=self.force_mock)
+        # A disabled judge never calls a model, so it must not need credentials for one either.
+        self.llm: LLM = create_llm(model_name, force_mock=force_mock or not enabled)
+        # create_llm falls back to the mock when a hosted provider has no key; the heuristic judge then stands in for it.
+        self.force_mock = force_mock or isinstance(self.llm, MockLLM)
 
     def judge(self, question: Question, answer: str, contexts: list[RetrievedChunk]) -> AnswerJudgeResult:
         """Score `answer` against the reference and retrieved context.

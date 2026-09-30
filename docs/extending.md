@@ -105,7 +105,46 @@ Add a test under `tests/` that exercises ingestion and retrieval against the dem
 
 ## Chunkers and rerankers
 
-Both use the same mechanism: decorate the class with `@CHUNKERS.register("name", aliases=(...))` (in `documents/chunkers.py`) or `@RERANKERS.register("name")` (in `models/rerankers.py`). Names are then accepted in configs (`chunker.type`, `retrieval.reranker`) and unknown names are rejected with a did-you-mean suggestion.
+Both use the same mechanism: decorate the class with `@CHUNKERS.register("name", aliases=(...))` (one file per chunker under `documents/chunkers/`) or `@RERANKERS.register("name")` (one file per reranker under `models/rerankers/`). Names are then accepted in configs (`chunker.type`, `retrieval.reranker`) and unknown names are rejected with a did-you-mean suggestion.
+
+A chunker subclasses `BaseChunker` and implements `_spans(document) -> list[Span]`, returning character ranges in document order; the base class turns them into chunks (no empty chunks, `start_char`/`end_char` that reproduce the text, deterministic ids), so a new chunker only decides where to cut. Declare the `ChunkerConfig` fields it honours beyond the common ones in `options` (`min_chunk_size`, `prefix_heading`, `breakpoint_percentile`), its defaults in `default_chunk_size` / `default_chunk_overlap`, and `needs_embedder = True` if it embeds text (charge that cost through `self.last_cost`). `documents/chunkers/_split.py` has the splitting and packing helpers; `recursive.py` is the smallest structure-aware example.
+
+A reranker is any class with `name` and `rerank(question, chunks, top_k) -> RerankResult`. Return at most `top_k` chunks ranked 1..n, each with `metadata["reranker"]` and `metadata["original_rank"]`, and charge any per-call spend in `RerankResult.cost.rerank_cost`. Optional class attributes tell `create_reranker` how to build it: `needs_llm = True` (gets the system's LLM), `takes_model = True` (gets `retrieval.reranker_model`), `offline_fallback = "<name>"` (mock runs use that reranker instead, so `--mock` never downloads a model), and `import_modules` (libraries imported on the main thread before worker threads start). `models/rerankers/cross_encoder.py` is a complete example: lazy, shared model load, serialized prediction, actionable error when the extra is missing.
+
+The built-in `cross_encoder` reranker is local. A hosted reranking API (Cohere, Voyage, Jina, ...) is deliberately not built in: each has its own per-search pricing that would need a verified price row, and nothing in CI can exercise it. Ship one as a plugin instead (entry point below): call the API inside `rerank`, sort by the returned relevance scores, and put the spend in `rerank_cost`.
+
+## Document loaders
+
+A loader turns one file into documents: `loader(path, context) -> list[Document]`, registered for a file extension with `@LOADERS.register(".ext", aliases=(".other",))` (one module per format under `documents/loaders/`, or an entry point in the `ragbench.loaders` group). Build documents with `make_document(path, context, title, text, extra_metadata, doc_id=None)` so ids follow the usual rules (files of many rows use `doc_id=f"{base}#{row}"`). Decode bytes with `decode_bytes` (or `read_text_file`) to get the shared encoding fallbacks; report recoverable problems with `context.warn(message)`; raise `DocumentLoadError` for a file that cannot be used (it is raised or skipped according to `dataset.on_error`); raise `MissingExtraError` when an optional library is missing (always fatal). Put character spans your format knows about (PDF pages) in `metadata["page_spans"]` as `[start, end, page]` triples to give chunks a `page`.
+
+## Vector backends
+
+A backend is a class registered with `@VECTOR_BACKENDS.register("name")` (one file per backend under `stores/index/`, or an entry point in the `ragbench.vector_backends` group). It is constructed with `(collection_name=, persist_directory=)`, receives unit-length vectors in `build(ids, vectors, payloads)`, and returns `(row index, cosine score)` pairs, best first, from `search(query, top_k)`. Declare the class attributes `backend`, `approximate`, `persistent` (honours `persist_directory`) and `import_modules` (libraries to import on the main thread before worker threads start). Check the optional library in `__init__` with `require_extra(...)` so a missing extra fails when the system is built, and never fall back to another backend. `stores/index/faiss_index.py` is the smallest complete example.
+
+## Model providers
+
+A provider turns the part of a model ref after `provider:` into a model object. Write a factory and register it in `LLM_PROVIDERS` (chat, returns an `LLM`) and/or `EMBEDDERS` (returns an `EmbeddingModel`):
+
+```python
+from ragbench.models.llms import LLM, LLMResult
+from ragbench.registry import LLM_PROVIDERS
+
+
+class MyLLM(LLM):
+    provider = "my_provider"          # part of the disk-cache key: two providers may serve the same model name
+
+    def __init__(self, model: str):
+        self.model_name = model       # what reports and price lookups show
+
+    def generate(self, messages, *, temperature=0.0, max_tokens=None, json_mode=False, tools=None) -> LLMResult: ...
+
+
+@LLM_PROVIDERS.register("my_provider")
+def make_llm(model: str, *, providers) -> LLM:    # `providers`: the config's endpoint entries
+    return MyLLM(model)
+```
+
+`my_provider:some-model` is then a valid ref everywhere. Messages and `tools` use the OpenAI chat shapes; translate them inside the provider and fill `LLMResult.tool_calls` (see `models/providers/anthropic.py` for a worked translation). Keep retries (`call_with_retry`) and `limiter_for("<provider>")` around every request, import optional SDKs lazily (raise `MissingExtraError` naming the extra), and add a price row to `models/cost.py` if the provider bills per token.
 
 ## Plugins from other packages
 
@@ -120,6 +159,12 @@ my_chunker = "my_package.chunking:MyChunker"
 
 [project.entry-points."ragbench.rerankers"]
 my_reranker = "my_package.rerank:MyReranker"
+
+[project.entry-points."ragbench.loaders"]             # extension -> loader function, e.g. ".epub" = "my_package.epub:load_epub"
+epub = "my_package.epub:load_epub"
+
+[project.entry-points."ragbench.llm_providers"]      # and "ragbench.embedders" for embedding providers
+my_provider = "my_package.llm:make_llm"
 ```
 
 Plugins are loaded when `ragbench.rag_systems` is imported. A plugin that fails to import is skipped with a warning, and a name that is already taken is ignored. Give a plugin system a `spec` to get config validation and documentation; without one its `retrieval:` section is accepted as-is.

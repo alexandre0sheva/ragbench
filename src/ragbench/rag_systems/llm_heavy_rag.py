@@ -6,7 +6,7 @@ from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document, TextChunk
 from ragbench.models.cost import CostBreakdown
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult, RetrievedChunk
-from ragbench.rag_systems.components import build_chunker, build_embedder, build_reranker, build_vector_index
+from ragbench.rag_systems.components import build_chunker, build_embedder, build_reranker, build_vector_index, chunk_documents
 from ragbench.rag_systems.options import LLMHeavyFeatures, LLMHeavyOptions
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.registry import SYSTEMS
@@ -34,16 +34,21 @@ class LLMHeavyRAG(BaseRAGSystem):
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
         self.features = LLMHeavyFeatures.model_validate(config.llm_features)
-        self.chunker = build_chunker(config.chunker)
+        self.chunker = build_chunker(config.chunker, models=config.models, force_mock=force_mock)
         self.embedding_model = build_embedder(config.models, force_mock)
         self.store = build_vector_index(self.embedding_model, self.options, self.name)
-        self.reranker = build_reranker("llm" if self.features.enable_llm_rerank else self.options.reranker, llm=self.llm)
+        self.reranker = build_reranker(
+            "llm" if self.features.enable_llm_rerank else self.options.reranker,
+            llm=self.llm,
+            model=self.options.reranker_model,
+            force_mock=self.force_mock,
+        )
         self.original_text_by_chunk_id: dict[str, str] = {}
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
         enable_llm_ingestion = self.features.enable_llm_ingestion
         with timer() as t:
-            chunks = self.chunker.chunk(documents)
+            chunks, chunk_cost = chunk_documents(self.chunker, documents)
             self.original_text_by_chunk_id = {chunk.chunk_id: chunk.text for chunk in chunks}
             ingestion_cost = CostBreakdown()
             # One independent LLM call per chunk: run `evaluation.ingest_workers` of them at a time (order preserved).
@@ -71,7 +76,7 @@ class LLMHeavyRAG(BaseRAGSystem):
                 metadata["original_text"] = chunk.text
                 indexed_chunks.append(TextChunk(chunk_id=chunk.chunk_id, doc_id=chunk.doc_id, text=augmented_text, metadata=metadata))
             embedding_cost = self.store.build(indexed_chunks)
-            total_cost = ingestion_cost.plus(embedding_cost)
+            total_cost = chunk_cost.plus(ingestion_cost).plus(embedding_cost)
         return IngestionResult(
             system=self.name,
             num_documents=len(documents),

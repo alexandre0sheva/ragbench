@@ -21,6 +21,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 
 * `demo`: Create or verify the bundled demo dataset.
 * `inspect-dataset`: Show dataset counts, categories,...
+* `chunk-preview`: Show how a chunker cuts your documents:...
 * `list-systems`: Print available RAG systems with their...
 * `run`: Run a single config.
 * `compare`: Run multiple systems from one config.
@@ -58,6 +59,30 @@ $ ragbench inspect-dataset [OPTIONS]
 * `--docs <path>`: Document folder.  [required]
 * `--questions <path>`: Questions JSONL file.  [required]
 * `--qrels <path>`: Optional qrels JSONL file.
+* `--include <str>`: Only load files matching this glob (repeatable).
+* `--exclude <str>`: Skip files matching this glob (repeatable).
+* `--on-error <str>`: `raise` (fail on a file that cannot be loaded) or `skip` (warn and go on).  [default: raise]
+* `--help`: Show this message and exit.
+
+## `ragbench chunk-preview`
+
+Show how a chunker cuts your documents: size statistics plus the first chunks. Nothing is indexed or paid for (except `semantic`'s sentence embeddings).
+
+**Usage**:
+
+```console
+$ ragbench chunk-preview [OPTIONS]
+```
+
+**Options**:
+
+* `--docs <path>`: Document file or folder.  [required]
+* `--chunker <str>`: Chunker section as YAML or JSON, e.g. '{type: markdown, chunk_size: 300}'.  [default: {}]
+* `--doc <str>`: Only this document id.
+* `-n, --limit <int range>`: How many chunks to show.  [default: 5; x>=0]
+* `--json`: Print machine-readable JSON instead of tables.
+* `--mock`: Use mock hashing embeddings for chunkers that embed text (`semantic`).
+* `--embedding-model <str>`: Embedding model ref for `semantic` (default: the benchmark default).
 * `--help`: Show this message and exit.
 
 ## `ragbench list-systems`

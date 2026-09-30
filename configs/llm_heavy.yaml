@@ -11,17 +11,17 @@ systems:
   - type: llm_heavy
     name: llm_heavy_default
     chunker:
-      type: token
+      type: word
       chunk_size: 500
       chunk_overlap: 80
     retrieval:
-      vector_store: chroma
+      vector_store: numpy
       top_k: 5
       per_query_top_k: 10
       reranker: local_relevance
     models:
       embedding: text-embedding-3-small
-      generator: gpt-5.4-mini
+      generator: gpt-6.1-sol
     llm_features:
       enable_llm_ingestion: false
       enable_query_rewrite: true
@@ -30,6 +30,6 @@ systems:
 evaluation:
   k_values: [1, 3, 5, 10]
   judge_enabled: true
-  judge_model: gpt-5.4-nano
+  judge_model: gpt-6-luna
   max_questions: null
   max_workers: 4

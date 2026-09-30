@@ -65,7 +65,7 @@ systems:
     name: bm25_smoke
     chunker: {{type: token, chunk_size: 60, chunk_overlap: 0}}
     retrieval: {{top_k: 3}}
-    models: {{generator: gpt-5.4-nano}}
+    models: {{generator: gpt-6-luna}}
 evaluation:
   k_values: [1, 3]
   judge_enabled: true

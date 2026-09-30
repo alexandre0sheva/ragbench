@@ -11,4 +11,5 @@ def _isolate_from_the_real_environment(monkeypatch, tmp_path_factory):
     loaded, and a test that wants a key sets one explicitly. The cache directory points at a throwaway location.
     """
     monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     monkeypatch.setenv("RAGBENCH_CACHE_DIR", str(tmp_path_factory.mktemp("ragbench_cache")))

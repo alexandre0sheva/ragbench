@@ -29,7 +29,8 @@ jobs:
       - name: Install package
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          # Optional extras are installed here so the real-SDK provider tests and the PDF / Word loader tests run (they skip without them).
+          python -m pip install -e ".[dev,anthropic,pdf,docx]"
 
       - name: Lint
         run: ruff check .
@@ -49,3 +50,24 @@ jobs:
           ragbench inspect-dataset --docs data/demo/docs --questions data/demo/questions.jsonl --qrels data/demo/qrels.jsonl
           ragbench run --config configs/recommended.yaml --mock --max-workers 2
 
+
+  backends:
+    name: Vector backends (chroma, faiss)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install package with the optional vector backends
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,chroma,faiss,qdrant]"
+
+      - name: Backend tests and the live path (real Chroma on worker threads)
+        run: pytest tests/test_vector_backends.py tests/test_live_path.py

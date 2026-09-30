@@ -1,0 +1,79 @@
+{
+  "_comment": "Hand-recorded from the Messages API wire format (docs: platform.claude.com/docs/en/agents-and-tools/tool-use). `openai_messages` is RAGBench's canonical (OpenAI chat) transcript; `anthropic_request` is what the provider must send for it.",
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "search",
+        "description": "Search the corpus.",
+        "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+      }
+    }
+  ],
+  "openai_messages": [
+    {"role": "system", "content": "You answer from the corpus."},
+    {"role": "system", "content": "Cite [doc_id]."},
+    {"role": "user", "content": "What is the refund window?"},
+    {
+      "role": "assistant",
+      "content": "Let me look that up.",
+      "tool_calls": [
+        {"id": "toolu_01", "type": "function", "function": {"name": "search", "arguments": "{\"query\": \"refund window\"}"}},
+        {"id": "toolu_02", "type": "function", "function": {"name": "search", "arguments": "{\"query\": \"returns policy\"}"}}
+      ]
+    },
+    {"role": "tool", "tool_call_id": "toolu_01", "content": "[doc_3] Refunds within 30 days."},
+    {"role": "tool", "tool_call_id": "toolu_02", "content": "[doc_4] Returns need a receipt."},
+    {"role": "user", "content": "Please be brief."}
+  ],
+  "anthropic_request": {
+    "system": "You answer from the corpus.\n\nCite [doc_id].",
+    "messages": [
+      {"role": "user", "content": "What is the refund window?"},
+      {
+        "role": "assistant",
+        "content": [
+          {"type": "text", "text": "Let me look that up."},
+          {"type": "tool_use", "id": "toolu_01", "name": "search", "input": {"query": "refund window"}},
+          {"type": "tool_use", "id": "toolu_02", "name": "search", "input": {"query": "returns policy"}}
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {"type": "tool_result", "tool_use_id": "toolu_01", "content": "[doc_3] Refunds within 30 days."},
+          {"type": "tool_result", "tool_use_id": "toolu_02", "content": "[doc_4] Returns need a receipt."},
+          {"type": "text", "text": "Please be brief."}
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "search",
+        "description": "Search the corpus.",
+        "input_schema": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}
+      }
+    ]
+  },
+  "anthropic_response": {
+    "id": "msg_01",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [
+      {"type": "thinking", "thinking": "The user wants the window.", "signature": "sig"},
+      {"type": "text", "text": "Checking the policy."},
+      {"type": "tool_use", "id": "toolu_03", "name": "search", "input": {"query": "refund window days"}}
+    ],
+    "stop_reason": "tool_use",
+    "stop_sequence": null,
+    "usage": {"input_tokens": 412, "output_tokens": 57}
+  },
+  "expected_result": {
+    "text": "Checking the policy.",
+    "prompt_tokens": 412,
+    "completion_tokens": 57,
+    "finish_reason": "tool_calls",
+    "tool_calls": [{"id": "toolu_03", "name": "search", "arguments": {"query": "refund window days"}}]
+  }
+}

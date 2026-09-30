@@ -15,7 +15,7 @@ from typing import Any
 from ragbench import __version__
 from ragbench.documents.schema import Document
 
-TRACKED_DEPENDENCIES = ["openai", "pandas", "numpy", "scikit-learn", "pydantic", "chromadb", "rank-bm25", "tiktoken", "typer", "jinja2"]
+TRACKED_DEPENDENCIES = ["openai", "pandas", "numpy", "scikit-learn", "pydantic", "chromadb", "faiss-cpu", "qdrant-client", "rank-bm25", "tiktoken", "typer", "jinja2"]
 
 
 def utc_now_iso() -> str:

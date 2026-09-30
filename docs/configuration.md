@@ -25,11 +25,11 @@ systems:
   - type: hybrid
     name: hybrid_default
     chunker:
-      type: token
+      type: word
       chunk_size: 500
       chunk_overlap: 80
     retrieval:
-      vector_store: chroma
+      vector_store: numpy
       bm25_top_k: 20
       vector_top_k: 20
       final_top_k: 5
@@ -38,17 +38,52 @@ systems:
       max_query_variants: 4
     models:
       embedding: text-embedding-3-small
-      generator: gpt-5.4-nano
+      generator: gpt-6-luna
 
 evaluation:
   k_values: [1, 3, 5, 10]
   judge_enabled: true
-  judge_model: gpt-5.4-nano
+  judge_model: gpt-6-luna
   max_questions: null
   max_workers: 4
   embedding_cache: true
   # system_workers: 1, ingest_workers: 4, latency_probe_questions: 5  (see Concurrency)
 ```
+
+## Chunkers
+
+How documents are cut into chunks is a comparison axis of its own. Every system except `parent_doc` has a `chunker:` section; `type` picks the chunker and the common fields tune it (full option table: [systems.md](systems.md)).
+
+| `type` | Splits on | `chunk_size` / `chunk_overlap` unit | Notes |
+| --- | --- | --- | --- |
+| `token` (default) | windows of real model tokens (tiktoken `o200k_base`) | tokens | Accurate for code, CJK and punctuation-heavy text |
+| `word` | windows of whitespace-separated words | words | What `token` meant before 0.3.0; all shipped configs use it so results stay comparable with 0.2.0 |
+| `fixed_char` | character windows | characters | Default 1200 / 150 |
+| `recursive` | paragraphs, then lines, sentences, words, then a hard split | tokens | Keeps paragraphs and sentences whole whenever they fit |
+| `sentence` | sentences, packed up to the size | size in tokens, overlap in **sentences** (default 1) | A sentence longer than the size is split by tokens |
+| `semantic` | topic shifts between consecutive sentences | size in tokens, overlap in sentences (default 0) | Embeds every sentence with the system's embedding model (billed as ingestion cost; free under `--mock`) and breaks where the distance between neighbours exceeds `breakpoint_percentile` (default 90) |
+| `markdown` | headings (`#` to `######`, not inside code fences) | tokens | One chunk per section with `metadata["heading_path"]`; sections under `min_chunk_size` (default 50) are merged into the next one while they fit; long sections are split recursively |
+
+Common fields: `chunk_size`, `chunk_overlap`, `prefix_title` (prepend the document title to every chunk's text, so it is embedded and searched) and, for the chunkers that use them, `min_chunk_size` (`recursive`, `sentence`, `semantic`, `markdown`), `prefix_heading` (`markdown`: prepend `Guide > Returns` to the text) and `breakpoint_percentile` (`semantic`). A field the chosen chunker does not use is rejected when the config loads.
+
+```yaml
+chunker:
+  type: markdown
+  chunk_size: 400
+  chunk_overlap: 40
+  min_chunk_size: 60
+  prefix_heading: true
+```
+
+**Preview a chunker before paying for a benchmark:**
+
+```bash
+ragbench chunk-preview --docs data/demo/docs --chunker '{type: markdown, chunk_size: 300}'
+```
+
+It prints the number of chunks, mean/median/p95/max tokens, the share of chunks below `min_chunk_size` (50 tokens when unset) and the first chunks (`--limit`, `--doc DOC_ID`, `--json`; `--mock` uses hashing embeddings for `semantic`). If the real tokenizer's vocabulary cannot be downloaded (no network), token-based chunkers fall back to a deterministic approximation and log a warning; chunk metadata records the `tokenizer` used.
+
+Chunk sizes change what is retrieved, so results are comparable only between runs that used the same chunker settings.
 
 ## Retrieval depth, context size, and failures
 
@@ -107,29 +142,71 @@ A cache file that is corrupted or cannot be opened is ignored with a warning rat
 
 ## Mock Mode
 
-RAGBench automatically uses mock mode when `OPENAI_API_KEY` is not available. You can force mock mode even when a key is configured:
+RAGBench runs in mock mode (deterministic hashing embeddings, mock LLM, heuristic judge) when none of the models a config uses can be reached: no `OPENAI_API_KEY` for OpenAI refs, no `ANTHROPIC_API_KEY` for Claude refs, and no `providers:` endpoint or `local:` model in the config. You can force mock mode even when keys are set:
 
 ```bash
 ragbench compare --config configs/all.yaml --mock
 ```
 
-The mode is recorded as `mode: "mock" | "live"` in `run_summary.json` (next to `models_used`), and mock runs carry a banner at the top of `leaderboard.md` and `report.html`. If a key **is** set but the OpenAI client cannot be created, RAGBench raises an error instead of quietly switching to mock scores.
+The mode is recorded as `mode: "mock" | "live"` in `run_summary.json` (next to `models_used`), and mock runs carry a banner at the top of `leaderboard.md` and `report.html`. A live run never quietly mixes real and mock models: if some model it uses has no key (say a Claude generator with the default OpenAI judge and no `OPENAI_API_KEY`), it stops before spending anything and lists what is missing. If a key **is** set but a client cannot be created, RAGBench raises an error instead of switching to mock scores.
+
+## Providers & model refs
+
+Every model setting (`models.generator`, `models.embedding`, `evaluation.judge_model`) is a **model ref**: `provider:model`. A bare name is an OpenAI model, so `gpt-6-luna` and `openai:gpt-6-luna` are the same.
+
+| Ref | Serves | Needs |
+| --- | --- | --- |
+| `gpt-6-luna`, `openai:gpt-6.1-sol`, `openai:text-embedding-3-small` | chat, embeddings | `OPENAI_API_KEY` |
+| `anthropic:claude-haiku-4-5`, `anthropic:claude-sonnet-5-5` | chat | `ANTHROPIC_API_KEY` and `pip install 'ragbench[anthropic]'` |
+| `openai_compatible:<endpoint>/<model>` | chat, embeddings | an entry under `providers:` (below) |
+| `local:BAAI/bge-small-en-v1.5` | embeddings | `pip install 'ragbench[local]'`; downloads the Hugging Face model on first use |
+
+```yaml
+providers:                        # named OpenAI-compatible endpoints: Ollama, vLLM, LM Studio, OpenRouter, Together, ...
+  ollama:
+    base_url: http://localhost:11434/v1
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY     # omit for servers that need no key
+    limits: {max_concurrent_requests: 4, requests_per_minute: 120}   # this endpoint only
+
+systems:
+  - type: vector
+    models:
+      generator: anthropic:claude-haiku-4-5
+      embedding: local:BAAI/bge-small-en-v1.5
+  - type: hybrid
+    models:
+      generator: openai_compatible:ollama/llama3.1:8b          # the model name may contain `/` and `:`
+      embedding: openai_compatible:ollama/nomic-embed-text
+evaluation:
+  judge_model: openai_compatible:openrouter/anthropic/claude-sonnet-5-5
+```
+
+- Refs are checked when the config loads: an unknown endpoint, a chat model used as an embedder (or the reverse), or a mistyped provider (`anthropics:`) fails with the list of valid choices.
+- **Endpoints use `max_tokens`**, the parameter nearly every OpenAI-compatible server understands; OpenAI itself gets `max_completion_tokens`.
+- **Claude models** are called through the native Messages API. They take no sampling parameters, so `temperature` is not sent (older models that still honour it, such as Haiku 4.5, get it); Claude has no JSON mode, so judge calls ask for JSON in the system prompt and RAGBench strips any code fence from the reply. Models that think by default are called at low effort with extra `max_tokens` headroom, because thinking tokens count toward the limit.
+- **GPT-6 models** are sent `reasoning_effort: none` (their default is to reason, which would spend short calls' token budgets on hidden thinking and disables function calling on Chat Completions); an endpoint that rejects the parameter is detected and it is left out.
+- **Local embeddings** use [sentence-transformers](https://www.sbert.net) (chosen over fastembed because it runs any Hugging Face embedding model and ships wheels for Python 3.11–3.14 on macOS and Linux). Vectors are normalized and cost $0; results are cached on disk like any other embedding.
+- **Cost:** OpenAI and Claude prices come from the built-in table. `local:` and `openai_compatible:` models cost **$0 unless you add a price** under `pricing:`, keyed by the full ref, `<endpoint>/<model>`, or the bare model name — without one, a paid proxy such as OpenRouter is reported as free.
+- **Tool calling** (used by the agentic systems) is part of the common interface: `LLM.generate(messages, tools=[...])` takes OpenAI function schemas and returns `LLMResult.tool_calls`, and each provider translates to its own format.
+- Keys are read from the environment or the project's `.env`; see `.env.example`.
 
 ## Pricing
 
-Costs come from the price table in `src/ragbench/models/cost.py` (USD per 1M tokens, reviewed as of `PRICING_AS_OF`). Dated snapshots such as `gpt-4o-mini-2024-07-18` use the price of their base model. Override or extend the table per experiment:
+Costs come from the price table in `src/ragbench/models/cost.py` (USD per 1M tokens, reviewed as of `PRICING_AS_OF`, with the source pages listed above the table). Dated snapshots such as `claude-haiku-4-5-20251001` use the price of their base model; `local:` and `openai_compatible:` models are $0 unless priced here (see [Providers & model refs](#providers--model-refs)). Override or extend the table per experiment:
 
 ```yaml
 pricing:
   my-finetuned-model: {input: 0.30, output: 1.20}
-  gpt-5.4-nano: {input: 0.25, output: 1.50}   # overrides the built-in price
+  gpt-6-luna: {input: 0.25, output: 1.50}   # overrides the built-in price
 ```
 
 A model with no registered price is billed at $0 — RAGBench logs a warning, lists the model under `unknown_priced_models` in `run_summary.json`, and shows a "cost under-reported" banner in the reports, so a zero is never silent.
 
 ## Retries and timeouts
 
-OpenAI calls (chat and embeddings) time out after 120 s and are retried up to 6 attempts with exponential backoff (1 s doubling to a 30 s cap, plus jitter, and honoring `Retry-After`) on rate limits, 5xx responses, timeouts, and connection errors. Auth and bad-request errors fail immediately. The Responses API is used only for models that cannot be called through Chat Completions, never as a generic fallback. Models that reject `temperature` (for example the `o`-series) are called without it; other models that reject it are detected from the API error and remembered for the rest of the run.
+Calls to every provider (chat and embeddings; OpenAI, Claude and `providers:` endpoints) time out after 120 s and are retried up to 6 attempts with exponential backoff (1 s doubling to a 30 s cap, plus jitter, and honoring `Retry-After`) on rate limits, 5xx responses, timeouts, and connection errors. Auth and bad-request errors fail immediately. The Responses API is used only for models that cannot be called through Chat Completions, never as a generic fallback. Models that reject `temperature` (for example the `o`-series) are called without it; other models that reject it are detected from the API error and remembered for the rest of the run.
 
 ## Concurrency
 
@@ -152,7 +229,7 @@ Mock runs are CPU-bound and gain little from threads; live runs, which wait on t
 
 ### Rate limits
 
-A `limits:` section throttles requests to the provider (OpenAI for now) across every thread. Each retry attempt counts as a request, cache hits do not, and unset limits are not enforced:
+A `limits:` section throttles requests across every thread. It applies to each hosted API in use (OpenAI and Anthropic) with a separate limiter apiece, since their quotas are independent; every `providers:` endpoint sets its own `limits:` instead. Each retry attempt counts as a request, cache hits do not, and unset limits are not enforced:
 
 ```yaml
 limits:
@@ -169,12 +246,23 @@ Latency measured while many questions run at once includes time spent queueing b
 
 ## Vector Store
 
-Chroma is the default vector backend for vector-capable systems:
+`retrieval.vector_store` selects the backend of every system that searches embeddings (`vector`, `hybrid`, `hybrid_rerank`, `rerank`, `parent_doc`, `hyde`, `llm_heavy`). The backend is a comparison axis like the chunker or the reranker:
+
+| `vector_store` | Search | Install | Notes |
+| --- | --- | --- | --- |
+| `numpy` (default) | exact | nothing | Brute-force cosine; plenty for up to ~100k chunks, deterministic across runs and processes |
+| `faiss` | exact | `pip install 'ragbench[faiss]'` | Flat inner-product index |
+| `faiss_hnsw` | approximate | `ragbench[faiss]` | HNSW graph (M=32, efConstruction=200, efSearch=128) |
+| `chroma` | approximate (HNSW) | `ragbench[chroma]` | Can persist with `persist_directory`; its index is not deterministic across processes (ties in the tail of a ranking can shuffle) |
+| `qdrant` | exact | `ragbench[qdrant]` | Qdrant's embedded local mode, in memory or on disk with `persist_directory`; local mode locks its directory, so give each system its own |
 
 ```yaml
 retrieval:
-  vector_store: chroma
+  vector_store: faiss_hnsw
 ```
 
-If Chroma is unavailable, RAGBench falls back to local in-memory NumPy similarity.
-
+- **There is no silent fallback.** Asking for a backend whose library is not installed fails when the system is built, with the `pip install` to run. `RetrievalResult.metadata["vector_backend"]` (and so `per_question_results.jsonl`) always names the backend that actually ran.
+- `in_memory` is a deprecated alias of `numpy` (it logs a warning once). Chroma used to be the default and a mandatory dependency; configs that say `vector_store: chroma` keep working once `ragbench[chroma]` is installed.
+- `persist_directory` only applies to `chroma` and `qdrant`; setting it with another backend is a config error.
+- FAISS publishes no macOS wheel for Python 3.14 yet (Linux and Python 3.11-3.13 are fine).
+- Backends are pluggable: register a class with `@VECTOR_BACKENDS.register("name")` or an entry point in the `ragbench.vector_backends` group (see [extending.md](extending.md)).

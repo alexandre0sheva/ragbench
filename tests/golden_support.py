@@ -34,16 +34,15 @@ EXCLUDED_COLUMNS = {
 def run_all_systems_mock(workdir: Path) -> Path:
     """Run configs/all.yaml in mock mode against the bundled demo data, writing under `workdir`.
 
-    The exact in-memory vector backend is used instead of Chroma: Chroma's HNSW index is not
+    The shipped configs use the exact `numpy` vector backend. Chroma's HNSW index is not
     deterministic across processes (ties in the tail of a ranking shuffle), which would make a
-    golden snapshot flaky. The snapshot guards pipeline logic, not the ANN library.
+    golden snapshot flaky; the snapshot guards pipeline logic, not the ANN library.
     """
     raw = (ROOT / "configs" / "all.yaml").read_text(encoding="utf-8")
     config_path = workdir / "all.yaml"
     config_path.write_text(
         raw.replace("data/demo", str(ROOT / "data" / "demo"))
-        .replace("output_dir: results", f"output_dir: {workdir / 'results'}")
-        .replace("vector_store: chroma", "vector_store: in_memory"),
+        .replace("output_dir: results", f"output_dir: {workdir / 'results'}"),
         encoding="utf-8",
     )
     return run_benchmark(config_path, force_mock=True, max_workers=1)

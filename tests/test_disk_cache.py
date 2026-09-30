@@ -191,6 +191,44 @@ def runtime(tmp_path):
 MESSAGES = [{"role": "system", "content": "be brief"}, {"role": "user", "content": "what is 2+2?"}]
 
 
+class ToolCallingLLM(FakeLLM):
+    provider = "fake-provider"
+
+    def generate(self, messages, **kwargs) -> LLMResult:
+        from ragbench.models.llms import ToolCall
+
+        result = super().generate(messages, **kwargs)
+        result.tool_calls = [ToolCall(id="call_1", name="search", arguments={"query": "x"})]
+        result.finish_reason = "tool_calls"
+        return result
+
+
+def test_tool_calls_and_finish_reason_survive_the_cache_and_tools_are_part_of_the_key(priced_model, runtime):
+    tool = {"type": "function", "function": {"name": "search", "parameters": {"type": "object", "properties": {}}}}
+    inner = ToolCallingLLM()
+    llm = CachedLLM(inner)
+
+    first = llm.generate(MESSAGES, temperature=0, tools=[tool])
+    second = llm.generate(MESSAGES, temperature=0, tools=[tool])
+    without_tools = llm.generate(MESSAGES, temperature=0)
+
+    assert len(inner.calls) == 2, "the tools list must change the key"
+    assert second.cached and second.tool_calls == first.tool_calls and second.finish_reason == "tool_calls"
+    assert not without_tools.cached
+
+
+def test_the_provider_is_part_of_the_cache_key(priced_model, runtime):
+    class Other(FakeLLM):
+        provider = "other-provider"
+
+    a, b = FakeLLM(), Other()
+    CachedLLM(a).generate(MESSAGES, temperature=0)
+    hit = CachedLLM(b).generate(MESSAGES, temperature=0)
+
+    assert not hit.cached and len(b.calls) == 1
+    assert CachedLLM(b).provider == "other-provider"
+
+
 def test_identical_request_is_served_from_cache_with_standalone_cost(priced_model, runtime):
     inner = FakeLLM()
     llm = CachedLLM(inner)
@@ -278,9 +316,9 @@ def test_inner_errors_are_not_cached(priced_model, runtime):
 def test_mock_llm_is_never_wrapped_and_a_real_one_is(monkeypatch):
     assert isinstance(create_llm("gpt-x", force_mock=True), MockLLM)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    import ragbench.models.llms as llms_module
+    import ragbench.models.providers.openai as openai_provider
 
-    monkeypatch.setattr(llms_module, "OpenAILLM", lambda model_name: FakeLLM())
+    monkeypatch.setattr(openai_provider, "OpenAILLM", lambda model_name: FakeLLM())
     wrapped = create_llm("gpt-x")
     assert isinstance(wrapped, CachedLLM) and wrapped.model_name == "fake-paid-model"
 
@@ -587,12 +625,11 @@ def test_second_live_style_run_is_served_from_the_cache_at_the_same_charged_cost
 
     import pandas as pd
 
-    import ragbench.models.embeddings as embeddings_module
-    import ragbench.models.llms as llms_module
+    import ragbench.models.providers.openai as openai_provider
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
-    monkeypatch.setattr(llms_module, "OpenAILLM", lambda model_name: PaidMockLLM())
-    monkeypatch.setattr(embeddings_module, "OpenAIEmbeddingModel", PaidHashingEmbedding)
+    monkeypatch.setattr(openai_provider, "OpenAILLM", lambda model_name: PaidMockLLM())
+    monkeypatch.setattr(openai_provider, "OpenAIEmbeddingModel", PaidHashingEmbedding)
     monkeypatch.setenv("RAGBENCH_CACHE_DIR", str(tmp_path / "shared_cache"))
     config = write_experiment(
         tmp_path,

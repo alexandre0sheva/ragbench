@@ -11,17 +11,17 @@ systems:
   - type: bm25
     name: bm25_default
     chunker:
-      type: token
+      type: word
       chunk_size: 450
       chunk_overlap: 70
     retrieval:
       top_k: 5
     models:
-      generator: gpt-5.4-nano
+      generator: gpt-6-luna
 
 evaluation:
   k_values: [1, 3, 5, 10]
   judge_enabled: true
-  judge_model: gpt-5.4-nano
+  judge_model: gpt-6-luna
   max_questions: null
   max_workers: 4

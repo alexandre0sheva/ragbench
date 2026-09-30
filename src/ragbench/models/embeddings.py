@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import functools
 import logging
 import struct
 import threading
 from abc import ABC, abstractmethod
-from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any
 
@@ -13,11 +11,9 @@ import numpy as np
 
 from ragbench.cache import CacheRuntime, active_cache, cache_key
 from ragbench.models.cost import CostBreakdown, estimate_model_cost
-from ragbench.models.errors import ModelInitError, translate_openai_exception
-from ragbench.models.retry import call_with_retry
-from ragbench.runtime.context import current_runtime, limiter_for
-from ragbench.runtime.parallel import ordered_parallel_map
-from ragbench.utils.env import has_openai_key
+from ragbench.models.defaults import DEFAULT_EMBEDDING_MODEL
+from ragbench.models.errors import ModelInitError
+from ragbench.models.refs import parse_model_ref, provider_reachable
 from ragbench.utils.hashing import stable_hash
 from ragbench.utils.text import estimate_tokens, tokenize
 
@@ -67,60 +63,6 @@ class HashingEmbeddingModel(EmbeddingModel):
             if norm:
                 vectors[row] /= norm
         return EmbeddingResult(vectors=vectors, model=self.model_name, input_tokens=input_tokens, cost=CostBreakdown())
-
-
-class OpenAIEmbeddingModel(EmbeddingModel):
-    def __init__(self, model_name: str = "text-embedding-3-small", batch_size: int = 96, client: Any | None = None, timeout: float = 120.0):
-        self.model_name = model_name
-        self.batch_size = batch_size
-        if client is None:
-            from openai import OpenAI
-
-            # Retries are owned by `call_with_retry`, so the SDK's own are disabled.
-            client = OpenAI(timeout=timeout, max_retries=0)
-        self.client = client
-
-    def _embed_batch(self, batch: list[str]) -> Any:
-        limiter = limiter_for("openai")
-        tokens = sum(estimate_tokens(text, self.model_name) for text in batch) if limiter is not None and limiter.limits_tokens else 0
-        try:
-            with limiter.acquire(tokens) if limiter is not None else nullcontext():
-                return self.client.embeddings.create(model=self.model_name, input=batch)
-        except Exception as exc:
-            translated = translate_openai_exception(exc)
-            if translated is exc:
-                raise
-            raise translated from exc
-
-    def embed_texts(self, texts: list[str]) -> EmbeddingResult:
-        if not texts:
-            return EmbeddingResult(vectors=np.zeros((0, 0), dtype=np.float32), model=self.model_name, input_tokens=0, cost=CostBreakdown())
-        batches = [texts[i : i + self.batch_size] for i in range(0, len(texts), self.batch_size)]
-        # Batches are independent requests; `evaluation.ingest_workers` of them may be in flight at once.
-        responses = ordered_parallel_map(
-            lambda batch: call_with_retry(functools.partial(self._embed_batch, batch)),
-            batches,
-            workers=current_runtime().ingest_workers,
-            thread_name_prefix="ragbench-embed",
-        )
-        vectors: list[list[float]] = []
-        input_tokens = 0
-        for batch, response in zip(batches, responses, strict=True):
-            vectors.extend([item.embedding for item in response.data])
-            if getattr(response, "usage", None):
-                input_tokens += int(response.usage.prompt_tokens)
-            else:
-                input_tokens += sum(estimate_tokens(text, self.model_name) for text in batch)
-        array = np.asarray(vectors, dtype=np.float32)
-        norms = np.linalg.norm(array, axis=1, keepdims=True)
-        array = np.divide(array, np.maximum(norms, 1e-12))
-        cost = estimate_model_cost(self.model_name, input_tokens=input_tokens)
-        return EmbeddingResult(
-            vectors=array,
-            model=self.model_name,
-            input_tokens=input_tokens,
-            cost=CostBreakdown(embedding_input_tokens=input_tokens, embedding_cost=cost),
-        )
 
 
 class _EmbeddingCache:
@@ -290,16 +232,29 @@ class CachedEmbeddingModel(EmbeddingModel):
         return result
 
 
-def create_embedding_model(model_name: str | None = None, force_mock: bool = False, strict: bool = True) -> EmbeddingModel:
-    """Build the (cache-wrapped) embedding model; see `create_llm` for `strict` semantics."""
-    if force_mock or not has_openai_key():
+def create_embedding_model(
+    model_name: str | None = None, force_mock: bool = False, strict: bool = True, providers: dict[str, Any] | None = None
+) -> EmbeddingModel:
+    """Build the (cache-wrapped) embedding model for a ref such as `text-embedding-3-small` or `local:BAAI/bge-small-en-v1.5`.
+
+    See `create_llm` for `strict`, `providers` and the mock / missing-extra rules. Local models load their weights on first use.
+    """
+    import ragbench.models.providers  # noqa: F401  (registers the built-in providers)
+    from ragbench.registry import EMBEDDERS
+    from ragbench.runtime.context import current_runtime
+
+    ref = model_name or DEFAULT_EMBEDDING_MODEL
+    provider, model = parse_model_ref(ref)
+    if force_mock or not provider_reachable(provider):
         return CachedEmbeddingModel(HashingEmbeddingModel())
+    factory = EMBEDDERS.get(provider)
+    endpoints = providers if providers is not None else current_runtime().providers
     try:
-        return CachedEmbeddingModel(OpenAIEmbeddingModel(model_name or "text-embedding-3-small"))
+        return CachedEmbeddingModel(factory(model, providers=endpoints))
+    except ImportError:
+        raise
     except Exception as exc:
         if strict:
-            raise ModelInitError(
-                f"Could not create the OpenAI embedding client for {model_name!r} although OPENAI_API_KEY is set: {exc}"
-            ) from exc
-        logger.warning("OpenAI embedding client init failed (%s); falling back to hashing embeddings.", exc)
+            raise ModelInitError(f"Could not create the {provider} embedding client for {ref!r}: {exc}") from exc
+        logger.warning("%s embedding client init failed (%s); falling back to hashing embeddings.", provider, exc)
         return CachedEmbeddingModel(HashingEmbeddingModel())

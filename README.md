@@ -55,7 +55,7 @@ ragbench demo
 ragbench compare --config configs/all.yaml
 ```
 
-Without an `OPENAI_API_KEY`, RAGBench runs in **mock mode** — deterministic hashing embeddings, mock LLM, heuristic judge — so reviewers can exercise the full pipeline immediately. With a key set in your shell or `.env`, it switches to OpenAI embeddings, generation, and LLM-as-a-judge.
+Without an `OPENAI_API_KEY`, RAGBench runs in **mock mode** — deterministic hashing embeddings, mock LLM, heuristic judge — so reviewers can exercise the full pipeline immediately. With a key set in your shell or `.env`, it switches to real embeddings, generation, and LLM-as-a-judge. Models are `provider:model` refs (OpenAI, Claude via `pip install 'ragbench[anthropic]'`, any OpenAI-compatible server such as Ollama or vLLM, local `sentence-transformers` embeddings via `ragbench[local]`, cross-encoder reranking via `ragbench[rerank]`). The vector backend is exact NumPy by default; `ragbench[chroma]`, `ragbench[faiss]` and `ragbench[qdrant]` add others; see [configuration](docs/configuration.md#providers--model-refs).
 
 ```bash
 # strong default baseline only
@@ -73,7 +73,7 @@ ragbench inspect-dataset --docs my_dataset/docs \
 flowchart LR
     A[Documents] --> B[Chunkers]
     B --> S1[BM25 index]
-    B --> S2[Chroma vector]
+    B --> S2[Vector index]
     B --> S3[Hybrid RRF]
     S1 --> D[RAG Systems]
     S2 --> D
@@ -98,7 +98,7 @@ flowchart LR
 | `hybrid_rerank` | Hybrid BM25 + vector RRF retrieval followed by a reranking pass | Recall of hybrid plus rerank precision |
 | `parent_doc` | Retrieve small child chunks, answer from their larger parent chunks | Better answer context with precise retrieval |
 | `rerank` | Vector retrieval followed by a reranking pass | Higher precision context selection |
-| `vector` | Embedding search with cosine similarity (Chroma-backed, exact in-memory fallback) | Semantic baseline |
+| `vector` | Embedding search with cosine similarity over a pluggable vector backend (exact NumPy by default) | Semantic baseline |
 | `hyde` | Hypothetical Document Embeddings: the LLM writes a hypothetical answer used as the search probe | Short or vaguely-worded questions |
 | `llm_heavy` | LLM-driven ingestion metadata, query rewriting, and reranking | Higher-cost, quality-oriented experiments |
 <!-- systems:end -->
@@ -135,7 +135,7 @@ my_dataset/
   qrels.jsonl   # optional — graded relevance
 ```
 
-Documents can be `.md`, `.txt`, `.rst`, `.html`, or `.pdf` (PDF needs the optional extra: `pip install 'ragbench[pdf]'`). Point a config at the dataset (copy any of `configs/*.yaml`) and run `ragbench compare --config my_config.yaml`.
+Documents can be `.md`, `.txt`, `.rst`, `.html`, `.pdf`, `.docx`, `.csv`/`.tsv` or `.json`/`.jsonl` (PDF and Word need the optional extras `ragbench[pdf]` and `ragbench[docx]`); see [dataset-format.md](docs/dataset-format.md) for formats, ignore rules and error handling. Point a config at the dataset (copy any of `configs/*.yaml`) and run `ragbench compare --config my_config.yaml`.
 
 Before running, sanity-check the dataset — `inspect-dataset` validates qrels coverage, missing document references, duplicate ids, and empty documents:
 
@@ -172,7 +172,6 @@ Pricing constants in `src/ragbench/models/cost.py` are approximate (see `PRICING
 ## Roadmap
 
 - Persistent vector store adapters (Postgres / pgvector, Qdrant)
-- Cross-encoder reranker integration
 - Bootstrap confidence intervals for metric comparisons
 - Web dashboard for comparing historical runs
 

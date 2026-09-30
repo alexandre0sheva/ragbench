@@ -13,9 +13,8 @@ import openai
 import pytest
 
 from ragbench.models import retry as retry_module
-from ragbench.models.embeddings import OpenAIEmbeddingModel
 from ragbench.models.errors import PermanentModelError, TransientModelError
-from ragbench.models.llms import OpenAILLM
+from ragbench.models.providers.openai import OpenAIEmbeddingModel, OpenAILLM
 from ragbench.runtime import RuntimeContext, activate_runtime
 
 
@@ -64,16 +63,16 @@ def _fast_retries(monkeypatch):
 
 def test_chat_request_payload_and_response_parsing_with_the_real_sdk():
     server = Server(httpx.Response(200, json=_completion("the answer", 11, 7)))
-    llm = OpenAILLM("gpt-5.4-nano", client=server.client())
+    llm = OpenAILLM("gpt-6-luna", client=server.client())
 
     result = llm.generate([{"role": "system", "content": "be brief"}, {"role": "user", "content": "hi"}], temperature=0, max_tokens=42, json_mode=True)
 
     path, body = server.requests[0]
     assert path == "/v1/chat/completions"
-    assert body["model"] == "gpt-5.4-nano" and body["temperature"] == 0 and body["max_completion_tokens"] == 42 and "max_tokens" not in body
+    assert body["model"] == "gpt-6-luna" and body["temperature"] == 0 and body["max_completion_tokens"] == 42 and "max_tokens" not in body
     assert body["response_format"] == {"type": "json_object"} and body["messages"][1] == {"role": "user", "content": "hi"}
     assert result.text == "the answer" and (result.prompt_tokens, result.completion_tokens) == (11, 7)
-    assert result.cost.llm_prompt_tokens == 11 and result.model == "gpt-5.4-nano"
+    assert result.cost.llm_prompt_tokens == 11 and result.model == "gpt-6-luna"
 
 
 def test_rate_limit_is_retried_using_the_retry_after_header_then_succeeds(monkeypatch):
@@ -81,7 +80,7 @@ def test_rate_limit_is_retried_using_the_retry_after_header_then_succeeds(monkey
     slept: list[float] = []
     monkeypatch.setattr(retry_module.time, "sleep", slept.append)
 
-    result = OpenAILLM("gpt-5.4-nano", client=server.client()).generate([{"role": "user", "content": "q"}])
+    result = OpenAILLM("gpt-6-luna", client=server.client()).generate([{"role": "user", "content": "q"}])
 
     assert result.text == "ok" and len(server.requests) == 3
     assert slept[0] >= 3.0  # honors Retry-After
@@ -91,7 +90,7 @@ def test_server_errors_exhaust_bounded_retries_and_never_touch_the_responses_api
     server = Server(_error(500, "boom"))
 
     with pytest.raises(TransientModelError):
-        OpenAILLM("gpt-5.4-nano", client=server.client()).generate([{"role": "user", "content": "q"}])
+        OpenAILLM("gpt-6-luna", client=server.client()).generate([{"role": "user", "content": "q"}])
 
     assert len(server.requests) == 6 and {path for path, _ in server.requests} == {"/v1/chat/completions"}
 
@@ -100,7 +99,7 @@ def test_auth_errors_fail_immediately_without_retries():
     server = Server(_error(401, "bad key"))
 
     with pytest.raises(PermanentModelError):
-        OpenAILLM("gpt-5.4-nano", client=server.client()).generate([{"role": "user", "content": "q"}])
+        OpenAILLM("gpt-6-luna", client=server.client()).generate([{"role": "user", "content": "q"}])
 
     assert len(server.requests) == 1
 
@@ -178,3 +177,71 @@ def test_embedding_rate_limit_retries_only_the_failed_batch():
     result = OpenAIEmbeddingModel("text-embedding-3-small", batch_size=2, client=Server(flaky).client()).embed_texts(["1", "2", "3"])
 
     assert calls["n"] == 3 and result.vectors.shape == (3, 2)  # batch 1 twice, batch 2 once
+
+
+def _tool_call_completion() -> dict:
+    return {
+        "id": "chatcmpl-2",
+        "object": "chat.completion",
+        "created": 0,
+        "model": "gpt-test",
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {"id": "call_1", "type": "function", "function": {"name": "search", "arguments": "{\"query\": \"refund window\"}"}},
+                        {"id": "call_2", "type": "function", "function": {"name": "search", "arguments": "not json"}},
+                    ],
+                },
+                "finish_reason": "tool_calls",
+            }
+        ],
+        "usage": {"prompt_tokens": 30, "completion_tokens": 12, "total_tokens": 42},
+    }
+
+
+_SEARCH_TOOL = {"type": "function", "function": {"name": "search", "description": "Search.", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}}}}
+
+
+def test_tools_are_sent_and_tool_calls_parsed_with_the_real_sdk():
+    from ragbench.models.llms import ToolCall
+
+    server = Server(httpx.Response(200, json=_tool_call_completion()))
+    history = [
+        {"role": "user", "content": "q"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "call_0", "type": "function", "function": {"name": "search", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "call_0", "content": "result"},
+    ]
+
+    result = OpenAILLM("gpt-5.6-terra", client=server.client()).generate(history, tools=[_SEARCH_TOOL])
+
+    body = server.requests[0][1]
+    assert body["tools"] == [_SEARCH_TOOL] and body["messages"] == history
+    assert result.finish_reason == "tool_calls" and result.text == ""
+    assert result.tool_calls[0] == ToolCall(id="call_1", name="search", arguments={"query": "refund window"})
+    assert result.tool_calls[1].arguments == {"_raw_arguments": "not json"}, "malformed arguments are surfaced, not dropped"
+    assert result.assistant_message()["tool_calls"][0]["function"]["arguments"] == '{"query": "refund window"}'
+
+
+def test_gpt6_models_are_sent_reasoning_effort_none_and_it_is_dropped_if_an_endpoint_rejects_it():
+    server = Server(httpx.Response(200, json=_completion("ok")))
+    OpenAILLM("gpt-6-luna", client=server.client()).generate([{"role": "user", "content": "q"}], max_tokens=20)
+    assert server.requests[0][1]["reasoning_effort"] == "none" and server.requests[0][1]["max_completion_tokens"] == 20
+
+    picky = Server(_error(400, "Unrecognized request argument supplied: reasoning_effort"), httpx.Response(200, json=_completion("ok")))
+    llm = OpenAILLM("gpt-6-luna", client=picky.client())
+    llm.generate([{"role": "user", "content": "q"}])
+    llm.generate([{"role": "user", "content": "q"}])
+    bodies = [body for _, body in picky.requests]
+    assert "reasoning_effort" in bodies[0] and "reasoning_effort" not in bodies[1] and "reasoning_effort" not in bodies[2]
+
+
+def test_a_responses_only_model_cannot_be_given_tools():
+    def route(request: httpx.Request) -> httpx.Response:
+        return _error(404, "This model is only supported in v1/responses and not in v1/chat/completions.")
+
+    with pytest.raises(PermanentModelError, match="tool calling"):
+        OpenAILLM("codex-like", client=Server(route).client()).generate([{"role": "user", "content": "q"}], tools=[_SEARCH_TOOL])

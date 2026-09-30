@@ -41,6 +41,10 @@ def find_env_file(start: Path) -> Path | None:
     return None
 
 
-def has_openai_key() -> bool:
+def has_api_key(env_var: str) -> bool:
     load_project_env()
-    return bool(os.environ.get("OPENAI_API_KEY"))
+    return bool(os.environ.get(env_var))
+
+
+def has_openai_key() -> bool:
+    return has_api_key("OPENAI_API_KEY")

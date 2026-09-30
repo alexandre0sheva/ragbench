@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from ragbench.config.schema import ParentChildChunkerConfig, SystemConfig
-from ragbench.documents.chunkers import TokenChunker
+from ragbench.documents.chunkers import WordChunker
 from ragbench.documents.schema import Document, TextChunk
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult, RetrievedChunk
 from ragbench.rag_systems.components import build_embedder, build_vector_index
@@ -31,8 +31,8 @@ class ParentDocumentRAG(BaseRAGSystem):
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
         chunk_cfg = ParentChildChunkerConfig.model_validate(config.chunker)
-        self.parent_chunker = TokenChunker(chunk_size=chunk_cfg.parent_chunk_size, chunk_overlap=chunk_cfg.parent_chunk_overlap)
-        self.child_chunker = TokenChunker(chunk_size=chunk_cfg.child_chunk_size, chunk_overlap=chunk_cfg.child_chunk_overlap)
+        self.parent_chunker = WordChunker(chunk_size=chunk_cfg.parent_chunk_size, chunk_overlap=chunk_cfg.parent_chunk_overlap)
+        self.child_chunker = WordChunker(chunk_size=chunk_cfg.child_chunk_size, chunk_overlap=chunk_cfg.child_chunk_overlap)
         self.embedding_model = build_embedder(config.models, force_mock)
         self.child_store = build_vector_index(self.embedding_model, self.options, self.name)
         self.parents: dict[str, TextChunk] = {}

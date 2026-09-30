@@ -11,7 +11,7 @@ def test_bm25_system_can_ingest_and_retrieve_tiny_dataset(monkeypatch):
             name="bm25_test",
             chunker={"type": "token", "chunk_size": 20, "chunk_overlap": 0},
             retrieval={"top_k": 2},
-            models={"generator": "gpt-5.4-nano"},
+            models={"generator": "gpt-6-luna"},
         ),
         force_mock=True,
     )

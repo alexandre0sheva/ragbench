@@ -14,7 +14,7 @@ from ragbench.models.errors import (
     TransientModelError,
     translate_openai_exception,
 )
-from ragbench.models.llms import OpenAILLM
+from ragbench.models.providers.openai import OpenAILLM
 from ragbench.models.retry import call_with_retry
 
 
@@ -150,7 +150,7 @@ def test_openai_llm_retries_rate_limits_then_succeeds(monkeypatch):
     monkeypatch.setattr(retry_module.time, "sleep", lambda _: None)
     client, chat = _fake_client([_status_error(openai.RateLimitError, 429), _completion("done")])
 
-    result = OpenAILLM("gpt-5.4-nano", client=client).generate([{"role": "user", "content": "q"}])
+    result = OpenAILLM("gpt-6-luna", client=client).generate([{"role": "user", "content": "q"}])
 
     assert result.text == "done"
     assert len(chat.calls) == 2
@@ -162,7 +162,7 @@ def test_openai_llm_does_not_fall_back_to_responses_on_server_errors(monkeypatch
     client, chat = _fake_client([_status_error(openai.InternalServerError, 500)] * 6, responses=responses)
 
     with pytest.raises(TransientModelError):
-        OpenAILLM("gpt-5.4-nano", client=client).generate([{"role": "user", "content": "q"}])
+        OpenAILLM("gpt-6-luna", client=client).generate([{"role": "user", "content": "q"}])
 
     assert len(chat.calls) == 6  # bounded retries, no doubled spend
 
@@ -209,7 +209,7 @@ def test_error_types_share_a_base_class():
 def test_openai_embeddings_retry_transient_errors_per_batch(monkeypatch):
     import numpy as np
 
-    from ragbench.models.embeddings import OpenAIEmbeddingModel
+    from ragbench.models.providers.openai import OpenAIEmbeddingModel
 
     monkeypatch.setattr(retry_module.time, "sleep", lambda _: None)
     script: list = [_status_error(openai.RateLimitError, 429)]

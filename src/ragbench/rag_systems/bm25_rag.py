@@ -3,7 +3,7 @@ from __future__ import annotations
 from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult
-from ragbench.rag_systems.components import build_chunker
+from ragbench.rag_systems.components import build_chunker, chunk_documents
 from ragbench.rag_systems.options import BM25Options
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.registry import SYSTEMS
@@ -28,16 +28,16 @@ class BM25RAG(BaseRAGSystem):
 
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
-        self.chunker = build_chunker(config.chunker)
+        self.chunker = build_chunker(config.chunker, models=config.models, force_mock=force_mock)
         self.store = BM25Store()
         self.num_chunks = 0
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
         with timer() as t:
-            chunks = self.chunker.chunk(documents)
+            chunks, chunk_cost = chunk_documents(self.chunker, documents)
             self.store.build(chunks)
             self.num_chunks = len(chunks)
-        return IngestionResult(system=self.name, num_documents=len(documents), num_chunks=len(chunks), latency_ms=t.elapsed_ms)
+        return IngestionResult(system=self.name, num_documents=len(documents), num_chunks=len(chunks), latency_ms=t.elapsed_ms, cost=chunk_cost)
 
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
         k = self.options.resolve_top_k(top_k)
