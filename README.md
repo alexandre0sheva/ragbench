@@ -1,12 +1,12 @@
 # RAGBench
 
 [![CI](https://github.com/alexandre0sheva/ragbench/actions/workflows/ci.yml/badge.svg)](https://github.com/alexandre0sheva/ragbench/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Typed](https://img.shields.io/badge/typed-PEP%20561-informational.svg)](https://peps.python.org/pep-0561/)
 
-**RAGBench is an evaluation-first benchmark harness for Retrieval-Augmented Generation.** Run eight retrieval architectures — BM25, vector, hybrid, hybrid + rerank, rerank, parent-document, HyDE, LLM-heavy — against the same dataset and questions. Get a leaderboard of retrieval quality, answer quality, faithfulness, latency, and cost.
+**RAGBench is an evaluation-first benchmark harness for Retrieval-Augmented Generation.** Run many retrieval architectures — lexical, vector, hybrid, reranked, parent-document, HyDE, LLM-driven and more (see [docs/systems.md](docs/systems.md)) — against the same dataset and questions. Get a leaderboard of retrieval quality, answer quality, faithfulness, latency, and cost.
 
 It is not a demo chatbot. It answers a single question: *which RAG approach gives the best quality, cost, and speed tradeoff for **my** documents and **my** questions?*
 
@@ -90,24 +90,26 @@ flowchart LR
 
 ## Compared systems
 
+<!-- systems:start -->
 | System | Description | Typical use |
 | --- | --- | --- |
 | `bm25` | Lexical BM25 over chunks | Cheap baseline and exact-term matching |
-| `vector` | Chroma-backed embedding search with cosine similarity | Semantic baseline |
-| `hybrid` | BM25 + vector with (optionally weighted) Reciprocal Rank Fusion | Balanced lexical + semantic retrieval |
-| `hybrid_rerank` | Hybrid RRF retrieval followed by a reranking pass | Recall of hybrid plus rerank precision |
-| `rerank` | Vector retrieval followed by reranking | Higher precision context selection |
-| `parent_doc` | Retrieve small child chunks, answer from larger parent chunks (`max`/`sum`/`mean` score roll-up) | Better answer context with precise retrieval |
-| `hyde` | Hypothetical Document Embeddings: LLM writes a hypothetical answer used as the search probe | Short or vaguely-worded questions |
-| `llm_heavy` | LLM-driven ingestion metadata, query rewrite, and reranking | Higher-cost quality-oriented experiments |
+| `hybrid` | BM25 + vector search fused with (optionally weighted) Reciprocal Rank Fusion | Balanced lexical + semantic retrieval |
+| `hybrid_rerank` | Hybrid BM25 + vector RRF retrieval followed by a reranking pass | Recall of hybrid plus rerank precision |
+| `parent_doc` | Retrieve small child chunks, answer from their larger parent chunks | Better answer context with precise retrieval |
+| `rerank` | Vector retrieval followed by a reranking pass | Higher precision context selection |
+| `vector` | Embedding search with cosine similarity (Chroma-backed, exact in-memory fallback) | Semantic baseline |
+| `hyde` | Hypothetical Document Embeddings: the LLM writes a hypothetical answer used as the search probe | Short or vaguely-worded questions |
+| `llm_heavy` | LLM-driven ingestion metadata, query rewriting, and reranking | Higher-cost, quality-oriented experiments |
+<!-- systems:end -->
 
-All systems implement the same `BaseRAGSystem` interface and run on any user-supplied dataset — point any config at your own `docs/` + `questions.jsonl` and every approach above is directly comparable on your data.
+All systems implement the same `BaseRAGSystem` interface and run on any user-supplied dataset — point any config at your own `docs/` + `questions.jsonl` and every approach above is directly comparable on your data. Options for each system are documented in [docs/systems.md](docs/systems.md).
 
 ## Metrics
 
 Retrieval is evaluated at the **document level** because chunks are generated dynamically by each system. RAGBench reports:
 
-- **Retrieval:** Recall@K, Precision@K, Hit@K, MRR@K, nDCG@K (graded if qrels are present).
+- **Retrieval:** Recall@K, Precision@K, Hit@K, MRR@K, nDCG@K (graded if qrels are present), scored on a deeper ranking than the context the LLM reads ([details](docs/configuration.md#retrieval-depth-context-size-and-failures)).
 - **Answer:** Correctness, Faithfulness, Completeness, Relevance, Citation quality (LLM-as-judge or heuristic in mock mode).
 - **Operational:** Ingestion / query / judge cost, average latency, wall time, failure-type distribution.
 
@@ -115,7 +117,7 @@ Retrieval is evaluated at the **document level** because chunks are generated dy
 
 While a benchmark runs, the CLI shows live per-system progress (ingestion, then a question-by-question bar) and finishes with a leaderboard table in the terminal, with the best value in each column highlighted.
 
-Each run writes a timestamped directory containing `leaderboard.md`, `report.html`, `metrics_summary.csv`, `per_question_results.jsonl`, `retrieval_metrics.csv`, `answer_metrics.csv`, `cost_breakdown.csv`, `failures.md`, `qrels_audit.md`, `system_runtime.csv`, and `run_summary.json`.
+Each run writes a timestamped directory containing `leaderboard.md`, `report.html`, `metrics_summary.csv`, `per_question_results.jsonl`, `retrieval_metrics.csv`, `answer_metrics.csv`, `cost_breakdown.csv`, `failures.md`, `qrels_audit.md`, `system_runtime.csv`, `run_summary.json`, and `run_manifest.json` (versions, git commit, config/dataset hashes).
 
 `report.html` is a self-contained page (no CDN, works offline) with winner summary cards, a sortable leaderboard, comparison bar charts, per-category quality, cost breakdown, and failure analysis. It adapts to light and dark mode.
 
@@ -147,31 +149,25 @@ See [docs/dataset-format.md](docs/dataset-format.md) for the schema reference.
 
 ## Parallel runs
 
-```yaml
-evaluation:
-  max_workers: 4
-```
+Systems, questions, ingestion and embedding batches run concurrently (`--system-workers`, `--max-workers`; results are identical to a sequential run), optional rate limits keep you under provider quotas, and live runs re-time a few questions one at a time for clean latency. See [Concurrency](docs/configuration.md#concurrency).
 
-Or via CLI: `ragbench compare --config configs/all.yaml --max-workers 8`. Higher values reduce wall time for live LLM runs but may hit provider rate limits. Use `--max-workers 1` for fully sequential execution.
+## Caching
 
-## Embedding cache
-
-Systems in one comparison run embed the same corpus, so RAGBench shares corpus embeddings across systems via an in-process cache (on by default, `evaluation.embedding_cache: false` to disable). Two fairness rules keep the comparison honest:
-
-- **Cost stays standalone.** A cache hit is still charged to the requesting system at normal prices, so per-system `$/Q` and ingestion cost reflect what that system would cost deployed alone. The *actual* API savings are reported separately in `run_summary.json` and the console summary.
-- **Query embeddings are never cached.** Per-question latency is measured fresh for every system regardless of run order.
+Live runs cache paid calls on disk (`.ragbench_cache/`), so re-running an unchanged benchmark costs almost nothing, and systems in one run share corpus embeddings. A cache hit is still *charged* to each system at standalone prices, so `$/Q` stays comparable; the real savings are reported separately. See [Caching](docs/configuration.md#caching) for the rules and `ragbench cache stats|clear`.
 
 ## Documentation
 
 - [Configuration guide](docs/configuration.md)
+- [RAG systems and their options](docs/systems.md) *(generated)*
+- [Command-line reference](docs/cli.md) *(generated)*
 - [Dataset format](docs/dataset-format.md)
-- [Adding a new RAG system](docs/extending.md)
+- [Extending RAGBench](docs/extending.md)
 - [GitHub setup](docs/github-setup.md)
 - [Release checklist](docs/release-checklist.md)
 
 ## Cost warning
 
-Pricing constants in `src/ragbench/models/cost.py` are approximate. Defaults use `gpt-5.4-nano` at $0.20 / 1M input tokens and $1.25 / 1M output tokens. `gpt-5.4-mini` is registered for the LLM-heavy config at $0.75 / 1M input and $4.50 / 1M output. Update the registry before using RAGBench for financial forecasting. The `llm_heavy` system can be materially more expensive because it uses LLM calls during ingestion, query rewrite, reranking, and judging.
+Pricing constants in `src/ragbench/models/cost.py` are approximate (see `PRICING_AS_OF`); override them per experiment with the `pricing:` config section ([docs/configuration.md](docs/configuration.md#pricing)). Models without a registered price are reported as $0 with a visible warning. The `llm_heavy` system can be materially more expensive because it uses LLM calls during ingestion, query rewrite, reranking, and judging.
 
 ## Roadmap
 

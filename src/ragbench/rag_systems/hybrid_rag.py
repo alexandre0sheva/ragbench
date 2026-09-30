@@ -1,30 +1,40 @@
 from __future__ import annotations
 
 from ragbench.config.schema import SystemConfig
-from ragbench.documents.chunkers import create_chunker
 from ragbench.documents.schema import Document
 from ragbench.models.cost import CostBreakdown
-from ragbench.models.embeddings import create_embedding_model
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult
+from ragbench.rag_systems.components import build_chunker, build_embedder, build_vector_index
+from ragbench.rag_systems.options import HybridOptions
+from ragbench.rag_systems.spec import SystemSpec
+from ragbench.registry import SYSTEMS
 from ragbench.stores.bm25_store import BM25Store
 from ragbench.stores.hybrid_store import reciprocal_rank_fusion
-from ragbench.stores.vector_store import VectorStore
 from ragbench.utils.query_planning import generate_query_variants
 from ragbench.utils.timing import timer
 
 
+@SYSTEMS.register("hybrid")
 class HybridRAG(BaseRAGSystem):
+    spec = SystemSpec(
+        type="hybrid",
+        title="Hybrid (BM25 + vector)",
+        summary="BM25 + vector search fused with (optionally weighted) Reciprocal Rank Fusion",
+        best_for="Balanced lexical + semantic retrieval",
+        cost_profile="low",
+        latency_profile="fast",
+        requires_llm=False,
+        agentic=False,
+        options=HybridOptions,
+    )
+    options: HybridOptions
+
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
-        self.chunker = create_chunker(config.chunker)
-        self.embedding_model = create_embedding_model(config.models.get("embedding", "text-embedding-3-small"), force_mock=force_mock)
+        self.chunker = build_chunker(config.chunker)
+        self.embedding_model = build_embedder(config.models, force_mock)
         self.bm25_store = BM25Store()
-        self.vector_store = VectorStore(
-            self.embedding_model,
-            backend=config.retrieval.get("vector_store", "chroma"),
-            collection_name=self.name,
-            persist_directory=config.retrieval.get("persist_directory"),
-        )
+        self.vector_store = build_vector_index(self.embedding_model, self.options, self.name)
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
         with timer() as t:
@@ -41,34 +51,39 @@ class HybridRAG(BaseRAGSystem):
         )
 
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
-        cfg = self.config.retrieval
-        bm25_top_k = int(cfg.get("bm25_top_k", 20))
-        vector_top_k = int(cfg.get("vector_top_k", 20))
-        final_top_k = top_k or int(cfg.get("final_top_k", cfg.get("top_k", 5)))
-        rrf_k = int(cfg.get("rrf_k", 60))
-        bm25_weight = float(cfg.get("bm25_weight", 1.0))
-        vector_weight = float(cfg.get("vector_weight", 1.0))
-        queries = (
-            generate_query_variants(question, max_queries=int(cfg.get("max_query_variants", 4)))
-            if bool(cfg.get("multi_query", False))
-            else [question]
-        )
+        opts = self.options
+        final_top_k = opts.resolve_top_k(top_k)
+        bm25_top_k = max(opts.bm25_top_k, final_top_k)
+        vector_top_k = max(opts.vector_top_k, final_top_k)
+        queries = generate_query_variants(question, max_queries=opts.max_query_variants) if opts.multi_query else [question]
         with timer() as t:
             rankings = []
             weights: list[float] = []
             cost: CostBreakdown | None = None
             for query in queries:
-                bm25_result = self.bm25_store.search(query, top_k=bm25_top_k)
-                vector_result = self.vector_store.search(query, top_k=vector_top_k)
+                with self.trace.step("retrieve", "bm25_search", top_k=bm25_top_k) as step:
+                    step.set_input(query)
+                    bm25_result = self.bm25_store.search(query, top_k=bm25_top_k)
+                    step.set_chunks(bm25_result.chunks, bm25_result.cost)
+                with self.trace.step("retrieve", "vector_search", top_k=vector_top_k) as step:
+                    step.set_input(query)
+                    vector_result = self.vector_store.search(query, top_k=vector_top_k)
+                    step.set_chunks(vector_result.chunks, vector_result.cost)
                 rankings.extend([bm25_result.chunks, vector_result.chunks])
-                weights.extend([bm25_weight, vector_weight])
+                weights.extend([opts.bm25_weight, opts.vector_weight])
                 pair_cost = bm25_result.cost.plus(vector_result.cost)
                 cost = pair_cost if cost is None else cost.plus(pair_cost)
-            fused = reciprocal_rank_fusion(rankings, top_k=final_top_k, rrf_k=rrf_k, weights=weights)
+            fused = reciprocal_rank_fusion(rankings, top_k=final_top_k, rrf_k=opts.rrf_k, weights=weights)
         return RetrievalResult(
             question=question,
             chunks=fused,
             latency_ms=t.elapsed_ms,
             cost=cost or CostBreakdown(),
-            metadata={"retriever": "hybrid_rrf", "rrf_k": rrf_k, "queries": queries, "bm25_weight": bm25_weight, "vector_weight": vector_weight},
+            metadata={
+                "retriever": "hybrid_rrf",
+                "rrf_k": opts.rrf_k,
+                "queries": queries,
+                "bm25_weight": opts.bm25_weight,
+                "vector_weight": opts.vector_weight,
+            },
         )

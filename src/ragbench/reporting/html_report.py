@@ -5,6 +5,9 @@ from typing import Any
 
 from jinja2 import Template
 
+from ragbench.reporting.columns import MISSING, Column, format_value, is_missing, leaderboard_columns, to_float
+from ragbench.reporting.notices import build_notices
+
 # Color palette cycled across systems so every chart uses consistent colors.
 SYSTEM_PALETTE = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#14b8a6", "#f43f5e", "#84cc16", "#64748b"]
 
@@ -64,6 +67,10 @@ HTML_TEMPLATE = Template(
     padding: 16px; overflow-x: auto; font-size: 12.5px;
   }
   .footnote { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+  .notice {
+    background: color-mix(in srgb, #f59e0b 14%, var(--panel)); border: 1px solid color-mix(in srgb, #f59e0b 55%, var(--line));
+    border-radius: 10px; padding: 10px 14px; margin-top: 14px; font-size: 13.5px;
+  }
 </style>
 </head>
 <body>
@@ -74,8 +81,11 @@ HTML_TEMPLATE = Template(
       Run <strong>{{ run_id }}</strong>
       · {{ run_meta.num_systems }} systems · {{ run_meta.num_questions }} questions
       · wall time {{ "%.1f" | format(run_meta.run_wall_time_ms / 1000) }}s
-      {% if run_meta.cache_hits %} · embedding cache reused {{ run_meta.cache_hits }} embeddings (~${{ "%.4f" | format(run_meta.cache_saved_usd) }} saved){% endif %}
+      {% if run_meta.cache_hits %} · cache reused {{ run_meta.cache_hits }} results (~${{ "%.4f" | format(run_meta.cache_saved_usd) }} of API spend avoided){% endif %}
     </div>
+    {% for notice in notices %}
+    <div class="notice" role="note"><strong>Heads up:</strong> {{ notice }}</div>
+    {% endfor %}
   </header>
 
   <div class="cards">
@@ -206,24 +216,6 @@ document.querySelectorAll("#leaderboard th.sortable").forEach(function (th) {
 """
 )
 
-LEADERBOARD_COLUMNS: list[dict[str, Any]] = [
-    {"key": "retrieval_recall@5", "header": "Recall@5", "fmt": "{:.3f}", "higher_is_better": True},
-    {"key": "retrieval_mrr@10", "header": "MRR@10", "fmt": "{:.3f}", "higher_is_better": True},
-    {"key": "retrieval_ndcg@10", "header": "nDCG@10", "fmt": "{:.3f}", "higher_is_better": True},
-    {"key": "answer_score", "header": "Answer", "fmt": "{:.2f}", "higher_is_better": True},
-    {"key": "faithfulness", "header": "Faithful", "fmt": "{:.2f}", "higher_is_better": True},
-    {"key": "avg_cost_per_question", "header": "$/Q", "fmt": "{:.5f}", "higher_is_better": False},
-    {"key": "avg_latency_ms", "header": "Latency ms", "fmt": "{:.0f}", "higher_is_better": False},
-]
-
-CHART_SPECS: list[dict[str, Any]] = [
-    {"key": "answer_score", "title": "Answer score (0–5)", "fmt": "{:.2f}"},
-    {"key": "retrieval_recall@5", "title": "Recall@5", "fmt": "{:.3f}"},
-    {"key": "avg_cost_per_question", "title": "Cost per question (USD)", "fmt": "${:.5f}"},
-    {"key": "avg_latency_ms", "title": "Avg latency (ms)", "fmt": "{:.0f}"},
-]
-
-
 def write_html_report(
     path: Path,
     run_id: str,
@@ -235,13 +227,15 @@ def write_html_report(
     run_meta: dict[str, Any],
 ) -> None:
     colors = {row["system"]: SYSTEM_PALETTE[idx % len(SYSTEM_PALETTE)] for idx, row in enumerate(summary_rows)}
+    columns = leaderboard_columns({key for row in summary_rows for key in row}, run_meta.get("primary_k"))
     html = HTML_TEMPLATE.render(
         run_id=run_id,
         run_meta=run_meta,
-        cards=_build_cards(summary_rows),
-        leaderboard_columns=LEADERBOARD_COLUMNS,
-        leaderboard_rows=_build_leaderboard_rows(summary_rows, colors),
-        charts=_build_charts(summary_rows, colors),
+        notices=build_notices(run_meta.get("mode"), run_meta.get("unknown_priced_models")),
+        cards=_build_cards(summary_rows, columns),
+        leaderboard_columns=columns,
+        leaderboard_rows=_build_leaderboard_rows(summary_rows, colors, columns),
+        charts=_build_charts(summary_rows, colors, columns),
         category_rows=category_rows,
         cost_rows=cost_rows,
         failure_rows=failure_rows,
@@ -250,18 +244,28 @@ def write_html_report(
     path.write_text(html, encoding="utf-8")
 
 
+def _values(summary_rows: list[dict[str, Any]], key: str) -> list[tuple[dict[str, Any], float]]:
+    return [(row, float(row[key])) for row in summary_rows if not is_missing(row.get(key))]
+
+
 def _winner(summary_rows: list[dict[str, Any]], key: str, higher_is_better: bool = True) -> dict[str, Any] | None:
-    rows = [row for row in summary_rows if key in row]
-    if not rows:
+    pairs = _values(summary_rows, key)
+    if not pairs:
         return None
-    return max(rows, key=lambda row: row[key]) if higher_is_better else min(rows, key=lambda row: row[key])
+    return (max if higher_is_better else min)(pairs, key=lambda pair: pair[1])[0]
 
 
-def _build_cards(summary_rows: list[dict[str, Any]]) -> list[dict[str, str]]:
+def _column(columns: list[Column], prefix: str) -> Column | None:
+    return next((column for column in columns if column.key.startswith(prefix)), None)
+
+
+def _build_cards(summary_rows: list[dict[str, Any]], columns: list[Column]) -> list[dict[str, str]]:
     cards: list[dict[str, str]] = []
-    specs = [
-        ("Best answers", "answer_score", True, "{:.2f} / 5"),
-        ("Best retrieval (nDCG@10)", "retrieval_ndcg@10", True, "{:.3f}"),
+    ndcg = _column(columns, "retrieval_ndcg@")
+    specs: list[tuple[str, str, bool, str]] = [("Best answers", "answer_score", True, "{:.2f} / 5")]
+    if ndcg is not None:
+        specs.append((f"Best retrieval ({ndcg.header})", ndcg.key, True, "{:.3f}"))
+    specs += [
         ("Cheapest", "avg_cost_per_question", False, "${:.5f} / question"),
         ("Fastest", "avg_latency_ms", False, "{:.0f} ms / question"),
     ]
@@ -273,41 +277,47 @@ def _build_cards(summary_rows: list[dict[str, Any]]) -> list[dict[str, str]]:
     return cards
 
 
-def _build_leaderboard_rows(summary_rows: list[dict[str, Any]], colors: dict[str, str]) -> list[dict[str, Any]]:
+def _build_leaderboard_rows(summary_rows: list[dict[str, Any]], colors: dict[str, str], columns: list[Column]) -> list[dict[str, Any]]:
     best: dict[str, float] = {}
-    for col in LEADERBOARD_COLUMNS:
-        values = [float(row.get(col["key"], 0.0)) for row in summary_rows]
+    for col in columns:
+        values = [value for _, value in _values(summary_rows, col.key)]
         if values:
-            best[col["key"]] = max(values) if col["higher_is_better"] else min(values)
+            best[col.key] = max(values) if col.higher_is_better else min(values)
     rows: list[dict[str, Any]] = []
     for row in summary_rows:
         cells = []
-        for col in LEADERBOARD_COLUMNS:
-            value = float(row.get(col["key"], 0.0))
+        for col in columns:
+            value = row.get(col.key)
+            number = to_float(value)
             cells.append(
                 {
-                    "raw": value,
-                    "text": col["fmt"].format(value),
-                    "best": len(summary_rows) > 1 and value == best.get(col["key"]),
+                    "raw": "" if number is None else number,
+                    "text": format_value(col, value),
+                    "best": number is not None and len(summary_rows) > 1 and number == best.get(col.key),
                 }
             )
         rows.append({"system": row["system"], "color": colors[row["system"]], "cells": cells})
     return rows
 
 
-def _build_charts(summary_rows: list[dict[str, Any]], colors: dict[str, str]) -> list[dict[str, Any]]:
+def _build_charts(summary_rows: list[dict[str, Any]], colors: dict[str, str], columns: list[Column]) -> list[dict[str, Any]]:
+    recall = _column(columns, "retrieval_recall@")
+    specs = [("answer_score", "Answer score (0–5)", "{:.2f}")]
+    if recall is not None:
+        specs.append((recall.key, recall.header, "{:.3f}"))
+    specs += [("avg_cost_per_question", "Cost per question (USD)", "${:.5f}"), ("avg_latency_ms", "Avg latency (ms)", "{:.0f}")]
     charts: list[dict[str, Any]] = []
-    for spec in CHART_SPECS:
-        values = [float(row.get(spec["key"], 0.0)) for row in summary_rows]
+    for key, title, fmt in specs:
+        values = [value for _, value in _values(summary_rows, key)]
         peak = max(values) if values else 0.0
         bars = [
             {
                 "name": row["system"],
-                "pct": round(100.0 * float(row.get(spec["key"], 0.0)) / peak, 1) if peak else 0.0,
-                "value": spec["fmt"].format(float(row.get(spec["key"], 0.0))),
+                "pct": round(100.0 * float(row[key]) / peak, 1) if peak and not is_missing(row.get(key)) else 0.0,
+                "value": fmt.format(float(row[key])) if not is_missing(row.get(key)) else MISSING,
                 "color": colors[row["system"]],
             }
             for row in summary_rows
         ]
-        charts.append({"title": spec["title"], "bars": bars})
+        charts.append({"title": title, "bars": bars})
     return charts

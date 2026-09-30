@@ -1,34 +1,40 @@
 from __future__ import annotations
 
-from ragbench.config.schema import SystemConfig
+from ragbench.config.schema import ParentChildChunkerConfig, SystemConfig
 from ragbench.documents.chunkers import TokenChunker
 from ragbench.documents.schema import Document, TextChunk
-from ragbench.models.embeddings import create_embedding_model
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult, RetrievedChunk
-from ragbench.stores.vector_store import VectorStore
+from ragbench.rag_systems.components import build_embedder, build_vector_index
+from ragbench.rag_systems.options import ParentDocOptions
+from ragbench.rag_systems.spec import SystemSpec
+from ragbench.registry import SYSTEMS
 from ragbench.utils.ids import stable_chunk_id
 from ragbench.utils.timing import timer
 
 
+@SYSTEMS.register("parent_doc")
 class ParentDocumentRAG(BaseRAGSystem):
+    spec = SystemSpec(
+        type="parent_doc",
+        title="Parent document",
+        summary="Retrieve small child chunks, answer from their larger parent chunks",
+        best_for="Better answer context with precise retrieval",
+        cost_profile="low",
+        latency_profile="fast",
+        requires_llm=False,
+        agentic=False,
+        options=ParentDocOptions,
+        chunker=ParentChildChunkerConfig,
+    )
+    options: ParentDocOptions
+
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
-        chunk_cfg = config.chunker
-        self.parent_chunker = TokenChunker(
-            chunk_size=int(chunk_cfg.get("parent_chunk_size", 1000)),
-            chunk_overlap=int(chunk_cfg.get("parent_chunk_overlap", 150)),
-        )
-        self.child_chunker = TokenChunker(
-            chunk_size=int(chunk_cfg.get("child_chunk_size", 250)),
-            chunk_overlap=int(chunk_cfg.get("child_chunk_overlap", 50)),
-        )
-        self.embedding_model = create_embedding_model(config.models.get("embedding", "text-embedding-3-small"), force_mock=force_mock)
-        self.child_store = VectorStore(
-            self.embedding_model,
-            backend=config.retrieval.get("vector_store", "chroma"),
-            collection_name=self.name,
-            persist_directory=config.retrieval.get("persist_directory"),
-        )
+        chunk_cfg = ParentChildChunkerConfig.model_validate(config.chunker)
+        self.parent_chunker = TokenChunker(chunk_size=chunk_cfg.parent_chunk_size, chunk_overlap=chunk_cfg.parent_chunk_overlap)
+        self.child_chunker = TokenChunker(chunk_size=chunk_cfg.child_chunk_size, chunk_overlap=chunk_cfg.child_chunk_overlap)
+        self.embedding_model = build_embedder(config.models, force_mock)
+        self.child_store = build_vector_index(self.embedding_model, self.options, self.name)
         self.parents: dict[str, TextChunk] = {}
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
@@ -69,13 +75,17 @@ class ParentDocumentRAG(BaseRAGSystem):
         )
 
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
-        top_k_children = int(self.config.retrieval.get("top_k_children", 8))
-        top_k_parents = top_k or int(self.config.retrieval.get("top_k_parents", 4))
+        top_k_parents = top_k or self.options.top_k_parents
+        # Asking for a deeper parent ranking needs enough children to cover that many distinct parents.
+        top_k_children = max(self.options.top_k_children, top_k_parents * 2)
         # How child scores roll up to their parent: `max` keeps the single best
         # match, `sum` rewards parents hit by several children, `mean` averages.
-        aggregation = str(self.config.retrieval.get("parent_score_aggregation", "max")).lower()
+        aggregation = self.options.parent_score_aggregation
         with timer() as t:
-            child_result = self.child_store.search(question, top_k=top_k_children)
+            with self.trace.step("retrieve", "child_vector_search", top_k=top_k_children) as step:
+                step.set_input(question)
+                child_result = self.child_store.search(question, top_k=top_k_children)
+                step.set_chunks(child_result.chunks, child_result.cost)
             child_scores: dict[str, list[float]] = {}
             parent_children: dict[str, list[str]] = {}
             for child in child_result.chunks:

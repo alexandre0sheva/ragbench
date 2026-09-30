@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
@@ -9,6 +9,9 @@ from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.llms import LLM, create_llm
+from ragbench.rag_systems.options import BaseOptions, PermissiveOptions
+from ragbench.rag_systems.spec import SystemSpec
+from ragbench.rag_systems.trace import Step, Tracer, activate, current_tracer, reconcile_steps
 from ragbench.utils.timing import timer
 
 
@@ -31,6 +34,8 @@ class RetrievalResult(BaseModel):
     latency_ms: float = 0.0
     cost: CostBreakdown = Field(default_factory=CostBreakdown)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # Steps recorded while retrieving (empty when `fetch_context` runs without an active tracer).
+    steps: list[Step] = Field(default_factory=list)
 
 
 class AnswerResult(BaseModel):
@@ -44,6 +49,8 @@ class AnswerResult(BaseModel):
     cost: CostBreakdown = Field(default_factory=CostBreakdown)
     token_usage: dict[str, int] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # Ordered trace of everything the system did for this question; their costs add up to `cost`.
+    steps: list[Step] = Field(default_factory=list)
 
 
 class IngestionResult(BaseModel):
@@ -78,11 +85,16 @@ class BaseRAGSystem(ABC):
     """
 
     name: str
+    # Self-description used by `list-systems`, leaderboards and the generated docs. Built-in systems must
+    # declare one; custom systems may omit it (their `retrieval:` section is then not validated).
+    spec: ClassVar[SystemSpec | None] = None
+    options: BaseOptions
 
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         self.config = config
         self.name = config.resolved_name
         self.force_mock = force_mock
+        self.options = (self.spec.options if self.spec is not None else PermissiveOptions).model_validate(config.retrieval)
         self.llm: LLM = create_llm(config.models.get("generator", "gpt-5.4-nano"), force_mock=force_mock)
 
     @abstractmethod
@@ -99,34 +111,59 @@ class BaseRAGSystem(ABC):
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
         """Retrieve the top-k most relevant chunks for `question`.
 
-        `top_k` overrides the system's configured default when provided. The
-        returned `RetrievalResult` must include latency and any retrieval-side
+        `top_k` overrides the system's configured default when provided; the
+        evaluator passes the retrieval depth here, which may exceed the number of
+        chunks given to the generator (see `answer_question`). The returned `RetrievalResult` must include latency and any retrieval-side
         cost (embeddings, reranker calls, etc.).
         """
         raise NotImplementedError
 
-    def answer_question(self, question: str, top_k: int | None = None) -> AnswerResult:
+    @property
+    def trace(self) -> Tracer:
+        """The active per-question tracer (a silent no-op outside `answer_question`). Record work with `self.trace.step(...)`."""
+        return current_tracer()
+
+    def configured_context_k(self) -> int | None:
+        """How many chunks this system hands the generator when the caller does not say.
+
+        `None` means "not configured", in which case the evaluator falls back to `evaluation.context_k`.
+        """
+        return self.options.configured_top_k
+
+    def answer_question(self, question: str, top_k: int | None = None, context_k: int | None = None) -> AnswerResult:
         """Retrieve context and generate an answer in one call.
 
-        Default implementation: `fetch_context` -> format chunks -> LLM. Override
-        to add query rewriting, multi-hop, or custom prompt construction.
+        `top_k` is the retrieval *depth* (how many ranked chunks `fetch_context` returns; the evaluator
+        scores retrieval metrics on all of them). `context_k` is how many of those top-ranked chunks the
+        LLM actually sees; it defaults to the system's configured `top_k`. Default implementation:
+        `fetch_context` -> format chunks -> LLM. Override to add query rewriting, multi-hop, or custom
+        prompt construction.
         """
-        with timer() as total_timer:
+        tracer = Tracer()
+        with activate(tracer), timer() as total_timer:
             retrieval = self.fetch_context(question, top_k=top_k)
-            llm_result = self._generate_answer(question, retrieval.chunks)
+            if not tracer.steps:  # a system that records no steps of its own still gets a coarse trace
+                retrieval.steps = [Step(kind="retrieve", name="fetch_context", latency_ms=retrieval.latency_ms, cost=retrieval.cost)]
+                tracer.add(retrieval.steps[0])
+            else:
+                retrieval.steps = list(tracer.steps)
+            limit = context_k if context_k is not None else self.configured_context_k()
+            context_chunks = retrieval.chunks[:limit] if limit is not None else retrieval.chunks
+            llm_result = self._generate_answer(question, context_chunks)
         cost = retrieval.cost.plus(llm_result.cost)
         return AnswerResult(
             question=question,
             answer=llm_result.text,
             retrieval_result=retrieval,
             model_name=llm_result.model,
-            latency_ms=total_timer.elapsed_ms,
+            latency_ms=total_timer.elapsed_ms + tracer.latency_credit_ms,
             cost=cost,
             token_usage={
                 "prompt_tokens": llm_result.prompt_tokens,
                 "completion_tokens": llm_result.completion_tokens,
             },
-            metadata={"system_type": self.config.type},
+            metadata={"system_type": self.config.type, "context_chunk_ids": [chunk.chunk_id for chunk in context_chunks]},
+            steps=reconcile_steps(tracer.steps, cost),
         )
 
     def _generate_answer(self, question: str, chunks: list[RetrievedChunk]):
@@ -135,7 +172,11 @@ class BaseRAGSystem(ABC):
             {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
         ]
-        return self.llm.generate(messages, temperature=0)
+        with self.trace.step("generate", "answer", context_chunks=len(chunks)) as step:
+            result = self.llm.generate(messages, temperature=0)
+            step.set_llm(result)
+            step.set_input(question)
+        return result
 
     @staticmethod
     def _format_context(chunks: list[RetrievedChunk]) -> str:

@@ -17,16 +17,24 @@ FAILURE_TYPES = {
     "wrong_date",
     "over_refusal",
     "format_error",
+    "run_error",
 }
 
 
-def classify_failure(question: Question, answer: str, retrieval_metrics: dict[str, float], judge: AnswerJudgeResult) -> str:
+def classify_failure(
+    question: Question,
+    answer: str,
+    retrieval_metrics: dict[str, float],
+    judge: AnswerJudgeResult,
+    primary_k: int = 5,
+) -> str:
+    hit = retrieval_metrics.get(f"hit@{primary_k}", 0.0)
     refused = "could not find the answer" in answer.lower() or "not available" in answer.lower()
     if not question.is_answerable:
         return "no_failure" if refused else "answer_hallucination"
-    if retrieval_metrics.get("hit@5", 0.0) == 0.0 and judge.answer_score >= 4 and judge.faithfulness >= 4 and not refused:
+    if hit == 0.0 and judge.answer_score >= 4 and judge.faithfulness >= 4 and not refused:
         return "possible_qrels_gap"
-    if retrieval_metrics.get("hit@5", 0.0) == 0.0:
+    if hit == 0.0:
         return "retrieval_miss"
     if refused:
         return "over_refusal"

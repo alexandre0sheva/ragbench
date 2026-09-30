@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 import typer
+from pydantic import ValidationError
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
@@ -14,8 +16,8 @@ from ragbench.datasets.demo_generator import write_demo_dataset
 from ragbench.datasets.loader import load_dataset
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import load_documents
-from ragbench.evaluation.evaluator import ProgressListener, run_benchmark
-from ragbench.rag_systems import SYSTEM_REGISTRY
+from ragbench.evaluation.evaluator import BenchmarkRunError, ProgressListener, run_benchmark
+from ragbench.reporting.columns import format_value, is_missing, leaderboard_columns
 from ragbench.utils.env import has_openai_key, load_project_env
 
 app = typer.Typer(help="RAGBench: evaluation-first RAG benchmark framework.")
@@ -35,6 +37,7 @@ class _RichProgress(ProgressListener):
     def __init__(self, progress: Progress):
         self.progress = progress
         self.tasks: dict[str, Any] = {}
+        self.finished: dict[str, str] = {}
         self.num_systems = 0
 
     def run_started(self, num_systems: int, num_questions: int) -> None:
@@ -50,10 +53,17 @@ class _RichProgress(ProgressListener):
         self.progress.update(self.tasks[name], total=total, completed=done)
 
     def system_finished(self, name: str, wall_time_ms: float) -> None:
-        self.progress.update(self.tasks[name], description=f"[bold]{name}[/bold] · done in {wall_time_ms / 1000:.1f}s")
+        self.finished[name] = f"{wall_time_ms / 1000:.1f}s"
+        self.progress.update(self.tasks[name], description=f"[bold]{name}[/bold] · done in {self.finished[name]}")
+
+    def latency_probe(self, name: str, done: int, total: int) -> None:
+        suffix = f"measuring latency {done}/{total}" if done < total else "latency measured"
+        self.progress.update(self.tasks[name], description=f"[bold]{name}[/bold] · done in {self.finished.get(name, '?')} · {suffix}")
 
 
-def _execute_benchmark(config: Path, mock: bool, max_workers: int | None, done_message: str) -> None:
+def _execute_benchmark(
+    config: Path, mock: bool, max_workers: int | None, done_message: str, use_cache: bool = True, system_workers: int | None = None
+) -> None:
     load_project_env(config)
     _mock_warning(force_mock=mock)
     progress = Progress(
@@ -65,22 +75,24 @@ def _execute_benchmark(config: Path, mock: bool, max_workers: int | None, done_m
         console=console,
         transient=False,
     )
-    with progress:
-        output_dir = run_benchmark(config, force_mock=mock, max_workers=max_workers, progress=_RichProgress(progress))
+    try:
+        with progress:
+            output_dir = run_benchmark(config, force_mock=mock, max_workers=max_workers, progress=_RichProgress(progress), use_cache=use_cache, system_workers=system_workers)
+    except BenchmarkRunError as exc:
+        _print_run_summary(exc.output_dir)
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
+    except ValidationError as exc:
+        console.print(f"[red]Invalid config {config}:[/red]")
+        for error in exc.errors():
+            where = ".".join(str(part) for part in error["loc"])
+            console.print(f"  [red]•[/red] {where + ': ' if where else ''}{str(error['msg']).removeprefix('Value error, ')}", soft_wrap=True)
+        raise typer.Exit(2) from exc
+    except FileNotFoundError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
     _print_run_summary(output_dir)
     console.print(f"[green]{done_message}[/green] Results: [bold]{output_dir}[/bold]")
-
-
-_LEADERBOARD_COLUMNS: list[tuple[str, str, str, bool]] = [
-    # (csv column, header, format, higher_is_better)
-    ("retrieval_recall@5", "Recall@5", "{:.3f}", True),
-    ("retrieval_mrr@10", "MRR@10", "{:.3f}", True),
-    ("retrieval_ndcg@10", "nDCG@10", "{:.3f}", True),
-    ("answer_score", "Answer", "{:.2f}", True),
-    ("faithfulness", "Faithful", "{:.2f}", True),
-    ("avg_cost_per_question", "$/Q", "${:.5f}", False),
-    ("avg_latency_ms", "Latency", "{:.0f} ms", False),
-]
 
 
 def _print_run_summary(output_dir: Path) -> None:
@@ -92,33 +104,47 @@ def _print_run_summary(output_dir: Path) -> None:
     summary = pd.read_csv(summary_path)
     if summary.empty:
         return
+    run_summary_path = output_dir / "run_summary.json"
+    run_summary = json.loads(run_summary_path.read_text(encoding="utf-8")) if run_summary_path.exists() else {}
+    columns = leaderboard_columns(summary.columns, run_summary.get("primary_k"))
     table = Table(title="Leaderboard", title_justify="left")
     table.add_column("System", style="bold")
-    for _, header, _, _ in _LEADERBOARD_COLUMNS:
-        table.add_column(header, justify="right")
+    for column in columns:
+        table.add_column(column.header, justify="right")
     best: dict[str, float] = {}
-    for col, _, _, higher in _LEADERBOARD_COLUMNS:
-        if col in summary.columns:
-            best[col] = float(summary[col].max() if higher else summary[col].min())
+    for column in columns:
+        if column.key in summary.columns and summary[column.key].notna().any():
+            best[column.key] = float(summary[column.key].max() if column.higher_is_better else summary[column.key].min())
     for _, row in summary.iterrows():
         cells = [str(row["system"])]
-        for col, _, fmt, _ in _LEADERBOARD_COLUMNS:
-            if col not in summary.columns:
-                cells.append("—")
-                continue
-            value = float(row[col])
-            text = fmt.format(value)
-            cells.append(f"[bold green]{text}[/bold green]" if value == best.get(col) else text)
+        for column in columns:
+            value = row.get(column.key)
+            text = format_value(column, value)
+            cells.append(f"[bold green]{text}[/bold green]" if not is_missing(value) and float(value) == best.get(column.key) else text)
         table.add_row(*cells)
     console.print(table)
-    run_summary_path = output_dir / "run_summary.json"
-    if run_summary_path.exists():
-        run_summary = json.loads(run_summary_path.read_text(encoding="utf-8"))
+    if run_summary:
+        num_errors = int(run_summary.get("num_errors", 0))
+        if num_errors:
+            details = ", ".join(f"{name}: {count}" for name, count in run_summary.get("errors_by_system", {}).items())
+            console.print(f"[red]{num_errors} question(s) failed and are excluded from the scores above ({details}). See failures.md.[/red]")
         cache_stats = run_summary.get("embedding_cache", {})
         saved = float(cache_stats.get("saved_cost_usd", 0.0))
         hits = int(cache_stats.get("hits", 0))
         if hits:
             console.print(f"[dim]Embedding cache: {hits} reused embeddings, ~${saved:.4f} of API spend avoided.[/dim]")
+        disk = run_summary.get("cache", {})
+        if disk.get("enabled"):
+            lookups = int(disk["hits"]) + int(disk["misses"])
+            console.print(
+                f"[dim]Disk cache: {disk['hits']}/{lookups} lookups hit ({disk['hit_rate']:.0%}), ~${disk['saved_cost_usd']:.4f} of API spend avoided. "
+                f"Systems were charged ${disk['charged_cost_usd']:.4f} at standalone prices; real spend ≈ ${disk['real_spend_usd']:.4f}.[/dim]"
+            )
+        unknown_priced = run_summary.get("unknown_priced_models", [])
+        if unknown_priced:
+            console.print(
+                f"[yellow]No price registered for {', '.join(unknown_priced)}: reported cost is understated. Add it under `pricing:` in the config.[/yellow]"
+            )
         warnings = run_summary.get("dataset_warnings", [])
         if warnings:
             console.print(f"[yellow]Dataset issues detected ({len(warnings)}). Run `ragbench inspect-dataset` for details:[/yellow]")
@@ -192,43 +218,114 @@ def inspect_dataset(
 
 @app.command("list-systems")
 def list_systems() -> None:
-    """Print available RAG systems."""
+    """Print available RAG systems with their cost and latency profile."""
+    from ragbench.rag_systems import SYSTEMS, all_specs
+
     table = Table(title="Available RAG Systems")
-    table.add_column("Type")
-    table.add_column("Class")
-    for system_type, cls in sorted(SYSTEM_REGISTRY.items()):
-        table.add_row(system_type, cls.__name__)
+    table.add_column("Type", style="bold", no_wrap=True)
+    table.add_column("Cost")
+    table.add_column("Latency")
+    table.add_column("LLM", header_style="bold", justify="center")
+    table.add_column("Best for")
+    described = set()
+    for spec in all_specs():
+        described.add(spec.type)
+        table.add_row(spec.type, spec.cost_profile, spec.latency_profile, "yes" if spec.requires_llm else "no", spec.best_for)
+    for system_type in sorted(set(SYSTEMS.names()) - described):  # custom/plugin systems without a spec
+        table.add_row(system_type, "?", "?", "?", "Custom system")
     console.print(table)
+    console.print("[dim]LLM = the retrieval side calls an LLM. Options for each system: docs/systems.md[/dim]")
 
 
 @app.command()
 def run(
     config: Path = typer.Option(..., "--config", "-c", help="YAML config to run."),
     mock: bool = typer.Option(False, "--mock", help="Force local mock mode even if OPENAI_API_KEY is set."),
-    max_workers: int | None = typer.Option(None, "--max-workers", help="Override evaluation.max_workers for per-system question parallelism."),
+    max_workers: int | None = typer.Option(None, "--max-workers", min=1, help="Override evaluation.max_workers: questions answered at the same time within a system."),
+    system_workers: int | None = typer.Option(None, "--system-workers", min=1, help="Override evaluation.system_workers: systems evaluated at the same time."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache for this run."),
 ) -> None:
     """Run a single config."""
-    _execute_benchmark(config, mock, max_workers, "Run complete.")
+    _execute_benchmark(config, mock, max_workers, "Run complete.", use_cache=not no_cache, system_workers=system_workers)
 
 
 @app.command()
 def compare(
     config: Path = typer.Option(..., "--config", "-c", help="YAML config containing multiple systems."),
     mock: bool = typer.Option(False, "--mock", help="Force local mock mode even if OPENAI_API_KEY is set."),
-    max_workers: int | None = typer.Option(None, "--max-workers", help="Override evaluation.max_workers for per-system question parallelism."),
+    max_workers: int | None = typer.Option(None, "--max-workers", min=1, help="Override evaluation.max_workers: questions answered at the same time within a system."),
+    system_workers: int | None = typer.Option(None, "--system-workers", min=1, help="Override evaluation.system_workers: systems evaluated at the same time."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache for this run."),
 ) -> None:
     """Run multiple systems from one config."""
-    _execute_benchmark(config, mock, max_workers, "Comparison complete.")
+    _execute_benchmark(config, mock, max_workers, "Comparison complete.", use_cache=not no_cache, system_workers=system_workers)
 
 
 @app.command()
 def evaluate(
     config: Path = typer.Option(..., "--config", "-c", help="YAML config to evaluate."),
     mock: bool = typer.Option(False, "--mock", help="Force local mock mode even if OPENAI_API_KEY is set."),
-    max_workers: int | None = typer.Option(None, "--max-workers", help="Override evaluation.max_workers for per-system question parallelism."),
+    max_workers: int | None = typer.Option(None, "--max-workers", min=1, help="Override evaluation.max_workers: questions answered at the same time within a system."),
+    system_workers: int | None = typer.Option(None, "--system-workers", min=1, help="Override evaluation.system_workers: systems evaluated at the same time."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache for this run."),
 ) -> None:
     """Alias for run/compare."""
-    _execute_benchmark(config, mock, max_workers, "Evaluation complete.")
+    _execute_benchmark(config, mock, max_workers, "Evaluation complete.", use_cache=not no_cache, system_workers=system_workers)
+
+
+cache_app = typer.Typer(help="Inspect or clear the persistent cache of LLM responses and corpus embeddings.")
+app.add_typer(cache_app, name="cache")
+
+
+def _cache_path(cache_dir: Path | None) -> tuple[Path, Path]:
+    directory = cache_dir or Path(os.environ.get("RAGBENCH_CACHE_DIR") or ".ragbench_cache")
+    return directory, directory / "cache.sqlite3"
+
+
+def _human_bytes(size: float) -> str:
+    for unit in ("B", "KiB", "MiB", "GiB"):
+        if size < 1024 or unit == "GiB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} GiB"
+
+
+@cache_app.command("stats")
+def cache_stats(
+    cache_dir: Path | None = typer.Option(None, "--cache-dir", help="Cache directory (default: $RAGBENCH_CACHE_DIR or .ragbench_cache)."),
+) -> None:
+    """Show what the persistent cache holds."""
+    from ragbench.cache import DiskCache
+
+    directory, path = _cache_path(cache_dir)
+    info = DiskCache(path).describe()
+    if not info:
+        console.print(f"The cache is empty (or does not exist):\n{directory}")
+        return
+    table = Table(title="Persistent cache", title_justify="left", caption=str(directory))
+    table.add_column("Namespace", style="bold")
+    table.add_column("Entries", justify="right")
+    table.add_column("Stored data", justify="right")
+    for namespace, row in info.items():
+        table.add_row(namespace, str(row["entries"]), _human_bytes(row["bytes"]))
+    console.print(table)
+
+
+@cache_app.command("clear")
+def cache_clear(
+    cache_dir: Path | None = typer.Option(None, "--cache-dir", help="Cache directory (default: $RAGBENCH_CACHE_DIR or .ragbench_cache)."),
+    namespace: str | None = typer.Option(None, "--namespace", help="Only clear this namespace: `llm` or `embeddings`."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask for confirmation."),
+) -> None:
+    """Delete cached entries. Re-running a live benchmark afterwards pays for them again."""
+    from ragbench.cache import DiskCache
+
+    directory, path = _cache_path(cache_dir)
+    what = f"the `{namespace}` cache" if namespace else "the whole cache"
+    if not yes:
+        typer.confirm(f"Delete {what} in {directory}?", abort=True)
+    removed = DiskCache(path).clear(namespace)
+    console.print(f"[green]Removed {removed} cached entries.[/green]")
 
 
 if __name__ == "__main__":

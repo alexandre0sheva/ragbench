@@ -1,15 +1,27 @@
 from __future__ import annotations
 
+import functools
+import logging
+import struct
 import threading
 from abc import ABC, abstractmethod
+from contextlib import nullcontext
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
+from ragbench.cache import CacheRuntime, active_cache, cache_key
 from ragbench.models.cost import CostBreakdown, estimate_model_cost
+from ragbench.models.errors import ModelInitError, translate_openai_exception
+from ragbench.models.retry import call_with_retry
+from ragbench.runtime.context import current_runtime, limiter_for
+from ragbench.runtime.parallel import ordered_parallel_map
 from ragbench.utils.env import has_openai_key
 from ragbench.utils.hashing import stable_hash
 from ragbench.utils.text import estimate_tokens, tokenize
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,6 +34,8 @@ class EmbeddingResult:
 
 class EmbeddingModel(ABC):
     model_name: str
+    # False for models that are free to recompute: they are never written to the persistent disk cache.
+    cacheable: bool = True
 
     @abstractmethod
     def embed_texts(self, texts: list[str]) -> EmbeddingResult:
@@ -32,6 +46,8 @@ class EmbeddingModel(ABC):
 
 
 class HashingEmbeddingModel(EmbeddingModel):
+    cacheable = False
+
     def __init__(self, dim: int = 384):
         self.model_name = "hashing-embedding"
         self.dim = dim
@@ -54,21 +70,42 @@ class HashingEmbeddingModel(EmbeddingModel):
 
 
 class OpenAIEmbeddingModel(EmbeddingModel):
-    def __init__(self, model_name: str = "text-embedding-3-small", batch_size: int = 96):
+    def __init__(self, model_name: str = "text-embedding-3-small", batch_size: int = 96, client: Any | None = None, timeout: float = 120.0):
         self.model_name = model_name
         self.batch_size = batch_size
-        from openai import OpenAI
+        if client is None:
+            from openai import OpenAI
 
-        self.client = OpenAI()
+            # Retries are owned by `call_with_retry`, so the SDK's own are disabled.
+            client = OpenAI(timeout=timeout, max_retries=0)
+        self.client = client
+
+    def _embed_batch(self, batch: list[str]) -> Any:
+        limiter = limiter_for("openai")
+        tokens = sum(estimate_tokens(text, self.model_name) for text in batch) if limiter is not None and limiter.limits_tokens else 0
+        try:
+            with limiter.acquire(tokens) if limiter is not None else nullcontext():
+                return self.client.embeddings.create(model=self.model_name, input=batch)
+        except Exception as exc:
+            translated = translate_openai_exception(exc)
+            if translated is exc:
+                raise
+            raise translated from exc
 
     def embed_texts(self, texts: list[str]) -> EmbeddingResult:
         if not texts:
             return EmbeddingResult(vectors=np.zeros((0, 0), dtype=np.float32), model=self.model_name, input_tokens=0, cost=CostBreakdown())
+        batches = [texts[i : i + self.batch_size] for i in range(0, len(texts), self.batch_size)]
+        # Batches are independent requests; `evaluation.ingest_workers` of them may be in flight at once.
+        responses = ordered_parallel_map(
+            lambda batch: call_with_retry(functools.partial(self._embed_batch, batch)),
+            batches,
+            workers=current_runtime().ingest_workers,
+            thread_name_prefix="ragbench-embed",
+        )
         vectors: list[list[float]] = []
         input_tokens = 0
-        for i in range(0, len(texts), self.batch_size):
-            batch = texts[i : i + self.batch_size]
-            response = self.client.embeddings.create(model=self.model_name, input=batch)
+        for batch, response in zip(batches, responses, strict=True):
             vectors.extend([item.embedding for item in response.data])
             if getattr(response, "usage", None):
                 input_tokens += int(response.usage.prompt_tokens)
@@ -133,27 +170,62 @@ class _EmbeddingCache:
 EMBEDDING_CACHE = _EmbeddingCache()
 
 
-class CachedEmbeddingModel(EmbeddingModel):
-    """Wraps an embedding model with the shared corpus cache.
+def _pack(vector: np.ndarray, tokens: int) -> bytes:
+    return struct.pack("<I", tokens) + np.asarray(vector, dtype="<f4").tobytes()
 
-    Only `embed_texts` (corpus ingestion) consults the cache. `embed_query`
-    always calls the underlying model so per-question latency measurements
-    stay honest for every system regardless of run order.
+
+def _unpack(blob: bytes) -> tuple[np.ndarray, int]:
+    (tokens,) = struct.unpack("<I", blob[:4])
+    return np.frombuffer(blob[4:], dtype="<f4").astype(np.float32), tokens
+
+
+class CachedEmbeddingModel(EmbeddingModel):
+    """Wraps an embedding model with two cache tiers for corpus embeddings.
+
+    L1 is the in-process `EMBEDDING_CACHE` shared by all systems of a run; L2 is the run's persistent disk cache,
+    which lets later runs skip embedding an unchanged corpus altogether. Hits from either tier are still *charged*
+    at standalone prices (see `_EmbeddingCache`); the avoided spend is tracked separately.
+
+    `embed_query` goes straight to the underlying model so per-question latency stays honest, unless the user opts
+    in with `cache.cache_query_embeddings`. Models that are free to recompute (`cacheable = False`, e.g. the mock
+    hashing embeddings) never touch the disk.
     """
 
     def __init__(self, inner: EmbeddingModel):
         self.inner = inner
         self.model_name = inner.model_name
 
+    def _runtime(self) -> CacheRuntime | None:
+        runtime = active_cache()
+        if runtime is None or not runtime.config.embeddings or not getattr(self.inner, "cacheable", True):
+            return None
+        return runtime
+
+    def _disk_key(self, kind: str, text_hash: str) -> str:
+        return cache_key("embeddings", model=self.model_name, kind=kind, text=text_hash)
+
     def embed_texts(self, texts: list[str]) -> EmbeddingResult:
-        if not texts or not EMBEDDING_CACHE.enabled:
+        runtime = self._runtime()
+        if not texts or (not EMBEDDING_CACHE.enabled and runtime is None):
             return self.inner.embed_texts(texts)
         keys = [stable_hash(text, 32) for text in texts]
         cached: dict[int, tuple[np.ndarray, int]] = {}
-        for idx, key in enumerate(keys):
-            entry = EMBEDDING_CACHE.lookup(self.model_name, key)
-            if entry is not None:
-                cached[idx] = entry
+        if EMBEDDING_CACHE.enabled:
+            for idx, key in enumerate(keys):
+                entry = EMBEDDING_CACHE.lookup(self.model_name, key)
+                if entry is not None:
+                    cached[idx] = entry
+        if runtime is not None:
+            wanted = {self._disk_key("doc", keys[idx]): keys[idx] for idx in range(len(texts)) if idx not in cached}
+            stored = runtime.disk.get_many("embeddings", wanted)
+            entries = {wanted[disk_key]: _unpack(blob) for disk_key, blob in stored.items()}
+            for key, (vector, tokens) in entries.items():
+                runtime.disk.record_saved("embeddings", estimate_model_cost(self.model_name, input_tokens=tokens))
+                if EMBEDDING_CACHE.enabled:
+                    EMBEDDING_CACHE.store(self.model_name, key, vector, tokens)
+            for idx, key in enumerate(keys):
+                if idx not in cached and key in entries:
+                    cached[idx] = entries[key]
         miss_indices = [idx for idx in range(len(texts)) if idx not in cached]
         # Dedupe within the batch so repeated texts are embedded once.
         unique_texts: dict[str, int] = {}
@@ -164,17 +236,25 @@ class CachedEmbeddingModel(EmbeddingModel):
         if unique_texts:
             ordered_keys = list(unique_texts)
             miss_result = self.inner.embed_texts([texts[unique_texts[key]] for key in ordered_keys])
+            fresh: list[tuple[str, bytes]] = []
             for row, key in enumerate(ordered_keys):
                 vector = miss_result.vectors[row]
                 tokens = estimate_tokens(texts[unique_texts[key]], self.model_name)
                 vector_by_key[key] = vector
-                EMBEDDING_CACHE.store(self.model_name, key, vector, tokens)
+                if EMBEDDING_CACHE.enabled:
+                    EMBEDDING_CACHE.store(self.model_name, key, vector, tokens)
+                fresh.append((self._disk_key("doc", key), _pack(vector, tokens)))
+            if runtime is not None:
+                runtime.disk.put_many("embeddings", fresh, meta={"model": self.model_name})
         dim = (
             miss_result.vectors.shape[1]
             if miss_result is not None and miss_result.vectors.size
             else next(iter(cached.values()))[0].shape[0]
         )
         vectors = np.zeros((len(texts), dim), dtype=np.float32)
+        # Every text is charged its own token estimate, whether it was a cache hit or had to be embedded, so a
+        # system's bill does not depend on which other system (or thread, or earlier run) embedded it first.
+        miss_tokens: dict[str, int] = {}
         charged_tokens = 0
         for idx, key in enumerate(keys):
             if idx in cached:
@@ -182,8 +262,9 @@ class CachedEmbeddingModel(EmbeddingModel):
                 charged_tokens += cached[idx][1]
             else:
                 vectors[idx] = vector_by_key[key]
-        if miss_result is not None:
-            charged_tokens += miss_result.input_tokens
+                if key not in miss_tokens:
+                    miss_tokens[key] = estimate_tokens(texts[idx], self.model_name)
+                charged_tokens += miss_tokens[key]
         # Charge cache hits at standalone prices so per-system cost stays comparable.
         cost = estimate_model_cost(self.model_name, input_tokens=charged_tokens)
         return EmbeddingResult(
@@ -194,13 +275,31 @@ class CachedEmbeddingModel(EmbeddingModel):
         )
 
     def embed_query(self, text: str) -> EmbeddingResult:
-        return self.inner.embed_query(text)
+        runtime = self._runtime()
+        if runtime is None or not runtime.config.cache_query_embeddings:
+            return self.inner.embed_query(text)
+        disk_key = self._disk_key("query", stable_hash(text, 32))
+        blob = runtime.disk.get("embeddings", disk_key)
+        if blob is not None:
+            vector, tokens = _unpack(blob)
+            cost = estimate_model_cost(self.model_name, input_tokens=tokens)
+            runtime.disk.record_saved("embeddings", cost)
+            return EmbeddingResult(vector[np.newaxis, :], self.model_name, tokens, CostBreakdown(embedding_input_tokens=tokens, embedding_cost=cost))
+        result = self.inner.embed_query(text)
+        runtime.disk.put("embeddings", disk_key, _pack(result.vectors[0], result.input_tokens), meta={"model": self.model_name})
+        return result
 
 
-def create_embedding_model(model_name: str | None = None, force_mock: bool = False) -> EmbeddingModel:
+def create_embedding_model(model_name: str | None = None, force_mock: bool = False, strict: bool = True) -> EmbeddingModel:
+    """Build the (cache-wrapped) embedding model; see `create_llm` for `strict` semantics."""
     if force_mock or not has_openai_key():
         return CachedEmbeddingModel(HashingEmbeddingModel())
     try:
         return CachedEmbeddingModel(OpenAIEmbeddingModel(model_name or "text-embedding-3-small"))
-    except Exception:
+    except Exception as exc:
+        if strict:
+            raise ModelInitError(
+                f"Could not create the OpenAI embedding client for {model_name!r} although OPENAI_API_KEY is set: {exc}"
+            ) from exc
+        logger.warning("OpenAI embedding client init failed (%s); falling back to hashing embeddings.", exc)
         return CachedEmbeddingModel(HashingEmbeddingModel())

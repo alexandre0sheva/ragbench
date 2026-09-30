@@ -3,52 +3,58 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-LEADERBOARD_COLUMNS = [
-    "System",
-    "Recall@5",
-    "MRR@10",
-    "nDCG@10",
-    "Answer Score",
-    "Faithfulness",
-    "Avg Cost / Question",
-    "Avg Latency",
-    "Wall Time",
-    "Best For",
-]
+from ragbench.rag_systems.trace import STAGE_KEYS
+from ragbench.reporting.columns import format_value, leaderboard_columns
 
 
-BEST_FOR = {
-    "bm25": "Cheap lexical baseline",
-    "vector": "Semantic baseline",
-    "hybrid": "Balanced lexical + semantic search",
-    "hybrid_rerank": "Recall of hybrid plus rerank precision",
-    "rerank": "Higher precision retrieval",
-    "parent_doc": "Small-to-big context",
-    "hyde": "Short or vague questions",
-    "llm_heavy": "Quality-oriented expensive pipeline",
-}
+def _best_for(system_type: str) -> str:
+    import ragbench.rag_systems  # noqa: F401  (registers the built-in systems)
+    from ragbench.registry import SYSTEMS
+
+    cls = SYSTEMS.mapping.get(system_type)
+    spec = getattr(cls, "spec", None)
+    return spec.best_for if spec is not None else "Custom comparison"
 
 
-def write_leaderboard(path: Path, summary_rows: list[dict[str, Any]]) -> None:
+def write_leaderboard(
+    path: Path,
+    summary_rows: list[dict[str, Any]],
+    notices: list[str] | None = None,
+    primary_k: int | None = None,
+    stage_rows: list[dict[str, Any]] | None = None,
+) -> None:
+    columns = leaderboard_columns({key for row in summary_rows for key in row}, primary_k)
+    headers = ["System", *(column.header for column in columns), "Errors", "Wall Time", "Best For"]
     rows = []
     for row in summary_rows:
         system_type = row.get("system_type", row.get("system", ""))
-        rows.append(
-            {
-                "System": row["system"],
-                "Recall@5": f"{row.get('retrieval_recall@5', 0):.3f}",
-                "MRR@10": f"{row.get('retrieval_mrr@10', 0):.3f}",
-                "nDCG@10": f"{row.get('retrieval_ndcg@10', 0):.3f}",
-                "Answer Score": f"{row.get('answer_score', 0):.2f}",
-                "Faithfulness": f"{row.get('faithfulness', 0):.2f}",
-                "Avg Cost / Question": f"${row.get('avg_cost_per_question', 0):.6f}",
-                "Avg Latency": f"{row.get('avg_latency_ms', 0):.0f} ms",
-                "Wall Time": f"{row.get('system_wall_time_ms', 0):.0f} ms",
-                "Best For": BEST_FOR.get(str(system_type), "Custom comparison"),
-            }
-        )
-    content = ["# RAGBench Leaderboard", "", _markdown_table(LEADERBOARD_COLUMNS, rows), ""]
+        cells = {"System": row["system"]}
+        cells.update({column.header: format_value(column, row.get(column.key)) for column in columns})
+        cells["Errors"] = f"{row.get('n_error', 0)}/{row.get('n_ok', 0) + row.get('n_error', 0)}" if row.get("n_error") else "0"
+        cells["Wall Time"] = f"{row.get('system_wall_time_ms', 0):.0f} ms"
+        cells["Best For"] = _best_for(str(system_type))
+        rows.append(cells)
+    content = ["# RAGBench Leaderboard", ""]
+    if notices:
+        content.extend([*(f"> **Note:** {notice}" for notice in notices), ""])
+    content.extend([_markdown_table(headers, rows), ""])
+    content.extend(_stage_sections(stage_rows or []))
     path.write_text("\n".join(content), encoding="utf-8")
+
+
+def _stage_sections(stage_rows: list[dict[str, Any]]) -> list[str]:
+    """"Cost by stage" and "Latency by stage" tables; a stage column appears only when some system spent anything there."""
+    lines: list[str] = []
+    for title, field, fmt, unit in (
+        ("Cost by stage", "cost", "${:.6f}", "$ per question, answering only (the judge's cost is excluded)"),
+        ("Latency by stage", "latency_ms", "{:.1f} ms", "ms per question, answering only"),
+    ):
+        used = [key for key in STAGE_KEYS if any((row[field].get(key) or 0) > 0 for row in stage_rows)]
+        if not used:
+            continue
+        table_rows = [{"System": row["system"], **{key: fmt.format(row[field][key]) for key in used}} for row in stage_rows]
+        lines.extend([f"## {title}", "", f"Mean {unit}. `untracked` is cost or time that no recorded step accounts for.", "", _markdown_table(["System", *used], table_rows), ""])
+    return lines
 
 
 def write_failures(path: Path, failure_rows: list[dict[str, Any]]) -> None:
@@ -85,7 +91,7 @@ def write_failures(path: Path, failure_rows: list[dict[str, Any]]) -> None:
     path.write_text("\n".join(lines), encoding="utf-8")
 
 
-def write_qrels_audit(path: Path, audit_rows: list[dict[str, Any]]) -> None:
+def write_qrels_audit(path: Path, audit_rows: list[dict[str, Any]], primary_k: int = 5) -> None:
     lines = [
         "# Qrels Audit",
         "",
@@ -101,13 +107,13 @@ def write_qrels_audit(path: Path, audit_rows: list[dict[str, Any]]) -> None:
             "System": row["system"],
             "Question": row["question_id"],
             "Severity": row["severity"],
-            "Recall@5": f"{row['recall@5']:.2f}",
+            f"Recall@{primary_k}": f"{row['recall']:.2f}",
             "Labeled Docs": row["labeled_relevant_doc_ids"],
             "Unlabeled Retrieved Docs": row["unlabeled_retrieved_doc_ids"],
         }
         for row in audit_rows
     ]
-    lines.append(_markdown_table(["System", "Question", "Severity", "Recall@5", "Labeled Docs", "Unlabeled Retrieved Docs"], rows))
+    lines.append(_markdown_table(["System", "Question", "Severity", f"Recall@{primary_k}", "Labeled Docs", "Unlabeled Retrieved Docs"], rows))
     path.write_text("\n".join(lines), encoding="utf-8")
 
 

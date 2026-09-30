@@ -4,12 +4,13 @@ Thanks for helping improve RAGBench. This project is intended to be a practical,
 
 ## Development Setup
 
+Requires Python 3.11 or newer.
+
 ```bash
 git clone https://github.com/alexandre0sheva/ragbench.git
 cd ragbench
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
+uv venv && source .venv/bin/activate      # or: python -m venv .venv && source .venv/bin/activate
+uv pip install -e ".[dev]"                # or: pip install -e ".[dev]"
 ragbench demo
 pytest
 ```
@@ -20,7 +21,9 @@ RAGBench must work without `OPENAI_API_KEY`. Tests should not require network ca
 
 ```bash
 ruff check .
+mypy
 pytest
+python scripts/generate_docs.py --check   # generated docs (docs/systems.md, docs/cli.md, README system table) are current
 ragbench run --config configs/recommended.yaml --mock
 ragbench compare --config configs/all.yaml --mock --max-workers 4
 ```
@@ -36,12 +39,7 @@ ragbench compare --config configs/all.yaml --mock --max-workers 4
 
 ## Adding a RAG System
 
-1. Add a class under `src/ragbench/rag_systems/`.
-2. Inherit from `BaseRAGSystem`.
-3. Implement `ingest()` and `fetch_context()`.
-4. Register it in `src/ragbench/rag_systems/__init__.py`.
-5. Add a config example.
-6. Add at least one focused test.
+See [docs/extending.md](docs/extending.md): declare the options and a `SystemSpec`, register the class, then run `python scripts/generate_docs.py`. Add a config example and at least one focused test.
 
 ## Pull Requests
 

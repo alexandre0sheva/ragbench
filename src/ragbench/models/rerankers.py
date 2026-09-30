@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Protocol
 
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -9,6 +10,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.llms import LLM
 from ragbench.rag_systems.base import RetrievedChunk
+from ragbench.registry import RERANKERS
 from ragbench.utils.text import tokenize
 
 
@@ -18,6 +20,13 @@ class RerankResult:
     cost: CostBreakdown
 
 
+class Reranker(Protocol):
+    name: str
+
+    def rerank(self, question: str, chunks: list[RetrievedChunk], top_k: int) -> RerankResult: ...
+
+
+@RERANKERS.register("simple_keyword_overlap")
 class SimpleKeywordOverlapReranker:
     name = "simple_keyword_overlap"
 
@@ -56,6 +65,7 @@ class SimpleKeywordOverlapReranker:
         return RerankResult(chunks=reranked, cost=CostBreakdown())
 
 
+@RERANKERS.register("local_relevance", aliases=("local", "tfidf", "tfidf_relevance"))
 class LocalRelevanceReranker:
     name = "local_relevance"
 
@@ -110,8 +120,10 @@ class LocalRelevanceReranker:
             return self.keyword_fallback.rerank(question, chunks, top_k)
 
 
+@RERANKERS.register("llm", aliases=("llm_reranker",))
 class LLMReranker:
     name = "llm_reranker"
+    needs_llm = True
 
     def __init__(self, llm: LLM):
         self.llm = llm
@@ -157,9 +169,9 @@ class LLMReranker:
             return RerankResult(chunks=fallback.chunks, cost=result.cost.plus(fallback.cost))
 
 
-def create_reranker(name: str, llm: LLM | None = None):
-    if name in {"llm", "llm_reranker"} and llm is not None:
-        return LLMReranker(llm)
-    if name in {"local", "local_relevance", "tfidf", "tfidf_relevance"}:
-        return LocalRelevanceReranker()
-    return SimpleKeywordOverlapReranker()
+def create_reranker(name: str, llm: LLM | None = None) -> Reranker:
+    cls = RERANKERS.get(name)
+    if getattr(cls, "needs_llm", False):
+        # Without an LLM (e.g. a component built for inspection only) degrade to the free keyword reranker.
+        return cls(llm) if llm is not None else SimpleKeywordOverlapReranker()  # type: ignore[call-arg]
+    return cls()

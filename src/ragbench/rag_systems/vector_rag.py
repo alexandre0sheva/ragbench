@@ -1,25 +1,35 @@
 from __future__ import annotations
 
 from ragbench.config.schema import SystemConfig
-from ragbench.documents.chunkers import create_chunker
 from ragbench.documents.schema import Document
-from ragbench.models.embeddings import create_embedding_model
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult
-from ragbench.stores.vector_store import VectorStore
+from ragbench.rag_systems.components import build_chunker, build_embedder, build_vector_index
+from ragbench.rag_systems.options import VectorSystemOptions
+from ragbench.rag_systems.spec import SystemSpec
+from ragbench.registry import SYSTEMS
 from ragbench.utils.timing import timer
 
 
+@SYSTEMS.register("vector")
 class VectorRAG(BaseRAGSystem):
+    spec = SystemSpec(
+        type="vector",
+        title="Vector",
+        summary="Embedding search with cosine similarity (Chroma-backed, exact in-memory fallback)",
+        best_for="Semantic baseline",
+        cost_profile="low",
+        latency_profile="fast",
+        requires_llm=False,
+        agentic=False,
+        options=VectorSystemOptions,
+    )
+    options: VectorSystemOptions
+
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
-        self.chunker = create_chunker(config.chunker)
-        self.embedding_model = create_embedding_model(config.models.get("embedding", "text-embedding-3-small"), force_mock=force_mock)
-        self.store = VectorStore(
-            self.embedding_model,
-            backend=config.retrieval.get("vector_store", "chroma"),
-            collection_name=self.name,
-            persist_directory=config.retrieval.get("persist_directory"),
-        )
+        self.chunker = build_chunker(config.chunker)
+        self.embedding_model = build_embedder(config.models, force_mock)
+        self.store = build_vector_index(self.embedding_model, self.options, self.name)
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
         with timer() as t:
@@ -35,8 +45,11 @@ class VectorRAG(BaseRAGSystem):
         )
 
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
-        k = top_k or int(self.config.retrieval.get("top_k", 5))
-        result = self.store.search(question, top_k=k)
+        k = self.options.resolve_top_k(top_k)
+        with self.trace.step("retrieve", "vector_search", top_k=k) as step:
+            step.set_input(question)
+            result = self.store.search(question, top_k=k)
+            step.set_chunks(result.chunks, result.cost)
         result.metadata["retriever"] = "vector"
         result.metadata["embedding_model"] = self.embedding_model.model_name
         return result

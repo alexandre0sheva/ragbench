@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
+_DEFAULT_ENCODING = "o200k_base"
 
 
 def normalize_text(text: str) -> str:
@@ -31,11 +33,30 @@ def truncate(text: str, max_chars: int = 240) -> str:
     return clean[: max_chars - 3].rstrip() + "..."
 
 
-def estimate_tokens(text: str, model: str | None = None) -> int:
+@lru_cache(maxsize=64)
+def _get_encoding(model: str | None):
+    """Resolve (once per model) the tiktoken encoding used for estimates; None means use the heuristic."""
     try:
         import tiktoken
-
-        enc = tiktoken.encoding_for_model(model or "gpt-5.4-nano")
-        return len(enc.encode(text))
+    except ImportError:
+        return None
+    try:
+        return tiktoken.encoding_for_model(model) if model else tiktoken.get_encoding(_DEFAULT_ENCODING)
+    except KeyError:
+        pass  # Unknown model name: newer OpenAI models all use the o200k family.
     except Exception:
-        return max(1, int(len(text.split()) * 1.3))
+        return None
+    try:
+        return tiktoken.get_encoding(_DEFAULT_ENCODING)
+    except Exception:
+        return None
+
+
+def estimate_tokens(text: str, model: str | None = None) -> int:
+    encoding = _get_encoding(model)
+    if encoding is not None:
+        try:
+            return len(encoding.encode(text, disallowed_special=()))
+        except Exception:
+            pass
+    return max(1, int(len(text.split()) * 1.3))

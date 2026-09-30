@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,9 @@ from ragbench.models.cost import CostBreakdown
 from ragbench.models.embeddings import EmbeddingModel
 from ragbench.rag_systems.base import RetrievalResult, RetrievedChunk
 from ragbench.utils.timing import timer
+
+# Systems may be built on several threads; Chroma's in-process client is shared, so index builds take turns.
+_CHROMA_BUILD_LOCK = threading.Lock()
 
 
 class VectorStore:
@@ -64,28 +68,29 @@ class VectorStore:
 
     def _build_chroma(self, vectors: np.ndarray) -> None:
         try:
-            import chromadb
+            with _CHROMA_BUILD_LOCK:
+                import chromadb  # first import inside the lock: two threads must not import it at once
 
-            if self.persist_directory:
-                self.persist_directory.mkdir(parents=True, exist_ok=True)
-                client = chromadb.PersistentClient(path=str(self.persist_directory))
-            else:
-                client = chromadb.EphemeralClient()
-            try:
-                client.delete_collection(self.collection_name)
-            except Exception:
-                pass
-            self.collection = client.create_collection(
-                name=self.collection_name,
-                metadata={"hnsw:space": "cosine"},
-            )
-            if self.chunks:
-                self.collection.add(
-                    ids=[chunk.chunk_id for chunk in self.chunks],
-                    documents=[chunk.text for chunk in self.chunks],
-                    embeddings=[vector.astype(float).tolist() for vector in vectors],
-                    metadatas=[_sanitize_metadata(chunk.metadata | {"doc_id": chunk.doc_id}) for chunk in self.chunks],
+                if self.persist_directory:
+                    self.persist_directory.mkdir(parents=True, exist_ok=True)
+                    client = chromadb.PersistentClient(path=str(self.persist_directory))
+                else:
+                    client = chromadb.EphemeralClient()
+                try:
+                    client.delete_collection(self.collection_name)
+                except Exception:
+                    pass
+                self.collection = client.create_collection(
+                    name=self.collection_name,
+                    metadata={"hnsw:space": "cosine"},
                 )
+                if self.chunks:
+                    self.collection.add(
+                        ids=[chunk.chunk_id for chunk in self.chunks],
+                        documents=[chunk.text for chunk in self.chunks],
+                        embeddings=[vector.astype(float).tolist() for vector in vectors],
+                        metadatas=[_sanitize_metadata(chunk.metadata | {"doc_id": chunk.doc_id}) for chunk in self.chunks],
+                    )
             self.backend = "chroma"
             self.fallback_reason = None
         except Exception as exc:

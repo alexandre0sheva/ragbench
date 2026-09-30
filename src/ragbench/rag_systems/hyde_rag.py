@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from ragbench.config.schema import SystemConfig
-from ragbench.documents.chunkers import create_chunker
 from ragbench.documents.schema import Document
 from ragbench.models.cost import CostBreakdown
-from ragbench.models.embeddings import create_embedding_model
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult
+from ragbench.rag_systems.components import build_chunker, build_embedder, build_vector_index
+from ragbench.rag_systems.options import HyDEOptions
+from ragbench.rag_systems.spec import SystemSpec
+from ragbench.registry import SYSTEMS
 from ragbench.stores.hybrid_store import reciprocal_rank_fusion
-from ragbench.stores.vector_store import VectorStore
 from ragbench.utils.timing import timer
 
 HYDE_SYSTEM_PROMPT = (
@@ -17,6 +18,7 @@ HYDE_SYSTEM_PROMPT = (
 )
 
 
+@SYSTEMS.register("hyde")
 class HyDERAG(BaseRAGSystem):
     """Hypothetical Document Embeddings (HyDE), Gao et al. 2022.
 
@@ -27,16 +29,24 @@ class HyDERAG(BaseRAGSystem):
     RRF by default as a safety net against bad hypotheses.
     """
 
+    spec = SystemSpec(
+        type="hyde",
+        title="HyDE",
+        summary="Hypothetical Document Embeddings: the LLM writes a hypothetical answer used as the search probe",
+        best_for="Short or vaguely-worded questions",
+        cost_profile="medium",
+        latency_profile="medium",
+        requires_llm=True,
+        agentic=False,
+        options=HyDEOptions,
+    )
+    options: HyDEOptions
+
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
-        self.chunker = create_chunker(config.chunker)
-        self.embedding_model = create_embedding_model(config.models.get("embedding", "text-embedding-3-small"), force_mock=force_mock)
-        self.store = VectorStore(
-            self.embedding_model,
-            backend=config.retrieval.get("vector_store", "chroma"),
-            collection_name=self.name,
-            persist_directory=config.retrieval.get("persist_directory"),
-        )
+        self.chunker = build_chunker(config.chunker)
+        self.embedding_model = build_embedder(config.models, force_mock)
+        self.store = build_vector_index(self.embedding_model, self.options, self.name)
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
         with timer() as t:
@@ -52,17 +62,23 @@ class HyDERAG(BaseRAGSystem):
         )
 
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
-        cfg = self.config.retrieval
-        final_top_k = top_k or int(cfg.get("top_k", 5))
-        probe_top_k = int(cfg.get("probe_top_k", max(final_top_k * 2, 10)))
-        fuse_with_question = bool(cfg.get("fuse_with_question", True))
-        rrf_k = int(cfg.get("rrf_k", 60))
+        opts = self.options
+        final_top_k = opts.resolve_top_k(top_k)
+        probe_top_k = max(opts.probe_top_k if opts.probe_top_k is not None else max(final_top_k * 2, 10), final_top_k)
+        fuse_with_question = opts.fuse_with_question
+        rrf_k = opts.rrf_k
         with timer() as t:
             hypothetical, generation_cost = self._generate_hypothetical(question)
-            probe_result = self.store.search(hypothetical, top_k=probe_top_k)
+            with self.trace.step("retrieve", "vector_search:hypothesis", top_k=probe_top_k) as step:
+                step.set_input(hypothetical)
+                probe_result = self.store.search(hypothetical, top_k=probe_top_k)
+                step.set_chunks(probe_result.chunks, probe_result.cost)
             cost = generation_cost.plus(probe_result.cost)
             if fuse_with_question:
-                question_result = self.store.search(question, top_k=probe_top_k)
+                with self.trace.step("retrieve", "vector_search:question", top_k=probe_top_k) as step:
+                    step.set_input(question)
+                    question_result = self.store.search(question, top_k=probe_top_k)
+                    step.set_chunks(question_result.chunks, question_result.cost)
                 cost = cost.plus(question_result.cost)
                 chunks = reciprocal_rank_fusion([probe_result.chunks, question_result.chunks], top_k=final_top_k, rrf_k=rrf_k)
             else:
@@ -84,6 +100,10 @@ class HyDERAG(BaseRAGSystem):
             {"role": "system", "content": HYDE_SYSTEM_PROMPT},
             {"role": "user", "content": f"Question: {question}"},
         ]
-        result = self.llm.generate(messages, temperature=0, max_tokens=220)
+        with self.trace.step("llm", "hypothetical_document") as step:
+            result = self.llm.generate(messages, temperature=0, max_tokens=220)
+            cost = CostBreakdown(query_rewrite_cost=result.cost.total_cost)
+            step.set_llm(result, messages, cost=cost)
+            step.set_input(question)
         text = result.text.strip() or question
-        return text, CostBreakdown(query_rewrite_cost=result.cost.total_cost)
+        return text, cost

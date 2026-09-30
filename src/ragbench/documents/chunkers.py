@@ -3,12 +3,20 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 
+from ragbench.config.schema import ChunkerConfig
 from ragbench.documents.schema import Document, TextChunk
+from ragbench.registry import CHUNKERS
 from ragbench.utils.ids import stable_chunk_id
 
 
 class BaseChunker(ABC):
     name: str
+    default_chunk_size: int = 500
+    default_chunk_overlap: int = 80
+
+    def __init__(self, chunk_size: int, chunk_overlap: int):
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
 
     @abstractmethod
     def chunk(self, documents: list[Document]) -> list[TextChunk]:
@@ -42,8 +50,11 @@ class BaseChunker(ABC):
         )
 
 
+@CHUNKERS.register("fixed_char", aliases=("fixed", "character"))
 class FixedCharacterChunker(BaseChunker):
     name = "fixed_char"
+    default_chunk_size = 1200
+    default_chunk_overlap = 150
 
     def __init__(self, chunk_size: int = 1200, chunk_overlap: int = 150):
         if chunk_overlap >= chunk_size:
@@ -78,6 +89,7 @@ class FixedCharacterChunker(BaseChunker):
         return chunks
 
 
+@CHUNKERS.register("token", aliases=("tokenish", "word"))
 class TokenChunker(BaseChunker):
     name = "token"
 
@@ -117,6 +129,7 @@ class TokenChunker(BaseChunker):
         return chunks
 
 
+@CHUNKERS.register("markdown", aliases=("md",))
 class MarkdownAwareChunker(BaseChunker):
     name = "markdown"
 
@@ -170,14 +183,11 @@ class MarkdownAwareChunker(BaseChunker):
         return sections
 
 
-def create_chunker(config: dict | None = None) -> BaseChunker:
-    cfg = config or {}
-    chunker_type = cfg.get("type", "token")
-    if chunker_type in {"fixed", "fixed_char", "character"}:
-        return FixedCharacterChunker(chunk_size=int(cfg.get("chunk_size", 1200)), chunk_overlap=int(cfg.get("chunk_overlap", 150)))
-    if chunker_type in {"markdown", "md"}:
-        return MarkdownAwareChunker(chunk_size=int(cfg.get("chunk_size", 500)), chunk_overlap=int(cfg.get("chunk_overlap", 80)))
-    if chunker_type in {"token", "tokenish", "word"}:
-        return TokenChunker(chunk_size=int(cfg.get("chunk_size", 500)), chunk_overlap=int(cfg.get("chunk_overlap", 80)))
-    raise ValueError(f"Unknown chunker type: {chunker_type}")
-
+def create_chunker(config: ChunkerConfig | dict | None = None) -> BaseChunker:
+    """Build a chunker from a `chunker:` config section; unset sizes fall back to the chunker's own defaults."""
+    cfg = config if isinstance(config, ChunkerConfig) else ChunkerConfig.model_validate(config or {})
+    cls = CHUNKERS.get(cfg.type)
+    return cls(
+        chunk_size=cfg.chunk_size if cfg.chunk_size is not None else cls.default_chunk_size,
+        chunk_overlap=cfg.chunk_overlap if cfg.chunk_overlap is not None else cls.default_chunk_overlap,
+    )
