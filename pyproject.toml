@@ -53,6 +53,7 @@ Documentation = "https://github.com/alexandre0sheva/ragbench#readme"
 [project.optional-dependencies]
 dev = [
   "pytest>=9.1",
+  "httpx>=0.28",  # the wire-level tests drive the real OpenAI SDK through httpx.MockTransport; the SDK no longer installs it
   "ruff>=0.16",
   "build>=1.6",
   "twine>=6",

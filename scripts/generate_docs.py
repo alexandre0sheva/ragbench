@@ -18,7 +18,7 @@ import typing
 from pathlib import Path
 from typing import Any
 
-import click
+import typer
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
@@ -176,7 +176,7 @@ def render_cli_md() -> str:
 
     command = get_command(app)
     command.commands = {name: sub for name, sub in command.commands.items() if not getattr(sub, "hidden", False)}  # deprecated aliases are not documented
-    context = click.Context(command, info_name="ragbench")
+    context = typer.Context(command, info_name="ragbench")
     body = get_docs_for_click(obj=command, ctx=context, name="ragbench")
     return f"{BANNER}\n\n{body.strip()}\n"
 
