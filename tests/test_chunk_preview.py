@@ -53,7 +53,8 @@ def test_json_output_has_stats_config_and_the_first_chunks():
     assert result.exit_code == 0 and payload["chunker"] == {"type": "recursive", "chunk_size": 40, "chunk_overlap": 5, "prefix_title": False}
     assert len(payload["chunks"]) == 2 and payload["chunks"][0]["tokens"] <= 40 and payload["chunks"][0]["metadata"]["chunker"] == "recursive"
     stats = payload["stats"]
-    assert stats["documents"] == 22 and stats["chunks"] >= 22 and stats["max_tokens"] <= 40
+    n_docs = len(list(DEMO_DOCS.glob("*.md")))
+    assert stats["documents"] == n_docs and stats["chunks"] >= n_docs and stats["max_tokens"] <= 40
     assert stats["tokenizer"] == "test_words" and 0 <= stats["percent_below_threshold"] <= 100 and stats["p95_tokens"] >= stats["median_tokens"]
 
 

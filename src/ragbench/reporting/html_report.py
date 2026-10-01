@@ -5,7 +5,7 @@ from typing import Any
 
 from jinja2 import Template
 
-from ragbench.reporting.columns import MISSING, Column, format_value, is_missing, leaderboard_columns, to_float
+from ragbench.reporting.columns import MISSING, Column, format_cell, is_missing, leaderboard_columns, to_float
 from ragbench.reporting.notices import build_notices
 
 # Color palette cycled across systems so every chart uses consistent colors.
@@ -112,7 +112,7 @@ HTML_TEMPLATE = Template(
       <tbody>
         {% for row in leaderboard_rows %}
         <tr>
-          <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:{{ row.color }};margin-right:7px"></span>{{ row.system }}</td>
+          <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:{{ row.color }};margin-right:7px"></span>{{ row.system }}{% if row.pareto %} <span title="Pareto-optimal: no other system beats it on answer score, cost and latency at once">★</span>{% endif %}</td>
           {% for cell in row.cells %}
           <td class="num{{ ' best' if cell.best }}" data-value="{{ cell.raw }}">{{ cell.text }}</td>
           {% endfor %}
@@ -121,7 +121,7 @@ HTML_TEMPLATE = Template(
       </tbody>
     </table>
   </div>
-  <div class="footnote">Click a column header to sort. Green marks the best value in each column.</div>
+  <div class="footnote">Click a column header to sort. Green marks the best value in each column. Brackets are 95% bootstrap confidence intervals; ★ marks Pareto-optimal systems (see <code>significance.csv</code> and <code>stats.json</code> for paired comparisons).</div>
 
   <h2>Comparison Charts</h2>
   <div class="charts">
@@ -231,7 +231,7 @@ def write_html_report(
     html = HTML_TEMPLATE.render(
         run_id=run_id,
         run_meta=run_meta,
-        notices=build_notices(run_meta.get("mode"), run_meta.get("unknown_priced_models")),
+        notices=run_meta["notices"] if "notices" in run_meta else build_notices(run_meta.get("mode"), run_meta.get("unknown_priced_models")),
         cards=_build_cards(summary_rows, columns),
         leaderboard_columns=columns,
         leaderboard_rows=_build_leaderboard_rows(summary_rows, colors, columns),
@@ -292,11 +292,11 @@ def _build_leaderboard_rows(summary_rows: list[dict[str, Any]], colors: dict[str
             cells.append(
                 {
                     "raw": "" if number is None else number,
-                    "text": format_value(col, value),
+                    "text": format_cell(col, row),
                     "best": number is not None and len(summary_rows) > 1 and number == best.get(col.key),
                 }
             )
-        rows.append({"system": row["system"], "color": colors[row["system"]], "cells": cells})
+        rows.append({"system": row["system"], "color": colors[row["system"]], "cells": cells, "pareto": bool(row.get("pareto_optimal"))})
     return rows
 
 

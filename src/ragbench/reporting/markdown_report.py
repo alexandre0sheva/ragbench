@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from ragbench.rag_systems.trace import STAGE_KEYS
-from ragbench.reporting.columns import format_value, leaderboard_columns
+from ragbench.reporting.columns import Column, format_cell, leaderboard_columns
 
 
 def _best_for(system_type: str) -> str:
@@ -22,14 +22,18 @@ def write_leaderboard(
     notices: list[str] | None = None,
     primary_k: int | None = None,
     stage_rows: list[dict[str, Any]] | None = None,
+    significance_rows: list[dict[str, Any]] | None = None,
+    stats_info: dict[str, Any] | None = None,
 ) -> None:
     columns = leaderboard_columns({key for row in summary_rows for key in row}, primary_k)
-    headers = ["System", *(column.header for column in columns), "Errors", "Wall Time", "Best For"]
+    pareto = any("pareto_optimal" in row for row in summary_rows)
+    headers = ["System", *(column.header for column in columns), *(["Pareto"] if pareto else []), "Errors", "Wall Time", "Best For"]
     rows = []
     for row in summary_rows:
         system_type = row.get("system_type", row.get("system", ""))
         cells = {"System": row["system"]}
-        cells.update({column.header: format_value(column, row.get(column.key)) for column in columns})
+        cells.update({column.header: format_cell(column, row) for column in columns})
+        cells["Pareto"] = "✓" if row.get("pareto_optimal") else ""
         cells["Errors"] = f"{row.get('n_error', 0)}/{row.get('n_ok', 0) + row.get('n_error', 0)}" if row.get("n_error") else "0"
         cells["Wall Time"] = f"{row.get('system_wall_time_ms', 0):.0f} ms"
         cells["Best For"] = _best_for(str(system_type))
@@ -38,8 +42,57 @@ def write_leaderboard(
     if notices:
         content.extend([*(f"> **Note:** {notice}" for notice in notices), ""])
     content.extend([_markdown_table(headers, rows), ""])
+    content.extend(_statistics_sections(summary_rows, columns, significance_rows or [], stats_info or {}, pareto))
     content.extend(_stage_sections(stage_rows or []))
     path.write_text("\n".join(content), encoding="utf-8")
+
+
+def _p_text(p: float) -> str:
+    return "<0.001" if p < 0.001 else f"{p:.3f}"
+
+
+def _statistics_sections(
+    summary_rows: list[dict[str, Any]], columns: list[Column], significance_rows: list[dict[str, Any]], stats_info: dict[str, Any], pareto: bool
+) -> list[str]:
+    """How to read the intervals and the Pareto mark, and the paired comparison against the baseline system."""
+    if not stats_info:
+        return []
+    confidence = f"{1 - stats_info['alpha']:.0%}"
+    lines = [
+        f"Brackets are {confidence} bootstrap confidence intervals over the questions each system answered ({stats_info['n_boot']} resamples, "
+        f"seed {stats_info['seed']}). Overlapping intervals do not by themselves mean two systems are tied: the paired comparison below uses the same questions for both.",
+    ]
+    if pareto:
+        lines.append("✓ in Pareto: no other system is at least as good on answer score, cost and latency and better on one of them.")
+    lines.append("")
+    if not significance_rows:
+        return lines
+    headers = {column.key: column.header for column in columns}
+    rows = [
+        {
+            "System": row["system"],
+            "Metric": headers.get(row["metric"], row["metric"]),
+            "Difference": f"{row['mean_diff']:+.3f}",
+            f"{confidence} CI": f"[{row['ci_lo']:+.3f}, {row['ci_hi']:+.3f}]",
+            "p (Holm)": _p_text(row["p_holm"]),
+            "Verdict": row["verdict"],
+            "Wins / ties / losses": f"{row['wins']} / {row['ties']} / {row['losses']}",
+        }
+        for row in significance_rows
+    ]
+    table_columns = ["System", "Metric", "Difference", f"{confidence} CI", "p (Holm)", "Verdict", "Wins / ties / losses"]
+    lines.extend(
+        [
+            f"## Significance vs {stats_info['baseline']}",
+            "",
+            f"Each system minus the baseline `{stats_info['baseline']}` ({stats_info['baseline_source']}), on the questions both answered; positive means better. "
+            "p-values are Holm-adjusted across the systems compared on each metric. \"no clear difference\" means the data cannot rank the two, not that they are equal.",
+            "",
+            _markdown_table(table_columns, rows),
+            "",
+        ]
+    )
+    return lines
 
 
 def _stage_sections(stage_rows: list[dict[str, Any]]) -> list[str]:

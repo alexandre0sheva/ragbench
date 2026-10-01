@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import shutil
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -17,13 +16,23 @@ import yaml
 from ragbench.cache import CacheRuntime, DiskCache, activate_cache, summarize_cache
 from ragbench.config.loader import load_config, load_config_dict
 from ragbench.config.schema import ExperimentConfig, SystemConfig
+from ragbench.config.sweep import expand_sweeps
 from ragbench.datasets.loader import load_dataset
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import load_dataset_documents
 from ragbench.evaluation.answer_judge import AnswerJudge
+from ragbench.evaluation.answer_metrics import answer_metrics, is_refusal, refusal_metrics
+from ragbench.evaluation.budget import BudgetExceededError, BudgetGuard
+from ragbench.evaluation.context_metrics import context_precision, context_recall_doc
 from ragbench.evaluation.failure_analysis import classify_failure
 from ragbench.evaluation.manifest import build_manifest, dataset_hash, utc_now_iso
-from ragbench.evaluation.retrieval_metrics import compute_retrieval_metrics
+from ragbench.evaluation.retrieval_metrics import compute_retrieval_metrics, unmeasured_retrieval_metrics
+from ragbench.evaluation.route_metrics import route_accuracy, route_rows
+from ragbench.evaluation.run_stats import SIGNIFICANCE_COLUMNS, RunStats, compute_run_stats
+from ragbench.evaluation.stats import latency_percentiles
+from ragbench.evaluation.tool_metrics import summary_fields as tool_summary_fields
+from ragbench.evaluation.tool_metrics import tool_steps
+from ragbench.evaluation.tool_metrics import usage_rows as tool_usage_rows
 from ragbench.models import cost as pricing
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.embeddings import EMBEDDING_CACHE
@@ -48,6 +57,7 @@ from ragbench.runtime import (
     warm_up_imports,
 )
 from ragbench.runtime.progress import ProgressListener
+from ragbench.selection.recommend import recommend, write_recommendation
 from ragbench.utils.jsonl import write_jsonl
 from ragbench.utils.text import truncate, unique_preserve_order
 
@@ -89,11 +99,20 @@ class BenchmarkEvaluator:
         progress: ProgressListener | None = None,
         use_cache: bool = True,
         system_workers: int | None = None,
+        raw_config: dict[str, Any] | None = None,
     ):
         self.config_path = config_path
         self.use_cache = use_cache
-        self.config: ExperimentConfig = load_config(config_path)
-        self.raw_config = load_config_dict(config_path)
+        # `raw_config` is a config assembled in code (a preset, or a file narrowed with `--systems`) instead of read from `config_path`.
+        self._config_given = raw_config is not None
+        if raw_config is None:
+            self.config: ExperimentConfig = load_config(config_path)
+            self.raw_config = load_config_dict(config_path)
+        else:
+            self.raw_config = expand_sweeps(raw_config)
+            self.config = ExperimentConfig.model_validate(self.raw_config)
+        self.budget = BudgetGuard(self.config.evaluation.max_cost_usd)
+        self._reported: list[SystemConfig] | None = None  # the systems whose results are comparable; None = all of them
         # Live when any model the config calls can be reached (a key for a hosted API, or a local / endpoint model).
         self.mode = resolve_run_mode(self.config, force_mock)
         self.force_mock = force_mock or self.mode == "mock"
@@ -111,6 +130,7 @@ class BenchmarkEvaluator:
         self.max_workers = max(1, configured_workers)
         self.system_workers = max(1, int(system_workers if system_workers is not None else self.config.evaluation.system_workers))
         self.probe_results: dict[str, ProbeResult] = {}
+        self.generator_models: dict[str, tuple[str, str]] = {}  # system name -> (provider, model) of its generator, for the self-preference check
         self._qrels: dict[str, dict[str, int]] = {}
         self._judge: AnswerJudge | None = None
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -134,6 +154,8 @@ class BenchmarkEvaluator:
             ingest_workers=self.config.evaluation.ingest_workers,
             limiters=build_limiters(self.config.limits, self.config.providers),
             providers=self.config.providers,
+            tools=self.config.tools,
+            tools_now=self.config.evaluation.resolved_tools_now,
         )
         try:
             with activate_cache(self.cache_runtime), activate_runtime(runtime):
@@ -164,7 +186,7 @@ class BenchmarkEvaluator:
     def _run(self) -> Path:
         run_start = perf_counter()
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(self.config_path, self.output_dir / "config.yaml")
+        self._write_config_copy()
         EMBEDDING_CACHE.clear()
         EMBEDDING_CACHE.enabled = self.config.evaluation.embedding_cache
         documents = load_dataset_documents(self.config.dataset, warnings=self.document_warnings)
@@ -177,6 +199,8 @@ class BenchmarkEvaluator:
             model_name=self.config.evaluation.judge_model,
             enabled=self.config.evaluation.judge_enabled,
             force_mock=self.force_mock,
+            samples=self.config.evaluation.judge.samples,
+            temperature=self.config.evaluation.judge.temperature,
         )
         if judge.enabled:
             self.models_used.add(judge.llm.model_name)
@@ -197,18 +221,81 @@ class BenchmarkEvaluator:
             latency_probe_questions=self.config.evaluation.latency_probe_questions,
         )
         runner = SystemRunner(self, settings, self.progress)
-        outcomes = runner.run_all(self.config.systems, documents, questions)
+        all_outcomes = runner.run_all(self.config.systems, documents, questions)
+        # A system the spending cap stopped partway (or never started) has results over fewer questions than the others: they are
+        # set aside rather than compared. Everything below works on the systems that finished.
+        outcomes = [outcome for outcome in all_outcomes if outcome.complete]
+        unfinished = [outcome for outcome in all_outcomes if not outcome.complete]
+        if unfinished:
+            done = {outcome.name for outcome in outcomes}
+            self._reported = [cfg for cfg in self.config.systems if cfg.resolved_name in done]
         # Timings from the parallel pass include queueing behind other threads. A live run therefore re-times a few
         # questions one at a time afterwards; mock runs skip it (their latencies are microseconds of CPU).
-        self.probe_results = runner.probe(outcomes, questions) if self._should_probe(questions) else {}
+        self.probe_results = runner.probe(outcomes, questions) if self._should_probe(questions) and not unfinished else {}
         self._collect(outcomes, per_question_rows, retrieval_rows, answer_rows, cost_rows, ingestion_rows, system_runtime_rows)
 
         run_wall_time_ms = (perf_counter() - run_start) * 1000
-        self._write_outputs(per_question_rows, retrieval_rows, answer_rows, cost_rows, ingestion_rows, system_runtime_rows, run_wall_time_ms)
+        if outcomes:
+            self._write_outputs(per_question_rows, retrieval_rows, answer_rows, cost_rows, ingestion_rows, system_runtime_rows, run_wall_time_ms)
+        if unfinished:
+            raise self._budget_stop(outcomes, unfinished, len(questions), run_wall_time_ms)
         failed = self._failed_systems(per_question_rows, len(questions))
         if failed:
             raise BenchmarkRunError(self.output_dir, failed, self.config.evaluation.max_error_rate)
         return self.output_dir
+
+    def _write_config_copy(self) -> None:
+        """`config.yaml` in the run directory: the file as written when nothing changed (comments and all), else the config as it ran
+        (sweeps expanded, a preset's systems, a `--systems` subset), so the directory always says exactly what was benchmarked."""
+        target = self.output_dir / "config.yaml"
+        if not self._config_given and self.config_path.exists():
+            text = self.config_path.read_text(encoding="utf-8")
+            if (yaml.safe_load(text) or {}) == self.raw_config:
+                target.write_text(text, encoding="utf-8")
+                return
+        target.write_text(yaml.safe_dump(self.raw_config, sort_keys=False), encoding="utf-8")
+
+    def _budget_summary(self, completed: list[str], incomplete: dict[str, dict[str, int]]) -> dict[str, Any]:
+        return {
+            "max_cost_usd": self.config.evaluation.max_cost_usd,
+            "spent_usd": self.budget.spent,
+            "stopped": bool(incomplete),
+            "completed_systems": completed,
+            "incomplete_systems": incomplete,
+        }
+
+    def _budget_stop(self, outcomes: list[SystemOutcome], unfinished: list[SystemOutcome], num_questions: int, run_wall_time_ms: float) -> BudgetExceededError:
+        """Write what the stopped run still has to say (the unfinished systems' answers, and a run summary when nothing finished) and build the error."""
+        incomplete = {outcome.name: {"answered": outcome.answered, "total": num_questions} for outcome in unfinished}
+        completed = [outcome.name for outcome in outcomes]
+        partial = [result["per_question"] for outcome in unfinished for result in outcome.results if not result.get("skipped")]
+        if partial:
+            write_jsonl(self.output_dir / "per_question_partial.jsonl", partial)
+        budget = self._budget_summary(completed, incomplete)
+        if not outcomes:  # `_write_outputs` did not run: leave the run summary behind so the directory explains itself
+            (self.output_dir / "run_summary.json").write_text(
+                json.dumps({"run_id": self.run_id, "mode": self.mode, "run_wall_time_ms": run_wall_time_ms, "num_systems": 0, "budget": budget}, indent=2), encoding="utf-8"
+            )
+        else:
+            summary_path = self.output_dir / "run_summary.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["budget"] = budget
+            summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        cap = self.config.evaluation.max_cost_usd or 0.0
+        return BudgetExceededError(self.output_dir, cap, self.budget.spent, completed, incomplete)
+
+    @property
+    def reported_systems(self) -> list[SystemConfig]:
+        """The systems the outputs describe: all of them, unless the spending cap left some unfinished."""
+        return self._reported if self._reported is not None else self.config.systems
+
+    # -- spending cap (QuestionEvaluator protocol) ----------------------------------------------
+
+    def budget_exhausted(self) -> bool:
+        return self.budget.exhausted
+
+    def charge(self, usd: float) -> None:
+        self.budget.charge(usd)
 
     def _modules_to_warm_up(self) -> list[str]:
         """Libraries that worker threads would otherwise import lazily, racing with live API calls (see `warm_up_imports`)."""
@@ -266,11 +353,16 @@ class BenchmarkEvaluator:
     def create_system(self, system_config: SystemConfig) -> BaseRAGSystem:
         system = create_rag_system(system_config, force_mock=self.force_mock)
         self.models_used.update(_model_names(system))
+        self.generator_models[system.name] = (system.llm.provider, system.llm.model_name)
         return system
 
     def evaluate_single_question(self, system: BaseRAGSystem, system_config: SystemConfig, question) -> dict[str, Any]:
         assert self._judge is not None
-        return self._evaluate_single_question(system, system_config, question, self._qrels.get(question.id, {}), self._judge)
+        if self.budget.exhausted:  # the cap is reached: nothing new is started (questions already running finish)
+            return {"skipped": True}
+        result = self._evaluate_single_question(system, system_config, question, self._qrels.get(question.id, {}), self._judge)
+        self.budget.charge(float(result["per_question"]["cost"]["total_cost"]))
+        return result
 
     def answer_for_probe(self, system: BaseRAGSystem, question):
         """Answer `question` exactly as the main pass does (same depth and context size), without scoring it."""
@@ -317,10 +409,29 @@ class BenchmarkEvaluator:
         context_ids = answer.metadata.get("context_chunk_ids")
         ranked = answer.retrieval_result.chunks
         in_context = {chunk.chunk_id for chunk in ranked} if context_ids is None else set(context_ids)
-        retrieval_metrics = compute_retrieval_metrics(ranked, question.relevant_doc_ids, qrels=qrels, k_values=evaluation.k_values)
-        judge_result = judge.judge(question, answer.answer, [chunk for chunk in ranked if chunk.chunk_id in in_context])
-        failure_type = classify_failure(question, answer.answer, retrieval_metrics, judge_result, primary_k=evaluation.resolved_primary_k)
-        return self._build_question_rows(system, system_config, question, answer, retrieval_metrics, judge_result, failure_type, in_context)
+        spec = system.spec
+        # A system that retrieves nothing has no retrieval metrics (an empty dict); its rows get blanks, never zeros.
+        retrieves = spec is None or spec.retrieves
+        retrieval_metrics = compute_retrieval_metrics(ranked, question.relevant_doc_ids, qrels=qrels, k_values=evaluation.k_values) if retrieves else {}
+        context_chunks = [chunk for chunk in ranked if chunk.chunk_id in in_context]
+        # Same notion of "relevant" as the retrieval metrics: the question's own list, else the positive qrels.
+        relevant = question.relevant_doc_ids or [doc_id for doc_id, grade in qrels.items() if grade > 0]
+        context_metrics = {
+            "context_recall": context_recall_doc(context_chunks, relevant) if retrieves else None,
+            "context_precision": context_precision(context_chunks, relevant) if retrieves else None,
+        }
+        judge_result = judge.judge(question, answer.answer, context_chunks)
+        failure_type = classify_failure(
+            question,
+            answer.answer,
+            retrieval_metrics,
+            judge_result,
+            primary_k=evaluation.resolved_primary_k,
+            context_recall=context_metrics["context_recall"],
+        )
+        return self._build_question_rows(
+            system, system_config, question, answer, retrieval_metrics, judge_result, failure_type, in_context, context_metrics
+        )
 
     def _answer(self, system: BaseRAGSystem, question) -> AnswerResult:
         evaluation = self.config.evaluation
@@ -359,7 +470,15 @@ class BenchmarkEvaluator:
             "latency_ms": 0.0,
             "failure_type": "run_error",
             "error": error,
+            "answerable": question.is_answerable,
+            "refused": False,
+            "answer_metrics": {},
+            "context_metrics": {},
             "steps": [],
+            "requires_tools": list(question.requires_tools),
+            "route": None,
+            "routing_hint": question.routing_hint,
+            "agent": None,
         }
         return {"per_question": per_question, "retrieval_row": None, "answer_row": None, "cost_row": None}
 
@@ -373,7 +492,10 @@ class BenchmarkEvaluator:
         judge_result,
         failure_type: str,
         in_context: set[str],
+        context_metrics: dict[str, float | None],
     ) -> dict[str, Any]:
+        refused = is_refusal(answer.answer)
+        deterministic = answer_metrics(answer.answer, question.reference_answer, question.expected_keywords, question.is_answerable)
         total_cost = answer.cost.plus(judge_result.cost)
         retrieved_contexts = [
             {
@@ -415,11 +537,24 @@ class BenchmarkEvaluator:
             "latency_ms": answer.latency_ms,
             "failure_type": failure_type,
             "error": None,
+            "answerable": question.is_answerable,
+            "refused": refused,
+            "answer_metrics": deterministic,
+            "context_metrics": context_metrics,
             "steps": [step_to_dict(step) for step in answer.steps],
+            "requires_tools": list(question.requires_tools),
+            "route": answer.metadata.get("route"),  # the pipeline an `adaptive` system chose; None for every other system
+            "routing_hint": question.routing_hint,
+            "agent": answer.metadata.get("agent"),  # steps / hops / termination / budget_exhausted / llm_calls; None unless the system is agentic
         }
         return {
             "per_question": per_question,
-            "retrieval_row": {"system": system.name, "question_id": question.id, "category": question.category, **retrieval_metrics},
+            "retrieval_row": {
+                "system": system.name,
+                "question_id": question.id,
+                "category": question.category,
+                **(retrieval_metrics or unmeasured_retrieval_metrics(self.config.evaluation.k_values)),
+            },
             "answer_row": {
                 "system": system.name,
                 "question_id": question.id,
@@ -430,6 +565,10 @@ class BenchmarkEvaluator:
                 "relevance": judge_result.relevance,
                 "citation_quality": judge_result.citation_quality,
                 "answer_score": judge_result.answer_score,
+                **deterministic,
+                **context_metrics,
+                "answerable": question.is_answerable,
+                "refused": refused,
                 "failure_type": failure_type,
             },
             "cost_row": {
@@ -464,8 +603,18 @@ class BenchmarkEvaluator:
         runtime_df.to_csv(self.output_dir / "system_runtime.csv", index=False)
 
         summary_rows = self._build_summary(retrieval_df, answer_df, pd.DataFrame(cost_rows), per_question_rows, runtime_df)
+        run_stats = self._compute_stats(per_question_rows, summary_rows)
+        for summary_row in summary_rows:
+            summary_row.update(run_stats.summary_fields[summary_row["system"]])
         summary_df = pd.DataFrame(summary_rows)
         summary_df.to_csv(self.output_dir / "metrics_summary.csv", index=False)
+        pd.DataFrame(run_stats.significance_rows, columns=SIGNIFICANCE_COLUMNS).to_csv(self.output_dir / "significance.csv", index=False)
+        (self.output_dir / "stats.json").write_text(json.dumps(run_stats.stats, indent=2), encoding="utf-8")
+        (self.output_dir / "pareto.json").write_text(json.dumps(run_stats.pareto, indent=2), encoding="utf-8")
+        if routes := self._build_routes(per_question_rows):
+            pd.DataFrame(routes).to_csv(self.output_dir / "routes.csv", index=False)
+        if tool_usage := self._build_tool_usage(per_question_rows):
+            pd.DataFrame(tool_usage).to_csv(self.output_dir / "tool_usage.csv", index=False)
         unknown_priced = pricing.unknown_priced_models()
         charged = float(sum(row.get("total_cost", 0.0) for row in [*ingestion_rows, *cost_rows]))
         in_process = EMBEDDING_CACHE.stats()
@@ -480,12 +629,15 @@ class BenchmarkEvaluator:
             reason=self.cache_reason,
             extra_spend_usd=probe_cost,
         )
+        notices = build_notices(self.mode, unknown_priced, concurrent_latency=concurrent_latency, **self._judge_notices(summary_rows))
         write_leaderboard(
             self.output_dir / "leaderboard.md",
             summary_rows,
-            notices=build_notices(self.mode, unknown_priced, concurrent_latency=concurrent_latency),
+            notices=notices,
             primary_k=self.config.evaluation.resolved_primary_k,
             stage_rows=self._build_stage_summary(per_question_rows),
+            significance_rows=run_stats.significance_rows,
+            stats_info=run_stats.stats,
         )
         write_failures(self.output_dir / "failures.md", per_question_rows)
         qrels_audit_rows = self._build_qrels_audit(per_question_rows)
@@ -510,7 +662,8 @@ class BenchmarkEvaluator:
                         "probe_calls": probe_calls,
                         "probe_cost_usd": probe_cost,
                     },
-                    "num_systems": len(self.config.systems),
+                    "num_systems": len(self.reported_systems),
+                    "budget": self._budget_summary([cfg.resolved_name for cfg in self.reported_systems], {}),
                     "num_question_rows": len(per_question_rows),
                     "num_errors": sum(self._errors_by_system(per_question_rows).values()),
                     "errors_by_system": self._errors_by_system(per_question_rows),
@@ -526,6 +679,10 @@ class BenchmarkEvaluator:
                         "leaderboard": "leaderboard.md",
                         "report": "report.html",
                         "qrels_audit": "qrels_audit.md",
+                        "stats": "stats.json",
+                        "significance": "significance.csv",
+                        "pareto": "pareto.json",
+                        "recommendation": "recommendation.md",
                     },
                 },
                 indent=2,
@@ -550,9 +707,10 @@ class BenchmarkEvaluator:
             config_text=yaml.safe_dump(self.raw_config, sort_keys=False),
             run_meta={
                 "mode": self.mode,
+                "notices": notices,
                 "unknown_priced_models": unknown_priced,
                 "primary_k": self.config.evaluation.resolved_primary_k,
-                "num_systems": len(self.config.systems),
+                "num_systems": len(self.reported_systems),
                 "num_questions": len({row["question_id"] for row in per_question_rows}) if per_question_rows else 0,
                 "run_wall_time_ms": run_wall_time_ms,
                 "cache_hits": in_process["hits"] + cache_summary.get("hits", 0),
@@ -569,6 +727,27 @@ class BenchmarkEvaluator:
             finished_utc=utc_now_iso(),
         )
         (self.output_dir / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        self._write_recommendation()
+
+    def _write_recommendation(self) -> None:
+        """Which system to deploy (`recommendation.json` / `.md`, and `winner.yaml` when there is one), from this run's results."""
+        selection = self.config.selection
+        try:
+            write_recommendation(self.output_dir, recommend(self.output_dir, constraints=selection.constraints, weights=selection.weights, profile=selection.profile))
+        except Exception as exc:  # the results are already on disk; a recommendation that cannot be made must not turn the run into an error
+            logger.warning("Could not write the recommendation: %s: %s", type(exc).__name__, exc)
+
+    def _compute_stats(self, per_question_rows: list[dict[str, Any]], summary_rows: list[dict[str, Any]]) -> RunStats:
+        settings = self.config.evaluation.stats
+        return compute_run_stats(
+            per_question_rows,
+            summary_rows,
+            k_values=self.config.evaluation.k_values,
+            primary_k=self.config.evaluation.resolved_primary_k,
+            n_boot=settings.n_boot,
+            seed=settings.seed,
+            baseline=settings.baseline,
+        )
 
     @staticmethod
     def _build_cost_summary(ingestion_rows: list[dict[str, Any]], cost_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -596,7 +775,7 @@ class BenchmarkEvaluator:
             return rolled
 
         rows: list[dict[str, Any]] = []
-        for cfg in self.config.systems:
+        for cfg in self.reported_systems:
             ok = [row for row in per_question_rows if row["system"] == cfg.resolved_name and row["error"] is None]
             if not ok:
                 continue
@@ -645,6 +824,54 @@ class BenchmarkEvaluator:
             )
         return audit_rows
 
+    def _tools_offered(self) -> dict[str, list[str]]:
+        """The tool names each system is configured with (empty for a system that has none)."""
+        return {cfg.resolved_name: SYSTEMS.get(cfg.type).offered_tools(cfg) for cfg in self.reported_systems}
+
+    def _build_routes(self, per_question_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Per-route usage of every system that routes, in the order the systems are configured."""
+        rows: list[dict[str, Any]] = []
+        for cfg in self.reported_systems:
+            ok = [r for r in per_question_rows if r["system"] == cfg.resolved_name and r["error"] is None]
+            rows.extend(route_rows(cfg.resolved_name, ok))
+        return rows
+
+    def _build_tool_usage(self, per_question_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        offered = self._tools_offered()
+        rows: list[dict[str, Any]] = []
+        for system_name, configured in offered.items():
+            system_rows = [r for r in per_question_rows if r["system"] == system_name and r["error"] is None]
+            if configured or any(tool_steps(r) for r in system_rows):
+                rows.extend(tool_usage_rows(system_name, configured, system_rows))
+        return rows
+
+    def _judge_fallback_rate(self, rows: list[dict[str, Any]]) -> float | None:
+        """Share of questions the heuristic had to score because the LLM judge failed; None when no LLM judge was in use."""
+        if self._judge is None or not self._judge.uses_llm or not rows:
+            return None
+        return sum(1 for row in rows if row["answer_judge"]["metadata"].get("fallback")) / len(rows)
+
+    def _judge_notices(self, summary_rows: list[dict[str, Any]]) -> dict[str, Any]:
+        """Facts about the judge that `build_notices` turns into report warnings: self-preference and heuristic fallbacks."""
+        judge = self._judge
+        if judge is None or not judge.uses_llm:
+            return {}
+        judge_model = (judge.llm.provider, judge.llm.model_name)
+        same_model = [name for name, model in self.generator_models.items() if model == judge_model] if self.config.evaluation.judge.independent else []
+        fallbacks = {row["system"]: row["judge_fallback_rate"] for row in summary_rows if (row.get("judge_fallback_rate") or 0) > 0}
+        return {"judge_model": judge.llm.model_name, "judge_shares_model_with": same_model, "judge_fallbacks": fallbacks}
+
+    @staticmethod
+    def _agent_fields(agents: list[dict[str, Any]]) -> dict[str, float]:
+        """Mean loop iterations, mean LLM calls and the share of questions that hit the budget; empty for a system that is not agentic."""
+        if not agents:
+            return {}
+        return {
+            "avg_steps": sum(a["steps"] for a in agents) / len(agents),
+            "avg_llm_calls": sum(a["llm_calls"] for a in agents) / len(agents),
+            "budget_exhausted_rate": sum(1 for a in agents if a["budget_exhausted"]) / len(agents),
+        }
+
     @staticmethod
     def _latency_fields(concurrent_ms: list[float], probe: ProbeResult | None) -> dict[str, Any]:
         """Latency columns of one system.
@@ -657,8 +884,7 @@ class BenchmarkEvaluator:
         values = clean if clean is not None else concurrent_ms
         return {
             "avg_latency_ms": float(np.mean(values)) if values else None,
-            "latency_ms_p50": float(np.percentile(values, 50)) if values else None,
-            "latency_ms_p95": float(np.percentile(values, 95)) if values else None,
+            **{f"latency_ms_{name}": value for name, value in latency_percentiles(values).items()},
             "latency_source": "probe" if clean is not None else "concurrent",
             "avg_latency_concurrent_ms": concurrent_mean,
         }
@@ -671,7 +897,8 @@ class BenchmarkEvaluator:
         per_question_rows: list[dict[str, Any]],
         runtime_df: pd.DataFrame | None = None,
     ) -> list[dict[str, Any]]:
-        system_types = {cfg.resolved_name: cfg.type for cfg in self.config.systems}
+        system_types = {cfg.resolved_name: cfg.type for cfg in self.reported_systems}
+        tools_offered = self._tools_offered()
         ok_rows = [row for row in per_question_rows if row["error"] is None]
         latency = pd.DataFrame([{"system": row["system"], "latency_ms": row["latency_ms"]} for row in ok_rows], columns=["system", "latency_ms"])
         errors = self._errors_by_system(per_question_rows)
@@ -686,10 +913,23 @@ class BenchmarkEvaluator:
             # A system with no successful question has no measurements: leave them empty (shown as an em dash), never 0.
             for col in r.columns:
                 if col not in {"system", "question_id", "category"}:
-                    row[f"retrieval_{col}"] = float(r[col].mean()) if not r.empty else None
+                    mean = r[col].mean() if not r.empty else None
+                    row[f"retrieval_{col}"] = None if mean is None or pd.isna(mean) else float(mean)
             for col in ["correctness", "faithfulness", "completeness", "relevance", "citation_quality", "answer_score"]:
                 row[col] = float(a[col].mean()) if not a.empty else None
+            # Deterministic and context metrics are missing for a question that cannot have them (no reference, no keywords, no
+            # retrieval); the mean covers the questions that do, and a system with none gets an empty cell.
+            for col in ["exact_match", "token_f1", "keyword_recall", "context_recall", "context_precision"]:
+                mean = pd.to_numeric(a[col], errors="coerce").mean() if col in a else float("nan")
+                row[col] = None if pd.isna(mean) else float(mean)
             row["avg_cost_per_question"] = float(c["total_cost"].mean()) if not c.empty else None
+            ok_system_rows = [r for r in ok_rows if r["system"] == system_name]
+            row.update(refusal_metrics(ok_system_rows))
+            row["judge_fallback_rate"] = self._judge_fallback_rate(ok_system_rows)
+            row.update(tool_summary_fields(ok_system_rows, tooled=bool(tools_offered[system_name]) or any(tool_steps(r) for r in ok_system_rows)))
+            if (accuracy := route_accuracy(ok_system_rows)) is not None:
+                row["route_accuracy"] = accuracy
+            row.update(self._agent_fields([r["agent"] for r in ok_rows if r["system"] == system_name and r.get("agent")]))
             row.update(self._latency_fields(latency_rows["latency_ms"].tolist(), self.probe_results.get(system_name)))
             if runtime_df is not None and not runtime_df.empty:
                 runtime = runtime_df[runtime_df["system"] == system_name]
@@ -716,6 +956,7 @@ def run_benchmark(
     progress: ProgressListener | None = None,
     use_cache: bool = True,
     system_workers: int | None = None,
+    raw_config: dict[str, Any] | None = None,
 ) -> Path:
     """Convenience wrapper: build a `BenchmarkEvaluator` and run it.
 
@@ -723,5 +964,11 @@ def run_benchmark(
     and per-question results.
     """
     return BenchmarkEvaluator(
-        config_path, force_mock=force_mock, max_workers=max_workers, progress=progress, use_cache=use_cache, system_workers=system_workers
+        config_path,
+        force_mock=force_mock,
+        max_workers=max_workers,
+        progress=progress,
+        use_cache=use_cache,
+        system_workers=system_workers,
+        raw_config=raw_config,
     ).run()

@@ -9,8 +9,9 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 
-from ragbench.config.schema import LimitsConfig, ProviderConfig
+from ragbench.config.schema import LimitsConfig, ProviderConfig, ToolsConfig
 from ragbench.runtime.limiter import RateLimiter
 
 
@@ -21,6 +22,9 @@ class RuntimeContext:
     limiters: dict[str, RateLimiter] = field(default_factory=dict)
     # `providers:` endpoints, read by `create_llm` / `create_embedding_model` when a system builds its models.
     providers: dict[str, ProviderConfig] = field(default_factory=dict)
+    # The `tools:` rules and the frozen "today" (`evaluation.tools_now`) that systems put into each question's `ToolContext`.
+    tools: ToolsConfig = field(default_factory=ToolsConfig)
+    tools_now: datetime = field(default_factory=lambda: datetime.fromisoformat("2026-01-01"))
 
 
 _DEFAULT = RuntimeContext()

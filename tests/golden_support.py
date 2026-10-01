@@ -28,6 +28,7 @@ EXCLUDED_COLUMNS = {
     "latency_source",
     "avg_cost_per_question",
     "system_wall_time_ms",
+    "pareto_optimal",  # partly decided by latency
 }
 
 

@@ -162,6 +162,8 @@ def _make_paid(system) -> None:
             value.embedding_model = embedder
     if hasattr(system, "embedding_model"):
         system.embedding_model = embedder
+    for routed in getattr(system, "systems", {}).values():  # the pipelines inside an `adaptive` system
+        _make_paid(routed)
     reranker = getattr(system, "reranker", None)
     if reranker is not None and hasattr(reranker, "llm"):
         reranker.llm = system.llm
@@ -184,11 +186,25 @@ SYSTEM_CONFIGS = {
     "parent_doc": {"retrieval": {"vector_store": "in_memory"}},
     "hyde": {"retrieval": {"vector_store": "in_memory"}},
     "llm_heavy": {"retrieval": {"vector_store": "in_memory"}, "llm_features": {"enable_llm_rerank": True}},
+    "no_retrieval": {},
+    "full_context": {},
+    "sentence_window": {"retrieval": {"vector_store": "in_memory"}},
+    "contextual": {"retrieval": {"vector_store": "in_memory"}},
+    "hierarchical": {},
+    "rag_fusion": {"retrieval": {"vector_store": "in_memory"}},
+    "decompose": {"retrieval": {"vector_store": "in_memory", "sequential": True}},
+    "corrective": {"retrieval": {"vector_store": "in_memory"}},
+    "iterative": {"retrieval": {"vector_store": "in_memory"}},
+    "agent_search": {"retrieval": {"vector_store": "in_memory"}, "tools": ["calculator", "corpus_grep"]},
+    "grep_agent": {},
+    "adaptive": {"retrieval": {"routes": {"default": {"type": "vector", "retrieval": {"vector_store": "in_memory"}}, "lexical": {"type": "bm25"}}}},
 }
 
 
 def _system(system_type: str):
     cfg = {"chunker": {"type": "token", "chunk_size": 50, "chunk_overlap": 0}, **SYSTEM_CONFIGS[system_type]}
+    if SYSTEMS.get(system_type).spec.chunker is None:  # systems with their own unit of retrieval take no `chunker:` section
+        del cfg["chunker"]
     if system_type == "parent_doc":
         cfg["chunker"] = {"parent_chunk_size": 50, "parent_chunk_overlap": 0, "child_chunk_size": 10, "child_chunk_overlap": 0}
     system = create_rag_system(SystemConfig(type=system_type, name=f"{system_type}_trace", **cfg), force_mock=True)
@@ -213,7 +229,7 @@ def test_steps_account_for_the_whole_answer_cost_with_no_untracked_residual(syst
     assert total.total_cost == pytest.approx(result.cost.total_cost, rel=1e-9, abs=1e-15)
     assert total.total_cost > 0
     assert result.steps[-1].kind == "generate" and result.steps[-1].cost.llm_cost > 0
-    assert any(s.kind == "retrieve" for s in result.steps)
+    assert any(s.kind in ("retrieve", "tool") for s in result.steps)  # the tool-using agents search through tool calls
     assert result.retrieval_result.steps == [s for s in result.steps if s.kind != "generate"]
     assert all(s.latency_ms >= 0 for s in result.steps)
 

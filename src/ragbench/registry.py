@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from ragbench.models.rerankers import Reranker
     from ragbench.rag_systems.base import BaseRAGSystem
     from ragbench.stores.index import VectorIndex
+    from ragbench.tools.base import BaseTool
 
 logger = logging.getLogger(__name__)
 
@@ -119,4 +120,5 @@ EMBEDDERS: Registry[Callable[..., EmbeddingModel]] = Registry("embedding provide
 LOADERS: Registry[Callable[[Path, LoadContext], list[Document]]] = Registry("document loader")
 # Vector index backends (`vector_store:`); classes taking `(collection_name=, persist_directory=)`. Registered by `ragbench.stores.index`.
 VECTOR_BACKENDS: Registry[type[VectorIndex]] = Registry("vector backend")
-# TOOLS is added in Task 18.
+# Built-in tools, keyed by the name an agent calls them by; classes taking their `Options` as keyword arguments. Registered by `ragbench.tools`.
+TOOLS: Registry[type[BaseTool]] = Registry("tool")

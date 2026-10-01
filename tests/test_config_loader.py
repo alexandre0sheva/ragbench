@@ -82,3 +82,43 @@ def test_load_config_empty_file_raises_validation(tmp_path):
     path = _write(tmp_path, "empty.yaml", "")
     with pytest.raises(ValidationError):
         load_config(path)
+
+
+def _judge_config(tmp_path: Path, evaluation: str) -> Path:
+    return _write(
+        tmp_path,
+        "judge.yaml",
+        f"""
+run: {{name: r}}
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+systems:
+  - type: bm25
+evaluation:
+{evaluation}
+""",
+    )
+
+
+def test_judge_section_defaults_keep_the_legacy_judge_model_keys_working(tmp_path):
+    legacy = load_config(_judge_config(tmp_path, "  judge_model: gpt-6-luna\n  judge_enabled: true")).evaluation
+    assert legacy.judge.model == legacy.judge_model == "gpt-6-luna"
+    assert (legacy.judge.samples, legacy.judge.temperature, legacy.judge.independent) == (1, 0.0, True)
+
+
+def test_judge_section_sets_the_model_and_keeps_judge_model_in_sync(tmp_path):
+    evaluation = load_config(_judge_config(tmp_path, "  judge:\n    model: anthropic:claude-haiku-4-5\n    samples: 3\n    temperature: 0.7\n    independent: false")).evaluation
+    assert evaluation.judge_model == "anthropic:claude-haiku-4-5" == evaluation.judge.model
+    assert (evaluation.judge.samples, evaluation.judge.temperature, evaluation.judge.independent) == (3, 0.7, False)
+
+
+def test_judge_section_is_checked_when_the_config_loads(tmp_path):
+    with pytest.raises(ValueError, match="temperature"):
+        load_config(_judge_config(tmp_path, "  judge:\n    samples: 3"))  # identical samples at temperature 0 would waste money
+    with pytest.raises(ValueError, match="judge_model.*judge.model|judge.model.*judge_model"):
+        load_config(_judge_config(tmp_path, "  judge_model: gpt-6-luna\n  judge:\n    model: gpt-6-astra"))
+    with pytest.raises(ValueError, match="sampels"):
+        load_config(_judge_config(tmp_path, "  judge:\n    sampels: 3"))
+    with pytest.raises(ValueError, match="evaluation.judge.model"):
+        load_config(_judge_config(tmp_path, "  judge:\n    model: anthropics:claude-haiku-4-5"))

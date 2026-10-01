@@ -59,6 +59,8 @@ class FakeOpenAIServer:
                     json_mode = body.get("response_format", {}).get("type") == "json_object"
                     system = " ".join(m["content"] for m in body["messages"] if m["role"] == "system")
                     if json_mode and "evaluation judge" in system:
+                        with outer._lock:
+                            outer.stats["judge_calls"] += 1
                         text, prompt_tokens, completion_tokens = JUDGE_REPLY, 100, 30
                     else:
                         result = outer._llm.generate(body["messages"], json_mode=json_mode)

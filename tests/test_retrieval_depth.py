@@ -119,5 +119,6 @@ def test_every_real_system_reports_monotonic_recall_and_some_differ_at_10(tmp_pa
     out = run_benchmark(cfg_path, force_mock=True, max_workers=4)
 
     summary = pd.read_csv(out / "metrics_summary.csv")
+    summary = summary[summary["system_type"] != "no_retrieval"]  # retrieves nothing: its retrieval columns are blank by design
     assert (summary["retrieval_recall@10"] >= summary["retrieval_recall@5"] - 1e-12).all()
     assert (summary["retrieval_recall@10"] > summary["retrieval_recall@5"]).any(), "@10 must be a real measurement, not a copy of @5"

@@ -43,11 +43,14 @@ systems:
 evaluation:
   k_values: [1, 3, 5, 10]
   judge_enabled: true
-  judge_model: gpt-6-luna
+  judge_model: gpt-6-luna      # shorthand for judge.model (see Judge)
   max_questions: null
   max_workers: 4
   embedding_cache: true
   # system_workers: 1, ingest_workers: 4, latency_probe_questions: 5  (see Concurrency)
+  # judge: {...} (see Judge), stats: {n_boot: 2000, seed: 0, baseline: null} (see Statistics)
+# selection: {profile: balanced, constraints: {...}} (see Selection)
+# max_cost_usd: 25, cost_confirm_threshold_usd: 1.0  (see Estimating cost and capping it)
 ```
 
 ## Chunkers
@@ -97,11 +100,122 @@ Retrieval is scored on a deep ranking, but the generator only reads the top of i
 | `evaluation.primary_k` | `5` (or the median `k`) | Recall cut-off for headline columns, failure classification and the qrels audit; must be one of `k_values` |
 | `evaluation.max_error_rate` | `0.2` | Share of a system's questions that may fail before the run is reported as failed |
 
-Leaderboard columns follow your `k_values`: recall at `primary_k`, MRR and nDCG at the largest `k`. A value that could not be measured shows as `—`, never as `0`.
+Leaderboard columns follow your `k_values`: recall at `primary_k`, MRR and nDCG at the largest `k`. A value that could not be measured shows as `—`, never as `0`. The `Ctx recall` column (`context_recall`) scores only the first `context_k` chunks, the ones the generator actually read; see [methodology.md](methodology.md#context-metrics).
 
 A question that raises (provider outage, bad response, bug) no longer aborts the run. It is recorded in `per_question_results.jsonl` with an `error` field and `failure_type: run_error`, excluded from every mean, and counted in `n_error` / `run_summary.json` (`num_errors`, `errors_by_system`). A system whose ingestion fails has all of its questions marked this way while the other systems finish. All results are written first; then, if any system's failure share exceeds `max_error_rate`, `ragbench` prints the error and exits with status 1.
 
 Every run also writes `run_manifest.json`: RAGBench and dependency versions, Python/platform, git commit (and whether the tree was dirty), a hash of the config and of the dataset (documents + questions + qrels), models used, mode, and start/finish times.
+
+## Judge
+
+`judge_enabled` turns the LLM judge on or off (a heuristic judge scores mock runs and `judge_enabled: false`). The `judge:` section tunes it; how answers are scored, and where the judge can mislead you, is in [methodology.md](methodology.md#the-llm-judge).
+
+```yaml
+evaluation:
+  judge_enabled: true
+  judge:
+    model: anthropic:claude-haiku-4-5   # a model ref; default: evaluation.judge_model
+    samples: 3                          # independent judgments per question, averaged (default 1)
+    temperature: 0.5                    # judge sampling temperature (default 0); must be above 0 when samples > 1
+    independent: true                   # warn in the reports when the judge model is also a generator (default true)
+```
+
+`evaluation.judge_model` keeps working as a shorthand for `judge.model`; set only one of them (two different models are an error). The two always agree after loading. Choose a judge from a different model family than your generators: when it is the same model as a system's generator, the leaderboard and `report.html` warn about self-preference, and `independent: false` silences that on purpose. Every sample is a paid call, and temperature-0 judgments are cached on disk like any other LLM call; sampled ones are not unless `cache.llm_nonzero_temperature` is on.
+
+## Statistics
+
+`evaluation.stats` controls the bootstrap behind the leaderboard's confidence intervals and `significance.csv`; what they mean is in [methodology.md](methodology.md#statistics).
+
+```yaml
+evaluation:
+  stats:
+    n_boot: 2000     # bootstrap resamples (at least 100)
+    seed: 0          # same results + seed = same intervals and p-values
+    baseline: bm25   # system the others are compared with; default: the cheapest ($/Q). Must be a system name from this config
+```
+
+## Selection
+
+`selection:` decides what each run recommends deploying (`recommendation.md`, `recommendation.json` and `winner.yaml` in the run directory; how it works is in [methodology.md](methodology.md#selection)). Everything is optional; by default the `balanced` profile and no constraints.
+
+```yaml
+selection:
+  profile: balanced          # balanced | max_quality | cheapest_acceptable | lowest_latency
+  constraints:               # hard limits: a system that breaks one is never recommended
+    max_cost_per_question: 0.002     # dollars, mean $/Q
+    max_latency_ms_p95: 2500
+    min_faithfulness: 4.5            # 0-5
+    min_answer_score: 3.5            # 0-5
+    max_ingestion_cost: 5.0          # dollars to index the corpus once
+    require_local_models: false      # every model runs on this machine (`local:` or a localhost endpoint)
+    require_no_network: false        # ... and no tool uses the network
+  weights: {quality: 0.6, cost: 0.2, latency: 0.2}   # replaces the profile's weights
+```
+
+`ragbench recommend --run results/<run>` re-asks the question of a finished run, starting from its own `selection:` settings; `--profile`, `--max-cost`, `--max-latency`, `--min-faithfulness`, `--min-answer-score`, `--max-ingestion-cost`, `--local-models` and `--no-network` override them, and `--export winner.yaml` writes the winner's runnable config (see [cli.md](cli.md)). It exits with status 1 when no system qualifies. An unknown profile or constraint name is an error when the config loads.
+
+## Sweeps
+
+To explore an axis (chunk size × reranker × tool set) without writing a block per combination, give one system a `sweep:`. It becomes one system per combination, named `base[axis=value,...]`:
+
+```yaml
+systems:
+  - type: hybrid_rerank
+    name: hr                              # the base name
+    sweep:
+      chunker.chunk_size: [300, 500]
+      retrieval.reranker: [local_relevance, cross_encoder]
+      tools: [[], [calculator]]           # a tool set is a value like any other (agent_search only)
+```
+
+- **Axes** are `chunker.<option>`, `retrieval.<option>`, `llm_features.<option>`, `models.generator`, `models.embedding` and `tools`: the options listed for the system in [systems.md](systems.md). Anything else is an error that lists the valid axes and suggests the closest. Nested paths into an option's value (`retrieval.routes.default...`) are not supported.
+- **Names** are fixed by the config: the first axis varies slowest, values are written compactly (`chunk_size=300`, `tools=calculator+corpus_grep`, `tools=none`), and an axis is labelled by its last path segment (the whole path when two axes would end alike). The example above yields `hr[chunk_size=300,reranker=local_relevance]`, `hr[chunk_size=300,reranker=cross_encoder]`, and so on, four systems in all.
+- Every variant is validated like a hand-written system, a duplicate name is an error, and one sweep may not expand to more than 100 systems.
+- The run directory's `config.yaml` holds the **expanded** systems (a config without sweeps is copied verbatim, comments included), so `ragbench recommend` and `winner.yaml` work on variant names.
+
+`--systems hr,bm25` (or repeated `--systems`) runs only some of the systems of a config, after sweeps are expanded; a sweep's base name (`hr`) selects all of its variants, and a full variant name selects one.
+
+## Presets
+
+`--preset` replaces a config's systems with a ready-made list, so a first comparison needs no YAML at all:
+
+```bash
+ragbench compare --preset quick --docs my_dataset/docs --questions my_dataset/questions.jsonl
+ragbench compare --preset thorough --config my.yaml      # keep my dataset, models, judge, ... and swap the systems
+```
+
+| Preset | Systems |
+| --- | --- |
+| `quick` | `bm25`, `vector`, `hybrid_rerank` |
+| `standard` | `quick` + `hybrid`, `rerank`, `parent_doc`, `hyde`, `contextual` |
+| `thorough` | `standard` + `hierarchical`, `sentence_window`, `rag_fusion`, `decompose`, `llm_heavy` and a chunk-size sweep of `hybrid_rerank` (250 and 1000 words) |
+| `agentic` | `hybrid_rerank` as the reference, `corrective`, `iterative`, `agent_search` with and without tools, `grep_agent`, `adaptive` |
+
+The dataset comes from `--docs` / `--questions` / `--qrels` or from the `--config` you pass (flags win); without either the command stops and says so. A preset uses default models and options, so pair it with a config when you need other models. The assembled config is saved as the run's `config.yaml`. `--preset` works with `run`, `compare`, `evaluate` and `estimate`.
+
+## Estimating cost and capping it
+
+```bash
+ragbench estimate --config configs/all.yaml          # a table: ingestion, query and judge cost per system, and the total
+ragbench estimate --preset standard --docs docs/ --questions q.jsonl
+```
+
+`estimate` runs every system on the offline mock models (indexing the whole corpus and answering a sample of your questions) and counts what they send: prompt sizes, retrieved context, number of model calls, embedding volume. Those tokens are then priced with the configured models' rates ([Pricing](#pricing)), and judging is added from the real judge prompt (`evaluation.judge.samples` times). It never calls a paid model, and it takes a few seconds. It is **not** a guarantee:
+
+- Prompts, call counts and embedding volume are measured; against a mock run priced as if live it lands within a few percent (the test holds it to ±35%). What it cannot know is how long a real model's answers are (the mock's are short, so output cost is probably low) and how many steps a real agent takes (agentic systems are marked `~`; their `max_steps` and `max_cost_usd` bound the real spend).
+- It assumes no cache hits, so a re-run with a warm [cache](#caching) costs less. Time is a rough projection from typical API latencies and your concurrency settings.
+- It prints the date of the price table and warns when it is more than 90 days old, and when a configured model has no price (its cost would be counted as $0).
+
+Two settings turn the estimate into guard rails:
+
+```yaml
+evaluation:
+  cost_confirm_threshold_usd: 1.0   # a live run estimated above this asks first (default 1.00)
+  max_cost_usd: 25                  # hard cap on what the run may be charged (default: none)
+```
+
+- **Confirmation.** Before a live run (never a mock one) `run` / `compare` print the estimate. Above the threshold they ask `Run it for about $X?`, unless you pass `--yes`; with no terminal to ask (a pipe, a cron job) or with `CI` set they refuse and tell you to pass `--yes`. If the estimate itself fails, the run goes ahead with a warning.
+- **Budget cap.** `max_cost_usd` counts what the run is charged (ingestion, answers and judging, at standalone prices, so it is an upper bound of real spend when the cache is warm). Once it is reached no new question or system starts; questions already running finish, so the total can end up over the cap by about one question's cost per worker. The run then writes the results of every system that **finished**, saves the answers of unfinished systems in `per_question_partial.jsonl`, leaves them out of the leaderboard and the recommendation (a mean over some questions cannot be compared with a mean over all of them), records the outcome under `budget` in `run_summary.json`, prints which systems were and were not finished, and exits with status 1. Raise the cap, run fewer systems (`--systems`) or questions, or estimate first.
 
 ## System options
 
@@ -243,6 +357,29 @@ Waiting for a slot never holds up other threads, and a single request larger tha
 ### Latency measurement
 
 Latency measured while many questions run at once includes time spent queueing behind other requests. So **live** runs finish with a *latency probe*: `evaluation.latency_probe_questions` (default `5`; `0` disables it) questions per system, spread evenly across the dataset, are re-asked one at a time after everything else is done, with the disk cache bypassed. The leaderboard's Latency column then shows the probe's mean, `p95` is added, and `metrics_summary.csv` gains `latency_ms_p50`, `latency_ms_p95`, `latency_source` (`probe` or `concurrent`) and `avg_latency_concurrent_ms`. Probe answers are not scored and are not charged to any system; their cost appears as `probe_cost_usd` in `run_summary.json` and is included in `real_spend_usd`. Mock runs skip the probe, and if you disable it in a live run the reports say latency was measured under concurrency.
+
+## Tools
+
+Systems that call tools take a `tools:` list in their own block (built-in names, `{name, ...options}` mappings, or `{name, path: "pkg.module:function"}` for your own functions). A top-level `tools:` section sets the rules every call runs under: `allow` and `allow_network` (permissions for tools with side effects), `timeout_s` and `max_output_chars`. `evaluation.tools_now` fixes what "today" means for `date_calc`. The keys, the safety model and the tool metrics are described in [tools.md](tools.md).
+
+## Adaptive routing
+
+The `adaptive` system sends each question to one of several pipelines you define inline under `retrieval.routes`; every route is a complete system config (`type`, `chunker`, `retrieval`, `tools`, ...) and inherits the adaptive system's `models` unless it sets its own:
+
+```yaml
+- type: adaptive
+  name: router
+  models: {embedding: text-embedding-3-small, generator: gpt-6-luna}
+  retrieval:
+    router: heuristic            # or `llm`: the generator model picks the route, and you can name routes freely
+    routes:
+      default:     {type: hybrid_rerank}
+      lexical:     {type: bm25}                                   # exact identifiers, error codes, quoted phrases
+      multi_hop:   {type: decompose}                              # comparisons and questions with several linked parts
+      computation: {type: agent_search, tools: [calculator, date_calc]}   # arithmetic, percentages, date calculations
+```
+
+`default` is required; with `router: heuristic` the other names must be `lexical`, `computation` or `multi_hop`, and a role you leave out falls back to `default`. Routes, their types, options, tools and model refs are all checked when the config loads, not when question 37 arrives. Every route is ingested once, and routes with the same chunker and embedding model share corpus embeddings through the run's embedding cache (each route is still charged at standalone prices). The router's choice is a `route` step in the trace, the chosen pipeline's steps follow it tagged with the route, and costs add up exactly. Options: [systems.md](systems.md#adaptive); output: `routes.csv` and, with `routing_hint` on questions ([dataset-format.md](dataset-format.md)), `route_accuracy`.
 
 ## Vector Store
 

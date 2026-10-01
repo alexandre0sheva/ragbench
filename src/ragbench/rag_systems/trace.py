@@ -60,6 +60,12 @@ class StepHandle:
         self.output_preview: str | None = None
         self.metadata: dict[str, Any] = {}
         self.latency_override_ms: float | None = None
+        self.kind: StepKind | None = None
+        self.name: str | None = None
+
+    def relabel(self, kind: StepKind, name: str | None = None) -> None:
+        """Record this step under another kind (and name): for work whose role is only known once it finished (a turn that turned out to be the answer)."""
+        self.kind, self.name = kind, name or self.name
 
     def set_cost(self, cost: CostBreakdown) -> None:
         self.cost = cost
@@ -124,8 +130,8 @@ class Tracer:
                 self.latency_credit_ms += latency_ms - elapsed_ms
                 self.steps.append(
                     Step(
-                        kind=kind,
-                        name=name,
+                        kind=handle.kind or kind,
+                        name=handle.name or name,
                         latency_ms=latency_ms,
                         cost=handle.cost,
                         prompt_tokens=handle.prompt_tokens,

@@ -55,6 +55,18 @@ def compute_retrieval_metrics(
     return metrics
 
 
+def unmeasured_retrieval_metrics(k_values: list[int] | None = None) -> dict[str, float]:
+    """The keys of `compute_retrieval_metrics` with every value missing (NaN), for systems that retrieve nothing.
+
+    A system with no retrieval has no recall to report; a 0 would read as "retrieval failed", so the tables get blanks.
+    """
+    nan = float("nan")
+    metrics = {"num_relevant_docs": nan, "num_retrieved_docs": nan}
+    for k in k_values or [1, 3, 5, 10]:
+        metrics.update({f"{name}@{k}": nan for name in ("recall", "precision", "hit", "mrr", "ndcg")})
+    return metrics
+
+
 def metrics_to_flat_row(prefix: str, metrics: dict[str, Any]) -> dict[str, Any]:
     return {f"{prefix}_{key}": value for key, value in metrics.items()}
 

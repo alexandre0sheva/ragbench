@@ -15,7 +15,7 @@ from ragbench.registry import EMBEDDERS, LLM_PROVIDERS, UnknownComponentError
 from ragbench.utils.env import has_api_key
 
 if TYPE_CHECKING:
-    from ragbench.config.schema import ExperimentConfig, ProviderConfig
+    from ragbench.config.schema import ExperimentConfig, ProviderConfig, SystemConfig
 
 ModelKind = Literal["llm", "embedding"]
 
@@ -95,13 +95,24 @@ def _uses_embeddings(system_type: str, chunker: dict[str, Any] | None = None) ->
     return chunker_name in CHUNKERS and bool(getattr(CHUNKERS.get(chunker_name), "needs_embedder", False))
 
 
+def system_model_refs(system: SystemConfig) -> ModelRefs:
+    """The models one system calls: its generator, and its embedder when it embeds. (A route of an `adaptive` system is a system of its own.)"""
+    refs = ModelRefs()
+    _add(refs.llm, str(system.models.get("generator", DEFAULT_GENERATOR_MODEL)))
+    if "embedding" in system.models or _uses_embeddings(system.type, system.chunker):
+        _add(refs.embedding, str(system.models.get("embedding", DEFAULT_EMBEDDING_MODEL)))
+    return refs
+
+
 def collect_model_refs(config: ExperimentConfig) -> ModelRefs:
     """Every model ref the run will actually call: each system's generator, embedder (only systems that embed), and the judge."""
     refs = ModelRefs()
     for system in config.systems:
-        _add(refs.llm, str(system.models.get("generator", DEFAULT_GENERATOR_MODEL)))
-        if "embedding" in system.models or _uses_embeddings(system.type, system.chunker):
-            _add(refs.embedding, str(system.models.get("embedding", DEFAULT_EMBEDDING_MODEL)))
+        own = system_model_refs(system)
+        for ref in own.llm:
+            _add(refs.llm, ref)
+        for ref in own.embedding:
+            _add(refs.embedding, ref)
     if config.evaluation.judge_enabled:
         _add(refs.llm, config.evaluation.judge_model)
     return refs

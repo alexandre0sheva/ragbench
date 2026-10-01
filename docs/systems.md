@@ -4,7 +4,7 @@
 
 Every system runs on the same dataset and is configured in the `systems:` list of an experiment file (see [configuration.md](configuration.md)). Each system accepts `chunker:`, `retrieval:`, `models:` and, where noted, `llm_features:` sections; unknown options are rejected when the config is loaded.
 
-Profiles are relative: **cost** `low` = one generation call plus embeddings, `medium` = one extra short LLM call, `high` = several LLM calls per question or LLM work at ingestion; **latency** `fast` = no LLM call besides generation. *LLM in retrieval* means the retrieval side itself calls an LLM.
+Profiles are relative: **cost** `low` = one generation call plus embeddings, `medium` = one extra short LLM call, `high` = several LLM calls per question or a prompt that carries the whole corpus, or LLM work at ingestion; **latency** `fast` = no LLM call besides generation. *LLM in retrieval* means the retrieval side itself calls an LLM.
 
 ## Overview
 
@@ -13,15 +13,27 @@ Profiles are relative: **cost** `low` = one generation call plus embeddings, `me
 | [`bm25`](#bm25) | BM25 | low | fast | no | no | Cheap baseline and exact-term matching |
 | [`hybrid`](#hybrid) | Hybrid (BM25 + vector) | low | fast | no | no | Balanced lexical + semantic retrieval |
 | [`hybrid_rerank`](#hybrid_rerank) | Hybrid + rerank | low | fast | no | no | Recall of hybrid plus rerank precision |
+| [`no_retrieval`](#no_retrieval) | No retrieval | low | fast | no | no | Showing how much retrieval helps and how often the model makes things up without it |
 | [`parent_doc`](#parent_doc) | Parent document | low | fast | no | no | Better answer context with precise retrieval |
 | [`rerank`](#rerank) | Vector + rerank | low | fast | no | no | Higher precision context selection |
+| [`sentence_window`](#sentence_window) | Sentence window | low | fast | no | no | Precise matching with enough surrounding text to answer from |
 | [`vector`](#vector) | Vector | low | fast | no | no | Semantic baseline |
+| [`decompose`](#decompose) | Question decomposition | medium | medium | yes | no | Multi-part, comparison and multi-hop questions |
 | [`hyde`](#hyde) | HyDE | medium | medium | yes | no | Short or vaguely-worded questions |
+| [`rag_fusion`](#rag_fusion) | RAG-Fusion | medium | medium | yes | no | Questions worded differently from the documents |
+| [`contextual`](#contextual) | Contextual retrieval | high | fast | no | no | Corpora where chunks lose their meaning out of context (many similar documents, pronouns, section-relative facts) |
+| [`hierarchical`](#hierarchical) | Hierarchical (summary-routed) | high | fast | no | no | "Which document?" questions and corpora too large to search chunk by chunk |
+| [`adaptive`](#adaptive) | Adaptive router | high | medium | yes | no | Mixed workloads where no single architecture is best for every question |
+| [`full_context`](#full_context) | Full context | high | medium | no | no | Small corpora, and measuring how much a retrieval pipeline loses against reading everything |
+| [`agent_search`](#agent_search) | Tool-using agent (search) | high | slow | yes | yes | Questions that need computation, exact lookups, or several searches |
+| [`corrective`](#corrective) | Corrective RAG | high | slow | yes | yes | Corpora where the first search often misses and a bad context should be noticed rather than answered from |
+| [`grep_agent`](#grep_agent) | Grep agent (no index) | high | slow | yes | yes | Small or exact-match-heavy corpora, and testing whether you need retrieval infrastructure at all |
+| [`iterative`](#iterative) | Iterative multi-hop | high | slow | yes | yes | Multi-hop questions whose second search depends on what the first one found |
 | [`llm_heavy`](#llm_heavy) | LLM-heavy | high | slow | yes | no | Higher-cost, quality-oriented experiments |
 
 ## Chunker options
 
-All systems except `parent_doc` use this `chunker:` section:
+All systems except `no_retrieval`, `parent_doc`, `sentence_window`, `adaptive`, `full_context`, `grep_agent` use this `chunker:` section:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -55,6 +67,9 @@ Best for: Balanced lexical + semantic retrieval. Cost: low; latency: fast.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `diversity` | `none` \| `mmr` | `none` | `mmr` re-ranks a candidate pool by maximal marginal relevance so near-duplicate chunks stop crowding out other evidence. `none` keeps the plain ranking. |
+| `mmr_lambda` | `float` | `0.5` | Relevance versus diversity when `diversity: mmr`: 1.0 reproduces the plain ranking, 0.0 only avoids repeats. Relevance is the retrieval score scaled so the best candidate is 1. |
+| `mmr_candidates` | `int` | `20` | Candidates MMR chooses from when `diversity: mmr` (raised to the retrieval depth if smaller). |
 | `multi_query` | `bool` | `false` | Retrieve with local (non-LLM) query variants to help multi-hop questions. |
 | `max_query_variants` | `int` | `4` | Maximum number of query variants when `multi_query` is on. |
 | `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
@@ -91,6 +106,20 @@ Best for: Recall of hybrid plus rerank precision. Cost: low; latency: fast.
 | `reranker_model` | `str` | unset | Hugging Face model for `reranker: cross_encoder` (default `BAAI/bge-reranker-base`). Needs `pip install 'ragbench[rerank]'`. |
 | `candidate_top_k` | `int` | `30` | Fused candidates handed to the reranker (raised to the retrieval depth if smaller). |
 | `reranker` | `str` | `local_relevance` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`. |
+
+## `no_retrieval`
+
+**No retrieval.** The model answers from its own knowledge with no documents at all (the floor baseline).
+
+Best for: Showing how much retrieval helps and how often the model makes things up without it. Cost: low; latency: fast.
+
+`retrieval:` options
+
+This system has no `retrieval:` options.
+
+This system takes no `chunker:` section.
+
+This system retrieves nothing, so its retrieval columns (recall, MRR, nDCG) are blank in every report, never 0.
 
 ## `parent_doc`
 
@@ -137,6 +166,24 @@ Best for: Higher precision context selection. Cost: low; latency: fast.
 | `candidate_top_k` | `int` | `30` | Vector candidates handed to the reranker (raised to the retrieval depth if smaller). |
 | `reranker` | `str` | `simple_keyword_overlap` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`. |
 
+## `sentence_window`
+
+**Sentence window.** Search single sentences, then hand the generator each matched sentence with the sentences around it.
+
+Best for: Precise matching with enough surrounding text to answer from. Cost: low; latency: fast.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `window` | `int` | `2` | Sentences added on each side of a matched sentence (0 = the sentence alone). Overlapping windows of one document merge. |
+| `candidate_top_k` | `int` | `30` | Sentences searched before windows are built (raised to four times the retrieval depth if smaller). |
+
+This system takes no `chunker:` section.
+
 ## `vector`
 
 **Vector.** Embedding search with cosine similarity over a pluggable vector backend (exact NumPy by default).
@@ -147,9 +194,34 @@ Best for: Semantic baseline. Cost: low; latency: fast.
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
+| `diversity` | `none` \| `mmr` | `none` | `mmr` re-ranks a candidate pool by maximal marginal relevance so near-duplicate chunks stop crowding out other evidence. `none` keeps the plain ranking. |
+| `mmr_lambda` | `float` | `0.5` | Relevance versus diversity when `diversity: mmr`: 1.0 reproduces the plain ranking, 0.0 only avoids repeats. Relevance is the retrieval score scaled so the best candidate is 1. |
+| `mmr_candidates` | `int` | `20` | Candidates MMR chooses from when `diversity: mmr` (raised to the retrieval depth if smaller). |
 | `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
 | `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
 | `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+
+## `decompose`
+
+**Question decomposition.** The LLM splits a complex question into sub-questions; each is searched (optionally in sequence, feeding earlier answers forward), then one answer is synthesized from all the evidence.
+
+Best for: Multi-part, comparison and multi-hop questions. Cost: medium; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `retriever` | `hybrid` \| `vector` | `hybrid` | Search used for every query: `hybrid` (BM25 + vector, fused with RRF) or `vector` alone. |
+| `per_query_top_k` | `int` | `20` | Candidates per query before the rankings are merged (raised to the retrieval depth if smaller). |
+| `max_subquestions` | `int` | `4` | Most sub-questions the LLM may split a question into; extras are dropped. |
+| `sequential` | `bool` | `false` | Answer the sub-questions in order, each from its own evidence, and add the earlier findings to the next search (for questions whose later parts depend on earlier answers). Costs one extra LLM call per sub-question; off, they are searched independently. |
+| `chunks_per_subquestion` | `int` | `3` | Chunks of a sub-question's ranking the LLM reads to answer it when `sequential` is on. |
+| `include_original` | `bool` | `false` | Also search the original question, as a safety net against a bad split. |
 
 ## `hyde`
 
@@ -167,6 +239,190 @@ Best for: Short or vaguely-worded questions. Cost: medium; latency: medium.
 | `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
 | `probe_top_k` | `int` | unset | Results fetched per ranking before fusion. Default: twice the retrieval depth, at least 10. |
 | `fuse_with_question` | `bool` | `true` | Fuse the hypothetical-document ranking with the raw-question ranking via RRF. |
+
+## `rag_fusion`
+
+**RAG-Fusion.** The LLM writes alternative queries; each is searched (hybrid or vector) and the rankings are merged with Reciprocal Rank Fusion.
+
+Best for: Questions worded differently from the documents. Cost: medium; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `retriever` | `hybrid` \| `vector` | `hybrid` | Search used for every query: `hybrid` (BM25 + vector, fused with RRF) or `vector` alone. |
+| `per_query_top_k` | `int` | `20` | Candidates per query before the rankings are merged (raised to the retrieval depth if smaller). |
+| `num_queries` | `int` | `4` | Alternative queries the LLM writes for each question. |
+| `include_original` | `bool` | `true` | Also search the original question and merge it in (standard RAG-Fusion). |
+
+## `contextual`
+
+**Contextual retrieval.** An LLM situates each chunk within its document at ingestion; the context is embedded and BM25-indexed with the chunk, then hybrid RRF retrieval.
+
+Best for: Corpora where chunks lose their meaning out of context (many similar documents, pronouns, section-relative facts). Cost: high; latency: fast.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `diversity` | `none` \| `mmr` | `none` | `mmr` re-ranks a candidate pool by maximal marginal relevance so near-duplicate chunks stop crowding out other evidence. `none` keeps the plain ranking. |
+| `mmr_lambda` | `float` | `0.5` | Relevance versus diversity when `diversity: mmr`: 1.0 reproduces the plain ranking, 0.0 only avoids repeats. Relevance is the retrieval score scaled so the best candidate is 1. |
+| `mmr_candidates` | `int` | `20` | Candidates MMR chooses from when `diversity: mmr` (raised to the retrieval depth if smaller). |
+| `multi_query` | `bool` | `false` | Retrieve with local (non-LLM) query variants to help multi-hop questions. |
+| `max_query_variants` | `int` | `4` | Maximum number of query variants when `multi_query` is on. |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `bm25_top_k` | `int` | `20` | BM25 candidates per query (raised to the retrieval depth if smaller). |
+| `vector_top_k` | `int` | `20` | Vector candidates per query (raised to the retrieval depth if smaller). |
+| `bm25_weight` | `float` | `1.0` | Weight of the BM25 ranking in weighted RRF; raise it to favor lexical evidence. |
+| `vector_weight` | `float` | `1.0` | Weight of the vector ranking in weighted RRF; raise it to favor semantic evidence. |
+| `document_max_chars` | `int` | `12000` | Characters of the source document shown to the LLM when it writes each chunk's context. A longer document is cut to a window around the chunk. Raise it for long documents whose chunks need context from far away; every call pays for the whole excerpt. |
+
+## `hierarchical`
+
+**Hierarchical (summary-routed).** Choose documents first from LLM-written summaries and titles, then retrieve chunks only inside the chosen documents.
+
+Best for: "Which document?" questions and corpora too large to search chunk by chunk. Cost: high; latency: fast.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `docs_k` | `int` | `5` | Documents the first stage selects (by BM25 and embedding similarity over each document's title and summary). |
+| `chunks_per_doc` | `int` | `2` | Chunks taken from each selected document in the second stage; the best of them overall are returned. |
+| `summary_max_chars` | `int` | `6000` | Characters of each document shown to the LLM when it writes the summary. |
+
+## `adaptive`
+
+**Adaptive router.** Routes each question to the best of several configured pipelines (exact identifiers to BM25, comparisons to decomposition, calculations to a tool agent, the rest to the default).
+
+Best for: Mixed workloads where no single architecture is best for every question. Cost: high; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `router` | `heuristic` \| `llm` | `heuristic` | `heuristic` routes with fixed rules and costs nothing: exact identifiers go to `lexical`, arithmetic, percentages and date calculations to `computation`, comparisons and questions with several linked parts to `multi_hop`, everything else to `default`. `llm` asks the system's generator model to choose among the routes (one short call per question), which also allows route names of your own. |
+| `routes` | `dict` | *required* | The pipelines a question can be sent to, by route name; each is a full system config (`type`, `chunker`, `retrieval`, `tools`, ...). `default` is required. With `router: heuristic` the other names must be `lexical`, `computation` or `multi_hop`; a role you leave out falls back to `default`. Routes inherit the adaptive system's `models` unless they set their own. |
+| `route_descriptions` | `dict` | *required* | `router: llm` only: what each route is for, shown to the model. Known role names have a built-in description. |
+
+This system takes no `chunker:` section.
+
+## `full_context`
+
+**Full context.** Puts whole documents (the whole corpus when it fits) in the prompt, most relevant first by BM25, up to a token budget (the ceiling baseline: do you need retrieval at all?).
+
+Best for: Small corpora, and measuring how much a retrieval pipeline loses against reading everything. Cost: high; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `context_token_budget` | `int` | `100000` | Most tokens of document text put in the prompt (counted with the chunking tokenizer; the small `[doc_id]` headers are not counted). Documents are ordered by BM25 relevance to the question; when they do not all fit, the first one that does not is cut at a token boundary and the rest are dropped (`truncated: true` in the retrieval metadata). You pay for every token you put in. |
+
+This system takes no `chunker:` section.
+
+## `agent_search`
+
+**Tool-using agent (search).** A function-calling agent that searches the corpus and calls its configured tools (calculator, date_calc, corpus_grep, ...), then writes the cited answer.
+
+Best for: Questions that need computation, exact lookups, or several searches. Cost: high; latency: slow.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `retriever` | `hybrid` \| `vector` | `hybrid` | Search used for every query: `hybrid` (BM25 + vector, fused with RRF) or `vector` alone. |
+| `per_query_top_k` | `int` | `20` | Candidates per query before the rankings are merged (raised to the retrieval depth if smaller). |
+| `max_cost_usd` | `float` | unset | Stop the agent's extra work once this question has cost this much (USD, at standalone prices); the answer is then written from the evidence so far. No cap by default. |
+| `max_tokens` | `int` | unset | Stop the agent's extra work once this question has used this many LLM tokens (prompt + completion). No cap by default. |
+| `agent_mode` | `native` \| `react_json` | `native` | `native` uses the provider's function calling. `react_json` describes the tools in the prompt and parses one JSON action per reply, for models without function calling. |
+| `max_steps` | `int` | `6` | Most model turns (each may call several tools). When it is reached the agent is asked to answer with what it has. |
+| `max_tool_calls` | `int` | unset | Most tool calls per question; further calls are refused and the agent is asked to answer. No cap by default. |
+
+This system accepts a `tools:` list (see [tools.md](tools.md)).
+
+## `corrective`
+
+**Corrective RAG.** Retrieve, grade each chunk with the LLM, and when too little is relevant rewrite the query and widen the search; optional answer self-check.
+
+Best for: Corpora where the first search often misses and a bad context should be noticed rather than answered from. Cost: high; latency: slow.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `retriever` | `hybrid` \| `vector` | `hybrid` | Search used for every query: `hybrid` (BM25 + vector, fused with RRF) or `vector` alone. |
+| `per_query_top_k` | `int` | `20` | Candidates per query before the rankings are merged (raised to the retrieval depth if smaller). |
+| `max_cost_usd` | `float` | unset | Stop the agent's extra work once this question has cost this much (USD, at standalone prices); the answer is then written from the evidence so far. No cap by default. |
+| `max_tokens` | `int` | unset | Stop the agent's extra work once this question has used this many LLM tokens (prompt + completion). No cap by default. |
+| `max_rounds` | `int` | `2` | Retries after the first retrieval when too little relevant evidence was found (0 = grade only, never retry). |
+| `grade_top_k` | `int` | `5` | Chunks of the ranking the LLM grades per round (graded in one call). |
+| `min_relevant` | `int` | `1` | Chunks graded `relevant` needed to stop retrying. |
+| `expand_to` | `hybrid` \| `full_doc` \| `none` | `hybrid` | How a retry widens the search besides rewriting the query: `hybrid` searches with BM25 + vector at twice the depth and grades twice as many chunks, `full_doc` also adds every chunk of the two best documents (right document, wrong chunk), `none` only rewrites. |
+| `self_check` | `bool` | `false` | After answering, ask the LLM whether the answer is supported by the context and, if not, regenerate once from the supported claims. Costs one or two extra calls. |
+
+## `grep_agent`
+
+**Grep agent (no index).** An index-free agent: it lists, greps and reads the raw documents with tools. No chunking, no embeddings, no vector store.
+
+Best for: Small or exact-match-heavy corpora, and testing whether you need retrieval infrastructure at all. Cost: high; latency: slow.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `max_cost_usd` | `float` | unset | Stop the agent's extra work once this question has cost this much (USD, at standalone prices); the answer is then written from the evidence so far. No cap by default. |
+| `max_tokens` | `int` | unset | Stop the agent's extra work once this question has used this many LLM tokens (prompt + completion). No cap by default. |
+| `agent_mode` | `native` \| `react_json` | `native` | `native` uses the provider's function calling. `react_json` describes the tools in the prompt and parses one JSON action per reply, for models without function calling. |
+| `max_steps` | `int` | `6` | Most model turns (each may call several tools). When it is reached the agent is asked to answer with what it has. |
+| `max_tool_calls` | `int` | unset | Most tool calls per question; further calls are refused and the agent is asked to answer. No cap by default. |
+
+This system takes no `chunker:` section.
+
+## `iterative`
+
+**Iterative multi-hop.** Search, ask the LLM what is known and what is missing, search for the missing part, and repeat until it says it is done or the hop limit is reached.
+
+Best for: Multi-hop questions whose second search depends on what the first one found. Cost: high; latency: slow.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `retriever` | `hybrid` \| `vector` | `hybrid` | Search used for every query: `hybrid` (BM25 + vector, fused with RRF) or `vector` alone. |
+| `per_query_top_k` | `int` | `20` | Candidates per query before the rankings are merged (raised to the retrieval depth if smaller). |
+| `max_cost_usd` | `float` | unset | Stop the agent's extra work once this question has cost this much (USD, at standalone prices); the answer is then written from the evidence so far. No cap by default. |
+| `max_tokens` | `int` | unset | Stop the agent's extra work once this question has used this many LLM tokens (prompt + completion). No cap by default. |
+| `max_hops` | `int` | `3` | Most search rounds; each asks the LLM what is known, what is missing, and what to search next. |
+| `chunks_per_hop` | `int` | `3` | Top chunks of each round the LLM sees as evidence (the final answer reads the merged ranking). |
 
 ## `llm_heavy`
 

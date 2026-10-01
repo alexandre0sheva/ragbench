@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
@@ -113,6 +115,20 @@ class BaseRAGSystem(ABC):
         """The active per-question tracer (a silent no-op outside `answer_question`). Record work with `self.trace.step(...)`."""
         return current_tracer()
 
+    @contextmanager
+    def _recording(self) -> Iterator[Tracer]:
+        """The question's active tracer, or (when `fetch_context` is called on its own) a fresh one, so a system can always see what it spent."""
+        if self.trace.record:
+            yield self.trace
+        else:
+            with activate(Tracer()) as tracer:
+                yield tracer
+
+    @classmethod
+    def offered_tools(cls, config: SystemConfig) -> list[str]:
+        """Names of the tools this system may call under `config` (the `tools:` list; systems with built-in tools add theirs)."""
+        return [ref if isinstance(ref, str) else str(ref["name"]) for ref in config.tools]
+
     def configured_context_k(self) -> int | None:
         """How many chunks this system hands the generator when the caller does not say.
 
@@ -139,7 +155,7 @@ class BaseRAGSystem(ABC):
                 retrieval.steps = list(tracer.steps)
             limit = context_k if context_k is not None else self.configured_context_k()
             context_chunks = retrieval.chunks[:limit] if limit is not None else retrieval.chunks
-            llm_result = self._generate_answer(question, context_chunks)
+            llm_result = self._generate_from_retrieval(retrieval, question, context_chunks)
         cost = retrieval.cost.plus(llm_result.cost)
         return AnswerResult(
             question=question,
@@ -155,6 +171,10 @@ class BaseRAGSystem(ABC):
             metadata={"system_type": self.config.type, "context_chunk_ids": [chunk.chunk_id for chunk in context_chunks]},
             steps=reconcile_steps(tracer.steps, cost),
         )
+
+    def _generate_from_retrieval(self, retrieval: RetrievalResult, question: str, chunks: list[RetrievedChunk]):
+        """Generation step of `answer_question`. Override when the prompt needs more than the chunks (e.g. `retrieval.metadata`)."""
+        return self._generate_answer(question, chunks)
 
     def _generate_answer(self, question: str, chunks: list[RetrievedChunk]):
         context = self._format_context(chunks)

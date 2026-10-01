@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import numpy as np
+
 from ragbench.documents.schema import TextChunk
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.embeddings import EmbeddingModel
@@ -33,12 +35,16 @@ class VectorStore:
         self.index: VectorIndex = create_index(backend, collection_name=self.collection_name, persist_directory=self.persist_directory)
         self.backend = self.index.backend  # canonical name (`in_memory` -> `numpy`)
         self.chunks: list[TextChunk] = []
+        self._vectors: np.ndarray | None = None  # kept so MMR can compare candidates with each other
+        self._row_of: dict[str, int] = {}
         self.ingestion_cost = CostBreakdown()
 
     def build(self, chunks: list[TextChunk]) -> CostBreakdown:
         self.chunks = chunks
+        self._row_of = {chunk.chunk_id: row for row, chunk in enumerate(chunks)}
         result = self.embedding_model.embed_texts([chunk.text for chunk in chunks])
         self.ingestion_cost = result.cost
+        self._vectors = result.vectors
         if chunks:
             self.index.build(
                 [chunk.chunk_id for chunk in chunks],
@@ -46,6 +52,12 @@ class VectorStore:
                 [sanitize_payload(chunk.metadata | {"doc_id": chunk.doc_id}) for chunk in chunks],
             )
         return result.cost
+
+    def vectors_for(self, chunk_ids: list[str]) -> np.ndarray:
+        """Unit-length embeddings of already indexed chunks, in the order asked (for diversity re-ranking)."""
+        if self._vectors is None:
+            raise ValueError("The store has no embeddings yet; call build() first.")
+        return self._vectors[[self._row_of[chunk_id] for chunk_id in chunk_ids]]
 
     def search(self, query: str, top_k: int = 5) -> RetrievalResult:
         with timer() as t:

@@ -74,6 +74,12 @@ Questions are stored as JSONL:
 
 For unanswerable questions, use an empty `relevant_doc_ids` list and make the reference answer explicit that the documents do not contain the answer.
 
+Which fields feed which metric ([methodology.md](methodology.md)): `reference_answer` drives `token_f1`, `exact_match` and the judge's correctness; `expected_keywords` drive `keyword_recall`; an empty `relevant_doc_ids` marks the question unanswerable for the abstention metrics; and `answer_type` set to `date` (or `entity`, `person`, `name`, `organization`) lets a wrong answer be classified as `wrong_date` (or `wrong_entity`) instead of a generic failure.
+
+`requires_tools` is an optional list of tool names from the tool registry (see [tools.md](tools.md); an unknown name is an error) (for example `["calculator"]` or `["date_calc"]`) that an agent needs to answer the question. It is metadata only: it never changes retrieval or scoring, and is there so that later reports can show how much a tool-using system gains on the questions that need one.
+
+`routing_hint` is an optional route name (`default`, `lexical`, `computation`, `multi_hop`, or a route name of your own) that an `adaptive` system should send the question to. It is metadata only: it never changes retrieval or scoring. When questions carry hints, the run reports the router's `route_accuracy` and per-route precision and recall in `routes.csv`; without hints you still get the distribution of questions over routes.
+
 ## Optional Qrels
 
 `qrels.jsonl` supports graded relevance:
@@ -97,3 +103,25 @@ If qrels are missing, RAGBench derives binary relevance from `relevant_doc_ids`.
 
 Runs generate `qrels_audit.md` and `qrels_audit.csv`. These files flag cases where an answer was judged highly supported even though retrieval metrics were low because retrieved documents were not labeled relevant. Treat those rows as candidates for human review.
 
+## The bundled demo dataset
+
+`ragbench demo` writes the demo dataset to `data/demo`: 60 documents, 163 questions and graded qrels set in the fictional "RAGBench Mutual" universe. The files in `data/demo` are the source of truth and ship inside the wheel; `ragbench demo` only copies them, keeps any file you edited, and restores the originals with `--overwrite`.
+
+It is built to tell retrieval strategies apart. The corpus mixes very short FAQ pages, four handbooks of 2,400 to 3,100 words whose answers sit deep inside (where chunking matters), versioned documents that contradict each other (three remote work policies, two service level agreements, changelogs), near-duplicate product pages that differ in a few numbers, tables, code and configuration snippets, and a glossary and a newsletter written in a different register.
+
+| Category | Tests | `requires_tools` |
+| --- | --- | --- |
+| `direct_fact` | one fact in one short document (the easy baseline) | |
+| `paraphrase` | the question avoids the document's vocabulary | |
+| `exact_identifier` | error codes, SKUs, contract and incident ids; favors lexical search | |
+| `multi_hop` | the answer needs two documents | |
+| `comparison` | contrasts two items, often near-duplicate pages | |
+| `aggregation` | combines facts from three or more documents | `calculator` where it sums |
+| `numeric_reasoning` | percentages, totals and prices computed from document numbers | `calculator` |
+| `date_arithmetic` | days between two dates found in the documents | `date_calc` |
+| `temporal_conflict` | several versions disagree; the latest (or the asked-for) version wins | |
+| `distractor` | near-identical pages, and only one has the asked-for number | |
+| `long_context` | a fact buried in a 2,400-word or longer handbook | |
+| `unanswerable` | plausible, but the corpus never says; 15% of the questions | |
+
+Key-evidence documents carry relevance 3 in the qrels, supporting documents 2, and later documents that merely restate an answer from the first 50 questions 1 (credit for nDCG only; recall uses `relevant_doc_ids`).

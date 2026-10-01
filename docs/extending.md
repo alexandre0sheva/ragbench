@@ -42,6 +42,8 @@ class MyRAGSystem(BaseRAGSystem):
         latency_profile="fast",    # fast | medium | slow
         requires_llm=False,        # does retrieval itself call an LLM?
         agentic=False,             # does it run a multi-step loop?
+        # retrieves=False,        # only for systems that fetch nothing: their retrieval columns are blank, not 0
+        # chunker=None,           # for systems with no `chunker:` section
         options=MyOptions,
     )
     options: MyOptions             # validated copy of the config's `retrieval:` section
@@ -81,6 +83,31 @@ Step costs must add up to the cost you return. If they do not, `answer_question`
 `BaseRAGSystem.answer_question()` already wires `fetch_context` into the configured LLM, tracks cost, and returns an `AnswerResult`. Override it only when your system needs custom generation (query rewriting, multi-hop).
 
 Keep the system **dataset-agnostic and mock-safe**: it must work on any user-supplied corpus and run without an API key (use the builders and `self.llm`, which fall back to mocks). `HyDERAG` (`hyde_rag.py`) is a compact example of a system that adds an LLM step while staying mock-safe.
+
+If your system sends the LLM a new kind of prompt, teach the mock what to answer with `MockLLM.register_responder(predicate, respond, name=...)` (`predicate(prompt, json_mode) -> bool`, `respond(prompt) -> str`; the newest registration wins, `MockLLM.unregister_responder(name)` removes it). Put the phrase that identifies your prompt in `models/prompts.py` so the system and the mock share it. For LLM calls made at ingestion, wrap them in `rag_systems/llm_ingest.map_llm_calls` so one failed call degrades one item instead of the run (`ContextualRAG` and `HierarchicalRAG` show both).
+
+### Writing an agentic system with `AgentLoop`
+
+A system that decides, step by step, whether to keep searching (grade and retry, multi-hop, tool use) should not hand-roll its loop. `ragbench.agents.AgentLoop` owns the stopping rules; you write a *policy*, a function that does one iteration of work and returns what to do next:
+
+```python
+from ragbench.agents import BUDGET, Abort, AgentBudget, AgentLoop, Continue, Finish
+
+def policy(state):                      # state.iteration is 1 on the first call; state.query is the current query
+    chunks = my_search(state.query)     # record work with self.trace.step(...) as usual
+    if enough(chunks):
+        return Finish()                 # or Finish(answer) when the policy writes the answer itself
+    if state.over_budget():             # check before every extra LLM call
+        return Abort(BUDGET)
+    return Continue(better_query(state.query))
+
+state = AgentLoop(AgentBudget(max_steps=4, max_cost_usd=0.02), tracer).run(policy, question=question)
+state.metadata()  # {"steps", "hops", "budget_exhausted", "termination": finished | budget | max_steps | abort, ...state.info}
+```
+
+The loop stops at `max_steps` whatever the policy returns (never more than 50), and before an iteration when this question's traced spending has reached `max_cost_usd` or `max_tokens`. It never raises for a spent budget: it ends with `termination="budget"` and you answer from the evidence gathered so far. Each decision is recorded as a free `route` step (`agent_decision`, `agent_stop`). Put the loop inside `fetch_context` and return the chunks; `AgenticRAG` (`rag_systems/agentic_base.py`) does the wiring for you: it sums everything the agent spent into the retrieval cost, offers `self._ask(kind, name, messages, parse, ...)` for traced JSON control calls, and adds `llm_calls` to the `agent` block of `AnswerResult.metadata`, which the evaluator persists as `agent` in `per_question_results.jsonl` (summary columns `avg_steps`, `avg_llm_calls`, `budget_exhausted_rate`). For a system whose model calls tools, `agents/tool_agent.py` (`ToolAgent`, native or ReAct-JSON) and `rag_systems/tool_agent_base.py` (`ToolAgentRAG`) already implement the loop, the budgets and the trace; `AgentSearchRAG` and `GrepAgentRAG` are two short subclasses (see [tools.md](tools.md)). Keep prompt text in `agents/prompts.py` and reply parsing in `agents/replies.py`; `corrective_rag.py` and `iterative_rag.py` are the worked examples.
+
+A system that calls tools builds a `ToolBox` from its `tools:` list; see [tools.md](tools.md) for the tool types, custom tools and the safety model.
 
 ## 3. Register the import
 

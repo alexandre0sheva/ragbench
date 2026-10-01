@@ -20,9 +20,11 @@ class SystemSpec:
     """Self-description of a RAG system; the single source for `list-systems`, leaderboards and `docs/systems.md`.
 
     `cost_profile` is relative spend per question: `low` = one generation call plus embeddings, `medium` = one
-    extra short LLM call, `high` = several LLM calls per question or LLM work at ingestion. `latency_profile`
+    extra short LLM call, `high` = several LLM calls per question, a prompt that carries the whole corpus, or LLM work at ingestion. `latency_profile`
     follows the same idea (`fast` = no LLM call besides generation). `requires_llm` means the retrieval side
     itself calls an LLM (beyond generating the answer); `agentic` means the system runs a multi-step loop.
+    `retrieves` is False for systems that fetch nothing (the `no_retrieval` floor baseline): their retrieval metrics are
+    reported as missing, never as 0. `supports_tools` systems accept a `tools:` list (see `docs/tools.md`). `chunker=None` means the system has no `chunker:` section.
     """
 
     type: str
@@ -34,5 +36,7 @@ class SystemSpec:
     requires_llm: bool
     agentic: bool
     options: OptionsModel
-    chunker: SectionModel = ChunkerConfig
+    chunker: SectionModel | None = ChunkerConfig
     llm_features: SectionModel | None = None
+    retrieves: bool = True
+    supports_tools: bool = False  # the system takes a `tools:` list (agentic systems that call tools)

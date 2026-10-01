@@ -1,14 +1,26 @@
 """RAG system implementations. Importing this package registers every built-in system in `SYSTEMS`."""
 
 from ragbench.config.schema import SystemConfig
+from ragbench.rag_systems.adaptive_rag import AdaptiveRAG
+from ragbench.rag_systems.agent_search_rag import AgentSearchRAG
 from ragbench.rag_systems.base import BaseRAGSystem
 from ragbench.rag_systems.bm25_rag import BM25RAG
+from ragbench.rag_systems.contextual_rag import ContextualRAG
+from ragbench.rag_systems.corrective_rag import CorrectiveRAG
+from ragbench.rag_systems.decompose_rag import DecomposeRAG
+from ragbench.rag_systems.full_context_rag import FullContextRAG
+from ragbench.rag_systems.grep_agent_rag import GrepAgentRAG
+from ragbench.rag_systems.hierarchical_rag import HierarchicalRAG
 from ragbench.rag_systems.hybrid_rag import HybridRAG
 from ragbench.rag_systems.hybrid_rerank_rag import HybridRerankRAG
 from ragbench.rag_systems.hyde_rag import HyDERAG
+from ragbench.rag_systems.iterative_rag import IterativeRAG
 from ragbench.rag_systems.llm_heavy_rag import LLMHeavyRAG
+from ragbench.rag_systems.no_retrieval_rag import NoRetrievalRAG
 from ragbench.rag_systems.parent_doc_rag import ParentDocumentRAG
+from ragbench.rag_systems.rag_fusion_rag import RagFusionRAG
 from ragbench.rag_systems.rerank_rag import RerankRAG
+from ragbench.rag_systems.sentence_window_rag import SentenceWindowRAG
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.rag_systems.vector_rag import VectorRAG
 from ragbench.registry import CHUNKERS, RERANKERS, SYSTEMS
@@ -36,15 +48,27 @@ def create_rag_system(config: SystemConfig, force_mock: bool = False) -> BaseRAG
 
 __all__ = [
     "BM25RAG",
+    "AdaptiveRAG",
+    "AgentSearchRAG",
     "SYSTEMS",
     "SYSTEM_REGISTRY",
     "BaseRAGSystem",
+    "ContextualRAG",
+    "CorrectiveRAG",
+    "DecomposeRAG",
+    "FullContextRAG",
+    "GrepAgentRAG",
+    "HierarchicalRAG",
     "HyDERAG",
     "HybridRAG",
     "HybridRerankRAG",
+    "IterativeRAG",
     "LLMHeavyRAG",
+    "NoRetrievalRAG",
     "ParentDocumentRAG",
+    "RagFusionRAG",
     "RerankRAG",
+    "SentenceWindowRAG",
     "SystemSpec",
     "VectorRAG",
     "all_specs",

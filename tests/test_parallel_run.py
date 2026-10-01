@@ -21,7 +21,8 @@ from ragbench.rag_systems.base import AnswerResult, IngestionResult
 from ragbench.runtime import SerializedProgress, current_runtime, evenly_sample
 
 ROOT = Path(__file__).resolve().parents[1]
-TIMING_COLUMNS = {"avg_latency_ms", "avg_latency_concurrent_ms", "system_wall_time_ms", "latency_ms_p50", "latency_ms_p95"}
+# `pareto_optimal` is decided partly by measured latency, so it varies with timing like the latency columns do.
+TIMING_COLUMNS = {"avg_latency_ms", "avg_latency_concurrent_ms", "system_wall_time_ms", "latency_ms_p50", "latency_ms_p95", "pareto_optimal"}
 
 
 # --- config ----------------------------------------------------------------------------------

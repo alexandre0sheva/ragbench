@@ -10,6 +10,7 @@ from ragbench.rag_systems.spec import SystemSpec
 from ragbench.registry import SYSTEMS
 from ragbench.stores.bm25_store import BM25Store
 from ragbench.stores.hybrid_store import reciprocal_rank_fusion
+from ragbench.stores.mmr import mmr_rerank
 from ragbench.utils.query_planning import generate_query_variants
 from ragbench.utils.timing import timer
 
@@ -73,7 +74,12 @@ class HybridRAG(BaseRAGSystem):
                 weights.extend([opts.bm25_weight, opts.vector_weight])
                 pair_cost = bm25_result.cost.plus(vector_result.cost)
                 cost = pair_cost if cost is None else cost.plus(pair_cost)
-            fused = reciprocal_rank_fusion(rankings, top_k=final_top_k, rrf_k=opts.rrf_k, weights=weights)
+            mmr = opts.diversity == "mmr"
+            fused = reciprocal_rank_fusion(rankings, top_k=max(opts.mmr_candidates, final_top_k) if mmr else final_top_k, rrf_k=opts.rrf_k, weights=weights)
+            if mmr:
+                with self.trace.step("rerank", "mmr", mmr_lambda=opts.mmr_lambda, candidates=len(fused)) as step:
+                    fused = mmr_rerank(fused, self.vector_store.vectors_for([c.chunk_id for c in fused]), opts.mmr_lambda, final_top_k)
+                    step.set_chunks(fused)
         return RetrievalResult(
             question=question,
             chunks=fused,
@@ -85,5 +91,6 @@ class HybridRAG(BaseRAGSystem):
                 "queries": queries,
                 "bm25_weight": opts.bm25_weight,
                 "vector_weight": opts.vector_weight,
+                "diversity": opts.diversity,
             },
         )

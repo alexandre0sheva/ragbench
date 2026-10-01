@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -10,40 +11,153 @@ import yaml
 from pydantic import ValidationError
 from rich.console import Console
 from rich.markup import escape
+from rich.panel import Panel
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
 from ragbench import __version__
-from ragbench.config.loader import load_config
+from ragbench.config.loader import load_config, load_config_dict
+from ragbench.config.presets import PRESET_NAMES, apply_preset
+from ragbench.config.schema import ExperimentConfig
+from ragbench.config.sweep import expand_sweeps, select_systems, split_system_names
 from ragbench.datasets.demo_generator import write_demo_dataset
 from ragbench.datasets.loader import load_dataset
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import DocumentLoadError, load_documents
 from ragbench.documents.preview import DEFAULT_MIN_TOKENS, chunk_stats, stats_as_dict
 from ragbench.documents.tokenizer import count_tokens
+from ragbench.evaluation.budget import BudgetExceededError
+from ragbench.evaluation.estimate import Estimate, confirmation_decision, estimate_run
 from ragbench.evaluation.evaluator import BenchmarkRunError, ProgressListener, run_benchmark
 from ragbench.models.errors import MissingExtraError, ModelInitError
 from ragbench.models.refs import resolve_run_mode
-from ragbench.reporting.columns import format_value, is_missing, leaderboard_columns
+from ragbench.reporting.columns import format_cell, is_missing, leaderboard_columns
 from ragbench.utils.env import load_project_env
 
 app = typer.Typer(help="RAGBench: evaluation-first RAG benchmark framework.")
 console = Console()
 
 
-def _mock_warning(config: Path, force_mock: bool = False) -> None:
+def _mock_warning(config: ExperimentConfig, force_mock: bool = False) -> None:
     if force_mock:
         console.print("[yellow]Forced mock mode enabled. Scores are for pipeline validation only.[/yellow]")
         return
-    try:
-        mock = resolve_run_mode(load_config(config), force_mock=False) == "mock"
-    except Exception:
-        return  # an unreadable or invalid config is reported by the run itself
-    if mock:
+    if resolve_run_mode(config, force_mock=False) == "mock":
         console.print(
             "[yellow]No API key found for the configured models (OPENAI_API_KEY / ANTHROPIC_API_KEY). Running in mock mode. "
             "Scores are for pipeline validation only.[/yellow]"
         )
+
+
+def _fail(message: str, code: int = 2) -> typer.Exit:
+    console.print(f"[red]{escape(message)}[/red]")
+    return typer.Exit(code)
+
+
+def _resolve_config(
+    config: Path | None, preset: str | None, docs: Path | None, questions: Path | None, qrels: Path | None, systems: list[str] | None
+) -> tuple[Path, dict[str, Any] | None]:
+    """Where a run's config comes from: a file as written, or (a preset, `--systems`) a config assembled here and passed to the run as data.
+
+    Returns the path (used to find `.env` and to name things) and the assembled config, None when the file is to be used as it is.
+    """
+    if config is None and preset is None:
+        raise _fail("Pass --config (a YAML config) or --preset (quick, standard, thorough or agentic, with --docs and --questions).")
+    if preset is None and (docs or questions or qrels):
+        raise _fail("--docs, --questions and --qrels only apply with --preset; put the dataset in your config otherwise.")
+    try:
+        raw: dict[str, Any] | None = load_config_dict(config) if config is not None else None
+        if preset is not None:
+            raw = expand_sweeps(apply_preset(raw, preset, docs=docs, questions=questions, qrels=qrels))
+        if systems:
+            assert raw is not None
+            raw = select_systems(raw, split_system_names(systems))
+    except (FileNotFoundError, ValueError) as exc:
+        raise _fail(str(exc)) from exc
+    path = config if config is not None else Path.cwd() / f"preset-{preset}.yaml"
+    return path, (raw if preset is not None or systems else None)
+
+
+def _load_experiment(path: Path, raw: dict[str, Any] | None) -> ExperimentConfig:
+    try:
+        return ExperimentConfig.model_validate(raw) if raw is not None else load_config(path)
+    except ValidationError as exc:
+        console.print(f"[red]Invalid config {path}:[/red]")
+        for error in exc.errors():
+            where = ".".join(str(part) for part in error["loc"])
+            console.print(f"  [red]•[/red] {where + ': ' if where else ''}{escape(str(error['msg']).removeprefix('Value error, '))}", soft_wrap=True)
+        raise typer.Exit(2) from exc
+    except (FileNotFoundError, ValueError) as exc:
+        raise _fail(str(exc)) from exc
+
+
+def _is_interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _in_ci() -> bool:
+    return os.environ.get("CI", "").strip().lower() not in {"", "0", "false", "no"}
+
+
+def _money(value: float) -> str:
+    return f"${value:,.2f}" if value >= 1 else f"${value:.4f}"
+
+
+def _duration(seconds: float) -> str:
+    if seconds < 90:
+        return f"{seconds:.0f} s"
+    return f"{seconds / 60:.0f} min" if seconds < 5400 else f"{seconds / 3600:.1f} h"
+
+
+def _print_estimate(estimate: Estimate) -> None:
+    table = Table(title="Estimate", title_justify="left")
+    table.add_column("System", style="bold", overflow="fold")
+    for header in ("Ingestion", "Query", "Judge", "Total"):
+        table.add_column(header, justify="right")
+    for row in estimate.systems:
+        if row.error is not None:
+            table.add_row(row.system, "[red]could not be estimated[/red]", "", "", "")
+            continue
+        table.add_row(row.system + (" ~" if row.agentic else ""), _money(row.ingestion_usd), _money(row.query_usd), _money(row.judge_usd), _money(row.total_usd))
+    table.add_section()
+    table.add_row("Total", "", "", "", f"[bold]{_money(estimate.total_usd)}[/bold]")
+    console.print(table)
+    console.print(
+        f"{estimate.n_questions} questions over {estimate.n_documents} documents (~{estimate.corpus_tokens:,} tokens) · "
+        f"about {_duration(estimate.wall_seconds)} at the configured concurrency (rough) · prices as of {estimate.pricing_as_of}"
+    )
+    for warning in estimate.warnings:
+        console.print(f"[yellow]• {escape(warning)}[/yellow]")
+    console.print(
+        "[dim]Measured by running each system on the offline mock models; prompts, call counts and embedding volume are exact, output lengths are the mock's "
+        "(real answers are usually longer). Assumes no cache hits. ~ marks agentic systems.[/dim]"
+    )
+
+
+def _confirm_cost(config: ExperimentConfig, yes: bool) -> None:
+    """Before a live run: project its cost, and ask (or refuse, or just go) when it is above `evaluation.cost_confirm_threshold_usd`."""
+    try:
+        with console.status("Estimating the cost…"):
+            estimate = estimate_run(config)
+    except Exception as exc:  # noqa: BLE001 (the estimate is advice; a failure in it must not stop the run itself)
+        console.print(f"[yellow]Could not estimate the cost ({escape(str(exc))}); continuing. Set `evaluation.max_cost_usd` to cap the spending.[/yellow]")
+        return
+    threshold = config.evaluation.cost_confirm_threshold_usd
+    cap = config.evaluation.max_cost_usd
+    decision = confirmation_decision(estimate.total_usd, threshold, yes=yes, interactive=_is_interactive(), ci=_in_ci())
+    console.print(f"[dim]Estimated cost: about {_money(estimate.total_usd)} (confirmation threshold {_money(threshold)}; see `ragbench estimate`).[/dim]")
+    if cap is not None and estimate.total_usd > cap:
+        console.print(f"[yellow]The estimate is above your `evaluation.max_cost_usd` of {_money(cap)}: the run will stop early.[/yellow]")
+    if decision == "proceed":
+        return
+    _print_estimate(estimate)
+    if decision == "refuse":
+        raise _fail(
+            f"The estimated cost {_money(estimate.total_usd)} is above the {_money(threshold)} confirmation threshold and there is no one to ask. "
+            "Re-run with --yes to go ahead, or raise `evaluation.cost_confirm_threshold_usd`."
+        )
+    if not typer.confirm(f"Run it for about {_money(estimate.total_usd)}?", default=False):
+        raise _fail("Cancelled. Nothing was spent.", code=1)
 
 
 class _RichProgress(ProgressListener):
@@ -77,10 +191,20 @@ class _RichProgress(ProgressListener):
 
 
 def _execute_benchmark(
-    config: Path, mock: bool, max_workers: int | None, done_message: str, use_cache: bool = True, system_workers: int | None = None
+    config: Path,
+    mock: bool,
+    max_workers: int | None,
+    done_message: str,
+    use_cache: bool = True,
+    system_workers: int | None = None,
+    raw_config: dict[str, Any] | None = None,
+    yes: bool = False,
 ) -> None:
     load_project_env(config)
-    _mock_warning(config, force_mock=mock)
+    loaded = _load_experiment(config, raw_config)
+    _mock_warning(loaded, force_mock=mock)
+    if resolve_run_mode(loaded, mock) == "live":
+        _confirm_cost(loaded, yes)
     progress = Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -92,7 +216,19 @@ def _execute_benchmark(
     )
     try:
         with progress:
-            output_dir = run_benchmark(config, force_mock=mock, max_workers=max_workers, progress=_RichProgress(progress), use_cache=use_cache, system_workers=system_workers)
+            output_dir = run_benchmark(
+                config,
+                force_mock=mock,
+                max_workers=max_workers,
+                progress=_RichProgress(progress),
+                use_cache=use_cache,
+                system_workers=system_workers,
+                raw_config=raw_config,
+            )
+    except BudgetExceededError as exc:
+        _print_run_summary(exc.output_dir)
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(1) from exc
     except BenchmarkRunError as exc:
         _print_run_summary(exc.output_dir)
         console.print(f"[red]{exc}[/red]")
@@ -108,6 +244,20 @@ def _execute_benchmark(
         raise typer.Exit(2) from exc
     _print_run_summary(output_dir)
     console.print(f"[green]{done_message}[/green] Results: [bold]{output_dir}[/bold]")
+
+
+def _recommendation_panel(data: dict[str, Any], footer: str | None = None) -> Panel:
+    """The decision as a panel: the winner (or why there is none), the statistical ties and the reasons."""
+    winner = data.get("winner")
+    if winner:
+        headline = f"[bold green]Deploy {escape(winner)}[/bold green]  [dim](profile {escape(str(data.get('profile')))})[/dim]"
+        ties = data.get("tied_with_winner") or []
+        if ties:
+            headline += f"\n[dim]Statistically tied on quality: {escape(', '.join(ties))}[/dim]"
+    else:
+        headline = "[bold red]No system meets your constraints[/bold red]"
+    body = "\n".join([headline, "", *(f"• {escape(line.replace('`', ''))}" for line in data.get("rationale", []))])
+    return Panel(body, title="Recommendation", title_align="left", subtitle=footer, subtitle_align="left", expand=False)
 
 
 def _print_run_summary(output_dir: Path) -> None:
@@ -134,7 +284,7 @@ def _print_run_summary(output_dir: Path) -> None:
         cells = [str(row["system"])]
         for column in columns:
             value = row.get(column.key)
-            text = format_value(column, value)
+            text = escape(format_cell(column, row, sep="\n"))
             cells.append(f"[bold green]{text}[/bold green]" if not is_missing(value) and float(value) == best.get(column.key) else text)
         table.add_row(*cells)
     console.print(table)
@@ -148,6 +298,10 @@ def _print_run_summary(output_dir: Path) -> None:
         hits = int(cache_stats.get("hits", 0))
         if hits:
             console.print(f"[dim]Embedding cache: {hits} reused embeddings, ~${saved:.4f} of API spend avoided.[/dim]")
+    recommendation_path = output_dir / "recommendation.json"
+    if recommendation_path.exists():
+        files = "recommendation.md" + (" · winner.yaml" if (output_dir / "winner.yaml").exists() else "")
+        console.print(_recommendation_panel(json.loads(recommendation_path.read_text(encoding="utf-8")), footer=files))
         disk = run_summary.get("cache", {})
         if disk.get("enabled"):
             lookups = int(disk["hits"]) + int(disk["misses"])
@@ -185,12 +339,14 @@ def main(
 @app.command()
 def demo(
     output: Path = typer.Option(Path("data/demo"), "--output", "-o", help="Directory where the demo dataset is written."),
-    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing demo document files."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite demo files that differ from the bundled copy (by default they are kept and reported)."),
 ) -> None:
     """Create or verify the bundled demo dataset."""
     stats = write_demo_dataset(output, overwrite=overwrite)
     console.print(f"[green]Demo dataset ready at {output}[/green]")
     console.print(f"Documents: {stats['documents']} | Questions: {stats['questions']} | Qrels: {stats['qrels']}")
+    if stats["modified"]:
+        console.print(f"[yellow]{stats['modified']} file(s) differ from the bundled copy and were kept; use --overwrite to restore them.[/yellow]")
 
 
 @app.command("inspect-dataset")
@@ -363,40 +519,135 @@ def list_systems() -> None:
     console.print("[dim]LLM = the retrieval side calls an LLM. Options for each system: docs/systems.md[/dim]")
 
 
+# Where a run's config comes from, shared by `run`, `compare`, `evaluate` and `estimate`.
+_CONFIG_HELP = "YAML config to run. Systems with a `sweep:` are expanded into one system per combination."
+_PRESET_HELP = f"Use a ready-made list of systems ({', '.join(PRESET_NAMES)}) instead of the config's own; the dataset comes from --docs/--questions or the config."
+_SYSTEMS_HELP = "Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded."
+
+
 @app.command()
 def run(
-    config: Path = typer.Option(..., "--config", "-c", help="YAML config to run."),
+    config: Path | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
+    preset: str | None = typer.Option(None, "--preset", help=_PRESET_HELP),
+    docs: Path | None = typer.Option(None, "--docs", help="Documents folder for --preset."),
+    questions: Path | None = typer.Option(None, "--questions", help="Questions JSONL for --preset."),
+    qrels: Path | None = typer.Option(None, "--qrels", help="Optional qrels JSONL for --preset."),
+    systems: list[str] | None = typer.Option(None, "--systems", help=_SYSTEMS_HELP),
     mock: bool = typer.Option(False, "--mock", help="Force local mock mode even if OPENAI_API_KEY is set."),
     max_workers: int | None = typer.Option(None, "--max-workers", min=1, help="Override evaluation.max_workers: questions answered at the same time within a system."),
     system_workers: int | None = typer.Option(None, "--system-workers", min=1, help="Override evaluation.system_workers: systems evaluated at the same time."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache for this run."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd."),
 ) -> None:
     """Run a single config."""
-    _execute_benchmark(config, mock, max_workers, "Run complete.", use_cache=not no_cache, system_workers=system_workers)
+    path, raw = _resolve_config(config, preset, docs, questions, qrels, systems)
+    _execute_benchmark(path, mock, max_workers, "Run complete.", use_cache=not no_cache, system_workers=system_workers, raw_config=raw, yes=yes)
 
 
 @app.command()
 def compare(
-    config: Path = typer.Option(..., "--config", "-c", help="YAML config containing multiple systems."),
+    config: Path | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
+    preset: str | None = typer.Option(None, "--preset", help=_PRESET_HELP),
+    docs: Path | None = typer.Option(None, "--docs", help="Documents folder for --preset."),
+    questions: Path | None = typer.Option(None, "--questions", help="Questions JSONL for --preset."),
+    qrels: Path | None = typer.Option(None, "--qrels", help="Optional qrels JSONL for --preset."),
+    systems: list[str] | None = typer.Option(None, "--systems", help=_SYSTEMS_HELP),
     mock: bool = typer.Option(False, "--mock", help="Force local mock mode even if OPENAI_API_KEY is set."),
     max_workers: int | None = typer.Option(None, "--max-workers", min=1, help="Override evaluation.max_workers: questions answered at the same time within a system."),
     system_workers: int | None = typer.Option(None, "--system-workers", min=1, help="Override evaluation.system_workers: systems evaluated at the same time."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache for this run."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd."),
 ) -> None:
     """Run multiple systems from one config."""
-    _execute_benchmark(config, mock, max_workers, "Comparison complete.", use_cache=not no_cache, system_workers=system_workers)
+    path, raw = _resolve_config(config, preset, docs, questions, qrels, systems)
+    _execute_benchmark(path, mock, max_workers, "Comparison complete.", use_cache=not no_cache, system_workers=system_workers, raw_config=raw, yes=yes)
+
+
+@app.command()
+def estimate(
+    config: Path | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
+    preset: str | None = typer.Option(None, "--preset", help=_PRESET_HELP),
+    docs: Path | None = typer.Option(None, "--docs", help="Documents folder for --preset."),
+    questions: Path | None = typer.Option(None, "--questions", help="Questions JSONL for --preset."),
+    qrels: Path | None = typer.Option(None, "--qrels", help="Optional qrels JSONL for --preset."),
+    systems: list[str] | None = typer.Option(None, "--systems", help=_SYSTEMS_HELP),
+) -> None:
+    """Project what a run would cost and how long it would take, without spending anything.
+
+    Runs every system on the offline mock models (corpus indexing in full, a sample of the questions) to measure prompts and call
+    counts, then prices them with the configured models. Warns when the price table is old or a model has no price.
+    """
+    path, raw = _resolve_config(config, preset, docs, questions, qrels, systems)
+    load_project_env(path)
+    loaded = _load_experiment(path, raw)
+    try:
+        with console.status("Measuring each system on the mock models…") as status:
+            result = estimate_run(loaded, progress=lambda name: status.update(f"Measuring {name}…"))
+    except (FileNotFoundError, DocumentLoadError, ValueError) as exc:
+        raise _fail(str(exc)) from exc
+    _print_estimate(result)
+
+
+@app.command("recommend")
+def recommend_command(
+    run: Path = typer.Option(..., "--run", help="A finished run directory, e.g. results/<run>."),
+    profile: str | None = typer.Option(None, "--profile", help="balanced, max_quality, cheapest_acceptable or lowest_latency. Default: the run's `selection.profile`."),
+    max_cost: float | None = typer.Option(None, "--max-cost", min=0, help="Highest acceptable mean cost per question, in dollars."),
+    max_latency: float | None = typer.Option(None, "--max-latency", min=0, help="Highest acceptable p95 latency, in milliseconds."),
+    min_faithfulness: float | None = typer.Option(None, "--min-faithfulness", min=0, max=5, help="Lowest acceptable mean faithfulness (0-5)."),
+    min_answer_score: float | None = typer.Option(None, "--min-answer-score", min=0, max=5, help="Lowest acceptable mean answer score (0-5)."),
+    max_ingestion_cost: float | None = typer.Option(None, "--max-ingestion-cost", min=0, help="Highest acceptable one-off indexing cost, in dollars."),
+    local_models: bool = typer.Option(False, "--local-models", help="Only systems whose models all run on this machine."),
+    no_network: bool = typer.Option(False, "--no-network", help="Only systems that send no data off this machine (local models, no network tools)."),
+    export: Path | None = typer.Option(None, "--export", help="Write the winner's runnable config to this file."),
+) -> None:
+    """Which system to deploy, from a finished run: ranked by your constraints and priorities, with the reasons.
+
+    Starts from the run's own `selection:` settings; the options here override them. Exits with status 1 when no system qualifies.
+    """
+    from ragbench.selection.recommend import recommend, selection_of_run, winner_yaml_text
+
+    try:
+        base = selection_of_run(run)
+        overrides = {
+            "max_cost_per_question": max_cost,
+            "max_latency_ms_p95": max_latency,
+            "min_faithfulness": min_faithfulness,
+            "min_answer_score": min_answer_score,
+            "max_ingestion_cost": max_ingestion_cost,
+            "require_local_models": True if local_models else None,
+            "require_no_network": True if no_network else None,
+        }
+        constraints = base.constraints.model_copy(update={key: value for key, value in overrides.items() if value is not None})
+        recommendation = recommend(run, constraints=constraints, weights=base.weights, profile=profile or base.profile)
+    except (FileNotFoundError, ValueError) as exc:
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(2) from exc
+    console.print(_recommendation_panel(recommendation.to_dict()))
+    if recommendation.winner is None:
+        raise typer.Exit(1)
+    if export is not None:
+        export.write_text(winner_yaml_text(run, recommendation.winner), encoding="utf-8")
+        console.print(f"[green]Wrote the winner's config to {export}[/green]")
 
 
 @app.command()
 def evaluate(
-    config: Path = typer.Option(..., "--config", "-c", help="YAML config to evaluate."),
+    config: Path | None = typer.Option(None, "--config", "-c", help=_CONFIG_HELP),
+    preset: str | None = typer.Option(None, "--preset", help=_PRESET_HELP),
+    docs: Path | None = typer.Option(None, "--docs", help="Documents folder for --preset."),
+    questions: Path | None = typer.Option(None, "--questions", help="Questions JSONL for --preset."),
+    qrels: Path | None = typer.Option(None, "--qrels", help="Optional qrels JSONL for --preset."),
+    systems: list[str] | None = typer.Option(None, "--systems", help=_SYSTEMS_HELP),
     mock: bool = typer.Option(False, "--mock", help="Force local mock mode even if OPENAI_API_KEY is set."),
     max_workers: int | None = typer.Option(None, "--max-workers", min=1, help="Override evaluation.max_workers: questions answered at the same time within a system."),
     system_workers: int | None = typer.Option(None, "--system-workers", min=1, help="Override evaluation.system_workers: systems evaluated at the same time."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache for this run."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd."),
 ) -> None:
     """Alias for run/compare."""
-    _execute_benchmark(config, mock, max_workers, "Evaluation complete.", use_cache=not no_cache, system_workers=system_workers)
+    path, raw = _resolve_config(config, preset, docs, questions, qrels, systems)
+    _execute_benchmark(path, mock, max_workers, "Evaluation complete.", use_cache=not no_cache, system_workers=system_workers, raw_config=raw, yes=yes)
 
 
 cache_app = typer.Typer(help="Inspect or clear the persistent cache of LLM responses and corpus embeddings.")

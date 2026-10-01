@@ -14,6 +14,7 @@ from ragbench.models.cost import CostBreakdown, estimate_model_cost
 from ragbench.models.defaults import DEFAULT_EMBEDDING_MODEL
 from ragbench.models.errors import ModelInitError
 from ragbench.models.refs import parse_model_ref, provider_reachable
+from ragbench.models.usage import note_embedding, recording
 from ragbench.utils.hashing import stable_hash
 from ragbench.utils.text import estimate_tokens, tokenize
 
@@ -62,6 +63,8 @@ class HashingEmbeddingModel(EmbeddingModel):
             norm = np.linalg.norm(vectors[row])
             if norm:
                 vectors[row] /= norm
+        if recording():  # `ragbench estimate`: count tokens the way a hosted API would (tiktoken), not with this model's rough heuristic
+            note_embedding(sum(estimate_tokens(text) for text in texts))
         return EmbeddingResult(vectors=vectors, model=self.model_name, input_tokens=input_tokens, cost=CostBreakdown())
 
 

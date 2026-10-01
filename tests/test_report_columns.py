@@ -13,6 +13,12 @@ def test_default_k_values_keep_the_familiar_headers():
     assert headers[3:] == ["Answer", "Faithful", "$/Q", "Latency"]
 
 
+def test_answer_and_context_columns_appear_only_when_the_run_measured_them():
+    headers = [column.header for column in leaderboard_columns([*KEYS_DEFAULT, "token_f1", "context_recall"])]
+    assert headers[3:] == ["Answer", "Faithful", "F1", "Ctx recall", "$/Q", "Latency"]
+    assert [column.header for column in leaderboard_columns([*KEYS_DEFAULT, "exact_match", "abstain_recall"])][3:] == ["Answer", "Faithful", "$/Q", "Latency"]
+
+
 def test_columns_follow_the_measured_ks_and_explicit_primary_k():
     keys = ["retrieval_recall@1", "retrieval_recall@3"]
     assert [c.header for c in leaderboard_columns(keys)][:3] == ["Recall@3", "MRR@3", "nDCG@3"]

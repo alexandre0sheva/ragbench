@@ -25,6 +25,8 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `list-systems`: Print available RAG systems with their...
 * `run`: Run a single config.
 * `compare`: Run multiple systems from one config.
+* `estimate`: Project what a run would cost and how long...
+* `recommend`: Which system to deploy, from a finished...
 * `evaluate`: Alias for run/compare.
 * `cache`: Inspect or clear the persistent cache of...
 
@@ -41,7 +43,7 @@ $ ragbench demo [OPTIONS]
 **Options**:
 
 * `-o, --output <path>`: Directory where the demo dataset is written.  [default: data/demo]
-* `--overwrite`: Overwrite existing demo document files.
+* `--overwrite`: Overwrite demo files that differ from the bundled copy (by default they are kept and reported).
 * `--help`: Show this message and exit.
 
 ## `ragbench inspect-dataset`
@@ -111,11 +113,17 @@ $ ragbench run [OPTIONS]
 
 **Options**:
 
-* `-c, --config <path>`: YAML config to run.  [required]
+* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
+* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
+* `--docs <path>`: Documents folder for --preset.
+* `--questions <path>`: Questions JSONL for --preset.
+* `--qrels <path>`: Optional qrels JSONL for --preset.
+* `--systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
 * `--mock`: Force local mock mode even if OPENAI_API_KEY is set.
 * `--max-workers <int range>`: Override evaluation.max_workers: questions answered at the same time within a system.  [x>=1]
 * `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
 * `--no-cache`: Do not read or write the persistent disk cache for this run.
+* `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
 * `--help`: Show this message and exit.
 
 ## `ragbench compare`
@@ -130,11 +138,66 @@ $ ragbench compare [OPTIONS]
 
 **Options**:
 
-* `-c, --config <path>`: YAML config containing multiple systems.  [required]
+* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
+* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
+* `--docs <path>`: Documents folder for --preset.
+* `--questions <path>`: Questions JSONL for --preset.
+* `--qrels <path>`: Optional qrels JSONL for --preset.
+* `--systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
 * `--mock`: Force local mock mode even if OPENAI_API_KEY is set.
 * `--max-workers <int range>`: Override evaluation.max_workers: questions answered at the same time within a system.  [x>=1]
 * `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
 * `--no-cache`: Do not read or write the persistent disk cache for this run.
+* `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
+* `--help`: Show this message and exit.
+
+## `ragbench estimate`
+
+Project what a run would cost and how long it would take, without spending anything.
+
+Runs every system on the offline mock models (corpus indexing in full, a sample of the questions) to measure prompts and call
+counts, then prices them with the configured models. Warns when the price table is old or a model has no price.
+
+**Usage**:
+
+```console
+$ ragbench estimate [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
+* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
+* `--docs <path>`: Documents folder for --preset.
+* `--questions <path>`: Questions JSONL for --preset.
+* `--qrels <path>`: Optional qrels JSONL for --preset.
+* `--systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
+* `--help`: Show this message and exit.
+
+## `ragbench recommend`
+
+Which system to deploy, from a finished run: ranked by your constraints and priorities, with the reasons.
+
+Starts from the run's own `selection:` settings; the options here override them. Exits with status 1 when no system qualifies.
+
+**Usage**:
+
+```console
+$ ragbench recommend [OPTIONS]
+```
+
+**Options**:
+
+* `--run <path>`: A finished run directory, e.g. results/<run>.  [required]
+* `--profile <str>`: balanced, max_quality, cheapest_acceptable or lowest_latency. Default: the run's `selection.profile`.
+* `--max-cost <float range>`: Highest acceptable mean cost per question, in dollars.  [x>=0]
+* `--max-latency <float range>`: Highest acceptable p95 latency, in milliseconds.  [x>=0]
+* `--min-faithfulness <float range>`: Lowest acceptable mean faithfulness (0-5).  [0<=x<=5]
+* `--min-answer-score <float range>`: Lowest acceptable mean answer score (0-5).  [0<=x<=5]
+* `--max-ingestion-cost <float range>`: Highest acceptable one-off indexing cost, in dollars.  [x>=0]
+* `--local-models`: Only systems whose models all run on this machine.
+* `--no-network`: Only systems that send no data off this machine (local models, no network tools).
+* `--export <path>`: Write the winner's runnable config to this file.
 * `--help`: Show this message and exit.
 
 ## `ragbench evaluate`
@@ -149,11 +212,17 @@ $ ragbench evaluate [OPTIONS]
 
 **Options**:
 
-* `-c, --config <path>`: YAML config to evaluate.  [required]
+* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
+* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
+* `--docs <path>`: Documents folder for --preset.
+* `--questions <path>`: Questions JSONL for --preset.
+* `--qrels <path>`: Optional qrels JSONL for --preset.
+* `--systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
 * `--mock`: Force local mock mode even if OPENAI_API_KEY is set.
 * `--max-workers <int range>`: Override evaluation.max_workers: questions answered at the same time within a system.  [x>=1]
 * `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
 * `--no-cache`: Do not read or write the persistent disk cache for this run.
+* `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
 * `--help`: Show this message and exit.
 
 ## `ragbench cache`

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import difflib
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, PrivateAttr, ValidationError, model_validator
 
+from ragbench.config.sweep import expand_sweeps
 from ragbench.models.defaults import DEFAULT_JUDGE_MODEL
+from ragbench.selection.constraints import Constraints
+from ragbench.selection.scoring import PROFILES, Weights
 
 
 class RunConfig(BaseModel):
@@ -143,6 +147,21 @@ def _validate_section(label: str, section: str, model: type[BaseModel] | None, v
         raise ValueError(_format_section_errors(label, section, model, exc)) from None
 
 
+# A tool in a system's `tools:` list: a built-in's name, or `{name: ..., <tool options>}`; a mapping with `path: "pkg.module:function"` is a custom tool.
+ToolRef = str | dict[str, Any]
+
+
+class ToolsConfig(BaseModel):
+    """Top-level `tools:` section: the rules every tool call runs under."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    allow: list[str] = Field(default_factory=list, description="Tools with side effects (network, filesystem) that may be used; a tool with side effects that is not listed here is refused when the config loads.")
+    allow_network: bool = Field(default=False, description="Permit tools that declare `side_effects: network` (they must also be listed in `allow`). No network tool is built in.")
+    timeout_s: float = Field(default=10.0, gt=0, description="A tool call that takes longer returns an error result instead of hanging the question.")
+    max_output_chars: int = Field(default=4000, ge=100, description="Tool output longer than this is cut and flagged `truncated`, so one call cannot flood the model's context.")
+
+
 class SystemConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -152,6 +171,7 @@ class SystemConfig(BaseModel):
     retrieval: dict[str, Any] = Field(default_factory=dict)
     models: dict[str, Any] = Field(default_factory=dict)
     llm_features: dict[str, Any] = Field(default_factory=dict)
+    tools: list[ToolRef] = Field(default_factory=list)
 
     @property
     def resolved_name(self) -> str:
@@ -175,6 +195,15 @@ class SystemConfig(BaseModel):
         _validate_section(label, "chunker", spec.chunker, self.chunker)
         _validate_section(label, "retrieval", spec.options, self.retrieval)
         _validate_section(label, "llm_features", spec.llm_features, self.llm_features)
+        if self.tools and not spec.supports_tools:
+            raise ValueError(f"{label} does not use tools; remove its `tools:` list (see docs/tools.md for the systems that do)")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_tool_refs_are_well_formed(self) -> SystemConfig:
+        for index, ref in enumerate(self.tools):
+            if isinstance(ref, dict) and not isinstance(ref.get("name"), str):
+                raise ValueError(f"System '{self.resolved_name}': tools[{index}] must be a tool name or a mapping with a `name`")
         return self
 
 
@@ -182,6 +211,32 @@ def default_primary_k(k_values: list[int]) -> int:
     """Headline cut-off for recall: 5 when available, otherwise the median of `k_values`."""
     ks = sorted(set(k_values))
     return 5 if 5 in ks else ks[len(ks) // 2]
+
+
+class JudgeConfig(BaseModel):
+    """`evaluation.judge:` section: how answers are graded by an LLM (a heuristic judge scores mock runs and `judge_enabled: false`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    model: str | None = Field(default=None, description="Model ref of the judge. Default: `evaluation.judge_model`. Prefer a different model family than the generators.")
+    samples: int = Field(default=1, ge=1, le=10, description="Independent judgments per question, averaged; the spread is recorded. Needs `temperature` above 0.")
+    temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="Judge sampling temperature. Leave at 0 for one deterministic (and cacheable) judgment.")
+    independent: bool = Field(
+        default=True,
+        description="Expect the judge to be a different model than the generators: the report warns when it is the same one (self-preference). Set false to accept that.",
+    )
+
+
+class StatsConfig(BaseModel):
+    """`evaluation.stats:` section: how uncertainty and significance are computed (see docs/methodology.md#statistics)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    n_boot: int = Field(default=2000, ge=100, le=100_000, description="Bootstrap resamples for every confidence interval and paired comparison.")
+    seed: int = Field(default=0, description="Random seed: the same results and seed give the same intervals and p-values.")
+    baseline: str | None = Field(
+        default=None, description="System name every other system is compared with in `significance.csv`. Default: the cheapest system ($/Q)."
+    )
 
 
 class EvaluationConfig(BaseModel):
@@ -197,7 +252,15 @@ class EvaluationConfig(BaseModel):
     judge_enabled: bool = True
     # Model ref (see docs/configuration.md#providers--model-refs): `gpt-6-luna`, `anthropic:claude-haiku-4-5`, ...
     judge_model: str = DEFAULT_JUDGE_MODEL
+    # Judge details. `judge.model`, when set, wins over `judge_model` (setting both to different models is an error); afterwards both agree.
+    judge: JudgeConfig = Field(default_factory=JudgeConfig)
+    stats: StatsConfig = Field(default_factory=StatsConfig)
     max_questions: int | None = None
+    # Hard spending cap in dollars: once the run has been charged this much it starts no more questions, finishes the ones in flight and
+    # reports the systems that completed. Counts charged cost (standalone prices), an upper bound of real spend when the cache is warm.
+    max_cost_usd: float | None = Field(default=None, gt=0)
+    # A live run whose estimate is above this asks for confirmation first (`--yes` skips it; with no terminal, or when CI is set, it refuses).
+    cost_confirm_threshold_usd: float = Field(default=1.0, ge=0)
     max_workers: int = Field(default=4, ge=1)
     # Systems evaluated at the same time (each still ingests once). Total concurrency is system_workers x max_workers.
     system_workers: int = Field(default=1, ge=1)
@@ -208,6 +271,36 @@ class EvaluationConfig(BaseModel):
     # Share corpus embeddings across systems in one run. Hits are still charged
     # to each system at standalone prices; real savings appear in run_summary.
     embedding_cache: bool = True
+    # What "today" is for the `date_calc` tool, an ISO date or datetime: frozen for the whole run so tool answers never depend on the clock.
+    tools_now: str = "2026-01-01"
+    _judge_model_in_section: bool = PrivateAttr(default=False)
+
+    @property
+    def judge_model_key(self) -> str:
+        """The config key the judge's model was set under, for error messages."""
+        return "evaluation.judge.model" if self._judge_model_in_section else "evaluation.judge_model"
+
+    @model_validator(mode="after")
+    def _sync_judge_model(self) -> EvaluationConfig:
+        explicit = "judge_model" in self.model_fields_set
+        self._judge_model_in_section = self.judge.model is not None
+        if self.judge.model is None:
+            self.judge.model = self.judge_model
+        elif explicit and self.judge_model != self.judge.model:
+            raise ValueError(f"evaluation.judge_model ({self.judge_model}) and evaluation.judge.model ({self.judge.model}) disagree; set only one of them")
+        else:
+            self.judge_model = self.judge.model
+        if self.judge.samples > 1 and self.judge.temperature == 0:
+            raise ValueError("evaluation.judge.samples > 1 needs evaluation.judge.temperature above 0, or every sample would be identical")
+        return self
+
+    @model_validator(mode="after")
+    def _check_tools_now(self) -> EvaluationConfig:
+        try:
+            datetime.fromisoformat(self.tools_now)
+        except ValueError:
+            raise ValueError(f"evaluation.tools_now must be an ISO date such as 2026-01-01, not {self.tools_now!r}") from None
+        return self
 
     @model_validator(mode="after")
     def _check_cutoffs(self) -> EvaluationConfig:
@@ -218,6 +311,10 @@ class EvaluationConfig(BaseModel):
         if self.primary_k is not None and self.primary_k not in self.k_values:
             raise ValueError(f"evaluation.primary_k ({self.primary_k}) must be one of k_values {self.k_values}")
         return self
+
+    @property
+    def resolved_tools_now(self) -> datetime:
+        return datetime.fromisoformat(self.tools_now)
 
     @property
     def resolved_retrieval_depth(self) -> int:
@@ -279,6 +376,42 @@ class ModelPrice(BaseModel):
     output: float = 0.0
 
 
+def _route_configs(system: SystemConfig) -> list[tuple[str, SystemConfig]]:
+    """The pipelines inside an `adaptive` system's `routes:`, as `(route name, config)`, each inheriting the system's `models`."""
+    routes = system.retrieval.get("routes")
+    if system.type != "adaptive" or not isinstance(routes, dict):
+        return []
+    configs = [(name, raw if isinstance(raw, SystemConfig) else SystemConfig.model_validate(raw)) for name, raw in routes.items()]
+    return [(name, config.model_copy(update={"models": {**system.models, **config.models}})) for name, config in configs]
+
+
+def _with_routes(systems: list[SystemConfig]) -> list[tuple[str, SystemConfig]]:
+    """Every system config to validate, with the label to report it under: each system, then each of its routes."""
+    found: list[tuple[str, SystemConfig]] = []
+    for index, system in enumerate(systems):
+        found.append((f"systems[{index}]", system))
+        found.extend((f"systems[{index}].routes.{name}", config) for name, config in _route_configs(system))
+    return found
+
+
+class SelectionConfig(BaseModel):
+    """`selection:` section: how the run's recommendation (`recommendation.md`, `winner.yaml`) is chosen. See docs/methodology.md#selection."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    profile: str = Field(default="balanced", description="`balanced`, `max_quality`, `cheapest_acceptable` or `lowest_latency`.")
+    constraints: Constraints = Field(default_factory=Constraints, description="Hard requirements; a system that breaks one is never recommended.")
+    weights: Weights | None = Field(default=None, description="Override the profile's weights for quality, cost and latency.")
+
+    @model_validator(mode="after")
+    def _known_profile(self) -> SelectionConfig:
+        if self.profile not in PROFILES:
+            from ragbench.selection.scoring import resolve_profile
+
+            resolve_profile(self.profile)  # raises with a did-you-mean hint
+        return self
+
+
 class ExperimentConfig(BaseModel):
     run: RunConfig
     dataset: DatasetConfig
@@ -291,6 +424,16 @@ class ExperimentConfig(BaseModel):
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
     # Named OpenAI-compatible endpoints, referenced as `openai_compatible:<name>/<model>`.
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
+    # Rules for tool calls (permissions, timeout, output cap); each system lists the tools it may use in its own `tools:`.
+    tools: ToolsConfig = Field(default_factory=ToolsConfig)
+    # Which system the run recommends deploying, and under what constraints and priorities.
+    selection: SelectionConfig = Field(default_factory=SelectionConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_sweeps(cls, data: Any) -> Any:
+        """A system with a `sweep:` becomes one system per combination before anything else is checked (see config/sweep.py)."""
+        return expand_sweeps(data) if isinstance(data, dict) else data
 
     @model_validator(mode="after")
     def _check_systems(self) -> ExperimentConfig:
@@ -310,25 +453,47 @@ class ExperimentConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _check_tools(self) -> ExperimentConfig:
+        from ragbench.tools import resolve_tools
+
+        for label, system in _with_routes(self.systems):
+            if system.tools:
+                try:
+                    resolve_tools(system.tools, self.tools)
+                except ValueError as exc:
+                    raise ValueError(f"{label}.tools: {exc}") from None
+        return self
+
+    @model_validator(mode="after")
+    def _check_stats_baseline(self) -> ExperimentConfig:
+        baseline = self.evaluation.stats.baseline
+        names = [system.resolved_name for system in self.systems]
+        if baseline is not None and baseline not in names:
+            close = difflib.get_close_matches(baseline, names, n=1, cutoff=0.6)
+            hint = f" Did you mean '{close[0]}'?" if close else ""
+            raise ValueError(f"evaluation.stats.baseline: no system named '{baseline}'.{hint} Systems: {', '.join(names)}")
+        return self
+
+    @model_validator(mode="after")
     def _check_model_refs(self) -> ExperimentConfig:
         from ragbench.models.refs import validate_model_ref
 
         for name in self.providers:
             if not name or any(char in name for char in "/:"):
                 raise ValueError(f"providers: endpoint name {name!r} must be non-empty and contain neither '/' nor ':'")
-        for index, system in enumerate(self.systems):
+        for label, system in _with_routes(self.systems):
             if "generator" in system.models:
                 try:
                     validate_model_ref(str(system.models["generator"]), "llm", self.providers)
                 except ValueError as exc:
-                    raise ValueError(f"systems[{index}].models.generator: {exc}") from None
+                    raise ValueError(f"{label}.models.generator: {exc}") from None
             if "embedding" in system.models:
                 try:
                     validate_model_ref(str(system.models["embedding"]), "embedding", self.providers)
                 except ValueError as exc:
-                    raise ValueError(f"systems[{index}].models.embedding: {exc}") from None
+                    raise ValueError(f"{label}.models.embedding: {exc}") from None
         try:
             validate_model_ref(self.evaluation.judge_model, "llm", self.providers)
         except ValueError as exc:
-            raise ValueError(f"evaluation.judge_model: {exc}") from None
+            raise ValueError(f"{self.evaluation.judge_model_key}: {exc}") from None
         return self

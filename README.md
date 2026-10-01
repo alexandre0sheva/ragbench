@@ -12,7 +12,7 @@ It is not a demo chatbot. It answers a single question: *which RAG approach give
 
 ## Results at a glance
 
-Example live run on the bundled demo dataset (numbers below are from a v0.1.0 run with the six original systems on the earlier 45-question dataset; the bundled dataset now has 22 documents and 50 questions across 11 categories — run `ragbench compare --config configs/all.yaml` to produce fresh numbers for all eight systems):
+Example live run on the bundled demo dataset (numbers below are from a v0.1.0 run with the six original systems on the earlier 45-question dataset; the bundled dataset now has 60 documents and 163 questions across 12 categories — run `ragbench compare --config configs/all.yaml` to produce fresh numbers for all eight systems):
 
 | System | Recall@5 | MRR@10 | nDCG@10 | Answer | Faithfulness | $/Q | Latency | Best for |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
@@ -55,6 +55,10 @@ ragbench demo
 ragbench compare --config configs/all.yaml
 ```
 
+No config yet? `ragbench compare --preset quick --docs my_docs/ --questions my_questions.jsonl` runs three strong baselines on your data (`standard`, `thorough` and `agentic` add more), and `ragbench estimate --config configs/all.yaml` projects the cost first; see [presets, sweeps and budgets](docs/configuration.md#sweeps).
+
+Every run ends with a **recommendation**: which system to deploy under your constraints, the systems that are statistically tied with it, and a ready-to-run `winner.yaml` (`ragbench recommend --run results/<run> --max-cost 0.002` re-asks it with other constraints; see [methodology](docs/methodology.md#selection)).
+
 Without an `OPENAI_API_KEY`, RAGBench runs in **mock mode** — deterministic hashing embeddings, mock LLM, heuristic judge — so reviewers can exercise the full pipeline immediately. With a key set in your shell or `.env`, it switches to real embeddings, generation, and LLM-as-a-judge. Models are `provider:model` refs (OpenAI, Claude via `pip install 'ragbench[anthropic]'`, any OpenAI-compatible server such as Ollama or vLLM, local `sentence-transformers` embeddings via `ragbench[local]`, cross-encoder reranking via `ragbench[rerank]`). The vector backend is exact NumPy by default; `ragbench[chroma]`, `ragbench[faiss]` and `ragbench[qdrant]` add others; see [configuration](docs/configuration.md#providers--model-refs).
 
 ```bash
@@ -96,10 +100,22 @@ flowchart LR
 | `bm25` | Lexical BM25 over chunks | Cheap baseline and exact-term matching |
 | `hybrid` | BM25 + vector search fused with (optionally weighted) Reciprocal Rank Fusion | Balanced lexical + semantic retrieval |
 | `hybrid_rerank` | Hybrid BM25 + vector RRF retrieval followed by a reranking pass | Recall of hybrid plus rerank precision |
+| `no_retrieval` | The model answers from its own knowledge with no documents at all (the floor baseline) | Showing how much retrieval helps and how often the model makes things up without it |
 | `parent_doc` | Retrieve small child chunks, answer from their larger parent chunks | Better answer context with precise retrieval |
 | `rerank` | Vector retrieval followed by a reranking pass | Higher precision context selection |
+| `sentence_window` | Search single sentences, then hand the generator each matched sentence with the sentences around it | Precise matching with enough surrounding text to answer from |
 | `vector` | Embedding search with cosine similarity over a pluggable vector backend (exact NumPy by default) | Semantic baseline |
+| `decompose` | The LLM splits a complex question into sub-questions; each is searched (optionally in sequence, feeding earlier answers forward), then one answer is synthesized from all the evidence | Multi-part, comparison and multi-hop questions |
 | `hyde` | Hypothetical Document Embeddings: the LLM writes a hypothetical answer used as the search probe | Short or vaguely-worded questions |
+| `rag_fusion` | The LLM writes alternative queries; each is searched (hybrid or vector) and the rankings are merged with Reciprocal Rank Fusion | Questions worded differently from the documents |
+| `contextual` | An LLM situates each chunk within its document at ingestion; the context is embedded and BM25-indexed with the chunk, then hybrid RRF retrieval | Corpora where chunks lose their meaning out of context (many similar documents, pronouns, section-relative facts) |
+| `hierarchical` | Choose documents first from LLM-written summaries and titles, then retrieve chunks only inside the chosen documents | "Which document?" questions and corpora too large to search chunk by chunk |
+| `adaptive` | Routes each question to the best of several configured pipelines (exact identifiers to BM25, comparisons to decomposition, calculations to a tool agent, the rest to the default) | Mixed workloads where no single architecture is best for every question |
+| `full_context` | Puts whole documents (the whole corpus when it fits) in the prompt, most relevant first by BM25, up to a token budget (the ceiling baseline: do you need retrieval at all?) | Small corpora, and measuring how much a retrieval pipeline loses against reading everything |
+| `agent_search` | A function-calling agent that searches the corpus and calls its configured tools (calculator, date_calc, corpus_grep, ...), then writes the cited answer | Questions that need computation, exact lookups, or several searches |
+| `corrective` | Retrieve, grade each chunk with the LLM, and when too little is relevant rewrite the query and widen the search; optional answer self-check | Corpora where the first search often misses and a bad context should be noticed rather than answered from |
+| `grep_agent` | An index-free agent: it lists, greps and reads the raw documents with tools. No chunking, no embeddings, no vector store | Small or exact-match-heavy corpora, and testing whether you need retrieval infrastructure at all |
+| `iterative` | Search, ask the LLM what is known and what is missing, search for the missing part, and repeat until it says it is done or the hop limit is reached | Multi-hop questions whose second search depends on what the first one found |
 | `llm_heavy` | LLM-driven ingestion metadata, query rewriting, and reranking | Higher-cost, quality-oriented experiments |
 <!-- systems:end -->
 
@@ -107,17 +123,13 @@ All systems implement the same `BaseRAGSystem` interface and run on any user-sup
 
 ## Metrics
 
-Retrieval is evaluated at the **document level** because chunks are generated dynamically by each system. RAGBench reports:
-
-- **Retrieval:** Recall@K, Precision@K, Hit@K, MRR@K, nDCG@K (graded if qrels are present), scored on a deeper ranking than the context the LLM reads ([details](docs/configuration.md#retrieval-depth-context-size-and-failures)).
-- **Answer:** Correctness, Faithfulness, Completeness, Relevance, Citation quality (LLM-as-judge or heuristic in mock mode).
-- **Operational:** Ingestion / query / judge cost, average latency, wall time, failure-type distribution.
+RAGBench scores retrieval (Recall, MRR, nDCG at the document level), the context the generator actually saw, answer quality (LLM judge, token F1, exact match, abstention) and operations (cost, latency, steps, tool calls). Leaderboards show 95% confidence intervals, a paired significance test against a baseline and the Pareto-optimal systems, so a 0.02 gap on 50 questions is not presented as a winner. Definitions, the judge's design and its biases, cost accounting and limitations are in [docs/methodology.md](docs/methodology.md).
 
 ## Outputs
 
 While a benchmark runs, the CLI shows live per-system progress (ingestion, then a question-by-question bar) and finishes with a leaderboard table in the terminal, with the best value in each column highlighted.
 
-Each run writes a timestamped directory containing `leaderboard.md`, `report.html`, `metrics_summary.csv`, `per_question_results.jsonl`, `retrieval_metrics.csv`, `answer_metrics.csv`, `cost_breakdown.csv`, `failures.md`, `qrels_audit.md`, `system_runtime.csv`, `run_summary.json`, and `run_manifest.json` (versions, git commit, config/dataset hashes).
+Each run writes a timestamped directory containing `leaderboard.md`, `report.html`, `metrics_summary.csv`, `per_question_results.jsonl`, `retrieval_metrics.csv`, `answer_metrics.csv`, `cost_breakdown.csv`, `failures.md`, `qrels_audit.md`, `system_runtime.csv`, `significance.csv`, `stats.json`, `pareto.json`, `recommendation.md` / `recommendation.json`, `winner.yaml`, `run_summary.json`, and `run_manifest.json` (versions, git commit, config/dataset hashes).
 
 `report.html` is a self-contained page (no CDN, works offline) with winner summary cards, a sortable leaderboard, comparison bar charts, per-category quality, cost breakdown, and failure analysis. It adapts to light and dark mode.
 
@@ -153,7 +165,7 @@ Systems, questions, ingestion and embedding batches run concurrently (`--system-
 
 ## Caching
 
-Live runs cache paid calls on disk (`.ragbench_cache/`), so re-running an unchanged benchmark costs almost nothing, and systems in one run share corpus embeddings. A cache hit is still *charged* to each system at standalone prices, so `$/Q` stays comparable; the real savings are reported separately. See [Caching](docs/configuration.md#caching) for the rules and `ragbench cache stats|clear`.
+Live runs cache paid calls on disk (`.ragbench_cache/`), so re-running an unchanged benchmark costs almost nothing, and systems in one run share corpus embeddings. A cache hit is still charged at standalone prices, so `$/Q` stays comparable ([why](docs/methodology.md#cost-accounting)). See [Caching](docs/configuration.md#caching) for the rules and `ragbench cache stats|clear`.
 
 ## Documentation
 
@@ -161,18 +173,18 @@ Live runs cache paid calls on disk (`.ragbench_cache/`), so re-running an unchan
 - [RAG systems and their options](docs/systems.md) *(generated)*
 - [Command-line reference](docs/cli.md) *(generated)*
 - [Dataset format](docs/dataset-format.md)
+- [Methodology: metrics, judge, cost accounting, limitations](docs/methodology.md)
 - [Extending RAGBench](docs/extending.md)
 - [GitHub setup](docs/github-setup.md)
 - [Release checklist](docs/release-checklist.md)
 
 ## Cost warning
 
-Pricing constants in `src/ragbench/models/cost.py` are approximate (see `PRICING_AS_OF`); override them per experiment with the `pricing:` config section ([docs/configuration.md](docs/configuration.md#pricing)). Models without a registered price are reported as $0 with a visible warning. The `llm_heavy` system can be materially more expensive because it uses LLM calls during ingestion, query rewrite, reranking, and judging.
+Live runs spend real money, and LLM-heavy and agentic systems spend the most. Prices are approximate and overridable; see [Cost accounting](docs/methodology.md#cost-accounting) and [`pricing:`](docs/configuration.md#pricing).
 
 ## Roadmap
 
 - Persistent vector store adapters (Postgres / pgvector, Qdrant)
-- Bootstrap confidence intervals for metric comparisons
 - Web dashboard for comparing historical runs
 
 ## License

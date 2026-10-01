@@ -39,6 +39,14 @@ class QuestionEvaluator(Protocol):
 
     def answer_for_probe(self, system: BaseRAGSystem, question: Any) -> AnswerResult: ...
 
+    def budget_exhausted(self) -> bool:
+        """The spending cap is reached: start no more systems."""
+        ...
+
+    def charge(self, usd: float) -> None:
+        """Count money spent outside a question (ingestion) against the spending cap."""
+        ...
+
 
 @dataclass
 class SystemOutcome:
@@ -47,10 +55,19 @@ class SystemOutcome:
     index: int
     name: str
     system_type: str
-    system: BaseRAGSystem
+    system: BaseRAGSystem | None  # None when the system was never started (the budget ran out first)
     ingestion_row: dict[str, Any] | None
-    results: list[dict[str, Any]]
+    results: list[dict[str, Any]]  # per question; `{"skipped": True}` for a question the budget stopped before it started
     runtime_row: dict[str, Any]
+
+    @property
+    def answered(self) -> int:
+        return sum(1 for result in self.results if not result.get("skipped"))
+
+    @property
+    def complete(self) -> bool:
+        """Every question was either answered or failed on its own: the system's results are comparable with the others'."""
+        return self.system is not None and self.answered == len(self.results)
 
 
 @dataclass
@@ -87,6 +104,10 @@ class SystemRunner:
         name = system_config.resolved_name
         system_start = perf_counter()
         self.progress.system_started(name, index, total)
+        if self.evaluator.budget_exhausted():
+            logger.warning("Skipping system %s: the spending cap (evaluation.max_cost_usd) was already reached.", name)
+            self.progress.system_finished(name, 0.0)
+            return SystemOutcome(index, name, system_config.type, None, None, [], {"system": name, "system_type": system_config.type, "num_questions": len(questions)})
         system = self.evaluator.create_system(system_config)
         ingest_start = perf_counter()
         ingest_error: dict[str, str] | None = None
@@ -99,6 +120,7 @@ class SystemRunner:
         ingestion_wall_time_ms = (perf_counter() - ingest_start) * 1000
         ingestion_row: dict[str, Any] | None = None
         if ingestion is not None:
+            self.evaluator.charge(ingestion.cost.total_cost)
             self.progress.ingestion_finished(system.name, ingestion.num_chunks, ingestion_wall_time_ms)
             ingestion_row = {
                 "system": system.name,
@@ -160,7 +182,9 @@ class SystemRunner:
         results: dict[str, ProbeResult] = {}
         with activate_cache(None):
             for outcome in outcomes:
-                ok_ids = [r["per_question"]["question_id"] for r in outcome.results if r["per_question"]["error"] is None]
+                if outcome.system is None:
+                    continue
+                ok_ids = [r["per_question"]["question_id"] for r in outcome.results if not r.get("skipped") and r["per_question"]["error"] is None]
                 chosen = evenly_sample(ok_ids, self.settings.latency_probe_questions)
                 probe = ProbeResult()
                 for done, question_id in enumerate(chosen, start=1):

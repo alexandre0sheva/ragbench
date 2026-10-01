@@ -33,7 +33,7 @@ def _write(directory: Path, name: str, content: str | bytes) -> Path:
 def test_the_demo_dataset_loads_exactly_as_before():
     documents = load_documents(ROOT / "data" / "demo" / "docs")
 
-    assert [d.doc_id for d in documents] == [f"doc_{i:03d}" for i in range(1, 23)]
+    assert [d.doc_id for d in documents] == [f"doc_{i:03d}" for i in range(1, 61)]
     for document in documents:
         source = Path(document.path)
         assert document.text == source.read_text(encoding="utf-8")
