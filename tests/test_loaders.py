@@ -134,6 +134,34 @@ def test_html_title_body_entities_and_nested_scripts_and_styles(tmp_path):
     assert "\n\n\n" not in text and not text.startswith("\n") and not text.endswith("\n")
 
 
+def test_html_extractor_state_cannot_clash_with_the_stdlib_parsers_private_attributes(monkeypatch):
+    """Newer CPython's `HTMLParser` keeps a private `_pending` list and joins it in `close()`; the extractor once stored an int under that name.
+
+    The stdlib class on the interpreter running the tests may or may not do this, so the test makes it do so.
+    """
+    from html.parser import HTMLParser
+
+    from ragbench.documents.loaders.html import html_to_text
+
+    original_reset, original_close = HTMLParser.reset, HTMLParser.close
+
+    def reset(self):
+        original_reset(self)
+        self._pending = []
+
+    def close(self):
+        if self._pending:
+            self.rawdata += "".join(self._pending)
+        original_close(self)
+
+    monkeypatch.setattr(HTMLParser, "reset", reset)
+    monkeypatch.setattr(HTMLParser, "close", close)
+
+    title, text = html_to_text("<html><body><h1>Heading Title</h1><p>x</p></body></html>")
+
+    assert title == "Heading Title" and "x" in text
+
+
 def test_html_title_falls_back_to_the_first_h1_then_the_file_name(tmp_path):
     _write(tmp_path, "a.html", "<html><body><h1>Heading Title</h1><p>x</p></body></html>")
     _write(tmp_path, "my_page-name.htm", "<p>no title at all</p>")

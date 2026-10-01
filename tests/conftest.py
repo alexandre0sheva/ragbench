@@ -15,6 +15,15 @@ def _isolate_from_the_real_environment(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("RAGBENCH_CACHE_DIR", str(tmp_path_factory.mktemp("ragbench_cache")))
 
 
+@pytest.fixture(autouse=True)
+def _plain_cli_output(monkeypatch):
+    """Typer forces colour codes whenever `GITHUB_ACTIONS`, `FORCE_COLOR` or `PY_COLORS` is set (it reads them once, at import).
+
+    Colour splits `--debug` into separately styled pieces, so a test asserting that an option appears in `--help` passes on a laptop and fails in CI.
+    """
+    monkeypatch.setattr("typer.rich_utils.FORCE_TERMINAL", False)
+
+
 @pytest.fixture
 def tiny_dataset(tmp_path):
     """The `dataset:` section of a config over six short documents and eight questions (tests/dataset_support.py), written under `tmp_path`."""

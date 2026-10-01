@@ -117,6 +117,7 @@ The format follows Keep a Changelog, and this project uses semantic versioning o
 - The "estimated cost is above the confirmation threshold" error told `ragbench run` users to pass `--max-cost`, a flag only some other commands have; it now names `evaluation.max_cost_usd` as well. `docs/release-checklist.md` and `docs/choosing-an-architecture.md` made the same mistake.
 - The README results are now from a live run of `configs/all.yaml` on the demo dataset, kept with its result files in `docs/example-run.md` (ragbench 0.3.0, 1 Oct 2026, about $2.91 real spend) with refreshed report screenshots in `docs/assets/`; the 0.1.0 table was removed earlier in this release.
 - A clean `pip install -e ".[dev]"` could not run the tests or `scripts/generate_docs.py`: `httpx` (used by the wire-level tests) and `click` (used by the docs script) had only ever arrived through `chromadb`. `httpx` is now in the `dev` extra and the docs script uses the `typer.Context` that Typer ships instead of importing `click`.
+- Loading any `.html` / `.htm` file failed (`TypeError: can only join an iterable`) on Python releases whose `HTMLParser` keeps its own private `_pending` list: the HTML text extractor stored an integer under the same name. Its state now uses class-private names that cannot clash with the standard library's.
 
 ## [0.2.0] - 2026-06-12
 
