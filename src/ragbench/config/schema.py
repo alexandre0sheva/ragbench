@@ -412,6 +412,18 @@ class SelectionConfig(BaseModel):
         return self
 
 
+class ReportConfig(BaseModel):
+    """`report:` section: how `report.html` is built. See docs/methodology.md#reading-the-report."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_embedded_mb: float = Field(
+        default=4.0,
+        gt=0,
+        description="Most question data (answers, contexts, traces) embedded in the page. Above it the page keeps a reduced copy and the complete data is written to `report_questions.json` next to it.",
+    )
+
+
 class ExperimentConfig(BaseModel):
     run: RunConfig
     dataset: DatasetConfig
@@ -428,6 +440,8 @@ class ExperimentConfig(BaseModel):
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     # Which system the run recommends deploying, and under what constraints and priorities.
     selection: SelectionConfig = Field(default_factory=SelectionConfig)
+    # How report.html is built (the size of the question explorer's data).
+    report: ReportConfig = Field(default_factory=ReportConfig)
 
     @model_validator(mode="before")
     @classmethod

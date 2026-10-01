@@ -154,6 +154,12 @@ def _lookup_pricing(model: str) -> dict[str, float] | None:
     return None
 
 
+def price_known(model: str) -> bool:
+    """Whether `model` has a price (a built-in row, an override, or a model that is free by default such as `local:`)."""
+    with _lock:
+        return _lookup_pricing(model) is not None
+
+
 def estimate_model_cost(model: str, input_tokens: int = 0, output_tokens: int = 0) -> float:
     with _lock:
         pricing = _lookup_pricing(model)

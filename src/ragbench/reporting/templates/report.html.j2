@@ -243,6 +243,39 @@
     </section>
     {% endif %}
 
+    {% if questions %}
+    <section class="block" id="questions" aria-labelledby="h-questions">
+      <header><span class="num">{{ sec.questions }}</span><h2 id="h-questions">Questions</h2></header>
+      <p class="lede">Every question with the systems side by side: open a row for the answers, the judge's reasoning, the passages each system retrieved and what it did step by step. Filters combine; with a system chosen, the failure and score filters look only at that system.</p>
+      <div class="q-controls" role="search" aria-label="Filter the questions">
+        <label class="q-field q-search"><span>Search</span><input type="search" id="q-search" placeholder="Questions, answers, ids   ( / )" autocomplete="off"></label>
+        <label class="q-field"><span>Category</span><select id="q-category"><option value="">All</option></select></label>
+        <label class="q-field"><span>System</span><select id="q-system"><option value="">All systems</option></select></label>
+        <label class="q-field"><span>Failure type</span><select id="q-failure"><option value="">Any</option></select></label>
+        <div class="q-field"><span id="q-below-label">Score below</span><span class="q-inline"><select id="q-metric" aria-label="Which score"><option value="score">Answer score</option><option value="correctness">Correctness</option><option value="faithfulness">Faithfulness</option></select><input type="number" id="q-below" min="0" max="5" step="0.5" placeholder="off" aria-labelledby="q-below-label"></span></div>
+        <label class="q-check"><input type="checkbox" id="q-disagree"> <span>Systems disagree</span></label>
+        <button type="button" class="btn" id="q-reset">Reset</button>
+      </div>
+      <p class="hint q-status" id="q-count" role="status" aria-live="polite"></p>
+      <p class="notice" role="note" id="q-note" hidden><span class="icon" aria-hidden="true">⚠</span><span id="q-note-text"></span></p>
+      <ul class="legend q-legend">
+        <li><span class="sw ctx-relevant"></span>Labeled relevant</li>
+        <li><span class="sw ctx-good"></span>Not labeled, but the answer was judged right and grounded (see Label audit)</li>
+        <li><span class="sw ctx-plain"></span>Other retrieved passage</li>
+        <li><span class="sw ctx-out"></span>Ranked but not shown to the generator</li>
+      </ul>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Questions table">
+        <table id="q-table">
+          <thead><tr><th scope="col">ID</th><th scope="col">Question</th><th scope="col">Category</th><th scope="col">Answer score by system</th><th scope="col" class="n">Spread</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p class="hint"><button type="button" class="btn" id="q-more" hidden>Show more</button></p>
+      <noscript><p class="empty">The question explorer needs JavaScript. The same data is in <code>per_question_results.jsonl</code> in the run directory.</p></noscript>
+      <p class="hint">Keys: <kbd>↑</kbd> <kbd>↓</kbd> move between questions, <kbd>Enter</kbd> opens or closes one, <kbd>Esc</kbd> closes it, <kbd>/</kbd> jumps to search. Spread is the best answer score minus the worst across systems; a score of 0 to 5 per answer, chips shaded like the heatmap (darker is higher), a ringed chip is a failure.</p>
+    </section>
+    {% endif %}
+
     <section class="block" id="repro" aria-labelledby="h-repro">
       <header><span class="num">{{ sec.repro }}</span><h2 id="h-repro">Reproducibility</h2></header>
       <dl class="repro">
@@ -263,7 +296,8 @@
   <footer>RAGBench · {{ repo_text }}</footer>
 </div>
 <script type="application/json" id="report-data">{{ blob | safe }}</script>
-<script>
+{% if questions %}<script type="application/json" id="questions-data">{{ questions_blob | safe }}</script>
+{% endif %}<script>
 {{ js | safe }}
 </script>
 </body>

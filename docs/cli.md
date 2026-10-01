@@ -4,6 +4,8 @@
 
 RAGBench: evaluation-first RAG benchmark framework.
 
+Exit codes: 0 success; 1 the command ran and ended badly (a run stopped, no system qualifies, you declined); 2 it could not start because of its input or setup (a flag, file, config, dataset, missing package or API key). Messages go to stderr, so a command with --json prints only JSON on stdout. `--debug` (before the command) shows the traceback of a failure.
+
 **Usage**:
 
 ```console
@@ -13,27 +15,168 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 **Options**:
 
 * `--version`: Show version and exit.
-* `--install-completion`: Install completion for the current shell.
-* `--show-completion`: Show completion for the current shell, to copy it or customize the installation.
+* `--debug`: Show the full traceback when a command fails (put it before the command: `ragbench --debug run ...`).  [env var: RAGBENCH_DEBUG]
 * `--help`: Show this message and exit.
 
 **Commands**:
 
+* `run`: Run a config: every system on the same...
+* `compare`: Run multiple systems from one config (the...
+* `estimate`: Project what a run would cost and how long...
+* `recommend`: Which system to deploy, from a finished...
+* `auto`: From a folder of documents to a decision:...
 * `demo`: Create or verify the bundled demo dataset.
 * `inspect-dataset`: Profile a dataset: sizes and balance,...
 * `generate-questions`: Write questions for documents that have...
 * `label`: Propose relevance labels for a run by...
-* `auto`: From a folder of documents to a decision:...
 * `init`: Start a benchmark of your own documents:...
 * `import`: Convert a CSV, BEIR dataset or Markdown...
 * `chunk-preview`: Show how a chunker cuts your documents:...
 * `list-systems`: Print available RAG systems with their...
-* `run`: Run a single config.
-* `compare`: Run multiple systems from one config.
-* `estimate`: Project what a run would cost and how long...
-* `recommend`: Which system to deploy, from a finished...
-* `evaluate`: Alias for run/compare.
 * `cache`: Inspect or clear the persistent cache of...
+* `completion`: Shell completion for the `ragbench` command.
+* `report`: Rebuild every report of a finished run...
+* `compare-runs`: How a later run moved against an earlier...
+* `doctor`: Check Python, packages, optional extras,...
+* `runs`: List, inspect, remove and index the runs...
+
+## `ragbench run`
+
+Run a config: every system on the same questions, then the report and a recommendation.
+
+**Usage**:
+
+```console
+$ ragbench run [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
+* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
+* `--docs <path>`: Documents folder for --preset.
+* `--questions <path>`: Questions JSONL for --preset.
+* `--qrels <path>`: Optional qrels JSONL for --preset.
+* `--only, --systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
+* `--skip <str>`: Leave these systems out (names or sweep base names, comma-separated or repeated). Applied after --only.
+* `--mock`: Force local mock mode even if OPENAI_API_KEY is set.
+* `--max-workers <int range>`: Override evaluation.max_workers: questions answered at the same time within a system.  [x>=1]
+* `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
+* `--no-cache`: Do not read or write the persistent disk cache for this run.
+* `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
+* `--json`: Print one JSON document on stdout when the run ends (progress and messages go to stderr), for scripts and CI.
+* `--help`: Show this message and exit.
+
+## `ragbench compare`
+
+Run multiple systems from one config (the same as `run`).
+
+**Usage**:
+
+```console
+$ ragbench compare [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
+* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
+* `--docs <path>`: Documents folder for --preset.
+* `--questions <path>`: Questions JSONL for --preset.
+* `--qrels <path>`: Optional qrels JSONL for --preset.
+* `--only, --systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
+* `--skip <str>`: Leave these systems out (names or sweep base names, comma-separated or repeated). Applied after --only.
+* `--mock`: Force local mock mode even if OPENAI_API_KEY is set.
+* `--max-workers <int range>`: Override evaluation.max_workers: questions answered at the same time within a system.  [x>=1]
+* `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
+* `--no-cache`: Do not read or write the persistent disk cache for this run.
+* `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
+* `--json`: Print one JSON document on stdout when the run ends (progress and messages go to stderr), for scripts and CI.
+* `--help`: Show this message and exit.
+
+## `ragbench estimate`
+
+Project what a run would cost and how long it would take, without spending anything.
+
+Runs every system on the offline mock models (corpus indexing in full, a sample of the questions) to measure prompts and call
+counts, then prices them with the configured models. Warns when the price table is old or a model has no price.
+
+**Usage**:
+
+```console
+$ ragbench estimate [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
+* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
+* `--docs <path>`: Documents folder for --preset.
+* `--questions <path>`: Questions JSONL for --preset.
+* `--qrels <path>`: Optional qrels JSONL for --preset.
+* `--only, --systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
+* `--skip <str>`: Leave these systems out (names or sweep base names, comma-separated or repeated). Applied after --only.
+* `--help`: Show this message and exit.
+
+## `ragbench recommend`
+
+Which system to deploy, from a finished run: ranked by your constraints and priorities, with the reasons.
+
+Starts from the run's own `selection:` settings; the options here override them. Exits with status 1 when no system qualifies.
+
+**Usage**:
+
+```console
+$ ragbench recommend [OPTIONS]
+```
+
+**Options**:
+
+* `--run <path>`: A finished run directory, e.g. results/<run>.  [required]
+* `--profile <str>`: balanced, max_quality, cheapest_acceptable or lowest_latency. Default: the run's `selection.profile`.
+* `--max-cost <float range>`: Highest acceptable mean cost per question, in dollars.  [x>=0]
+* `--max-latency <float range>`: Highest acceptable p95 latency, in milliseconds.  [x>=0]
+* `--min-faithfulness <float range>`: Lowest acceptable mean faithfulness (0-5).  [0<=x<=5]
+* `--min-answer-score <float range>`: Lowest acceptable mean answer score (0-5).  [0<=x<=5]
+* `--max-ingestion-cost <float range>`: Highest acceptable one-off indexing cost, in dollars.  [x>=0]
+* `--local-models`: Only systems whose models all run on this machine.
+* `--no-network`: Only systems that send no data off this machine (local models, no network tools).
+* `--export <path>`: Write the winner's runnable config to this file.
+* `--json`: Print the recommendation as JSON on stdout instead of the panel (the exit status is the same).
+* `--help`: Show this message and exit.
+
+## `ragbench auto`
+
+From a folder of documents to a decision: profile them, write questions if you have none, run the preset, and recommend a system.
+
+Writes everything to one run directory (questions, results, recommendation.md, winner.yaml, report.html). If it stops (budget, a crash, Ctrl-C),
+`--resume RUN_DIR` continues without paying again for the systems that finished.
+
+**Usage**:
+
+```console
+$ ragbench auto [OPTIONS]
+```
+
+**Options**:
+
+* `--docs <path>`: Your documents: a folder, or one file.
+* `--questions <path>`: Your questions JSONL. Without it, questions are written from your documents (flagged needs_review).
+* `--qrels <path>`: Optional qrels JSONL for --questions.
+* `--preset <str>`: Which systems to compare: quick, standard, thorough, agentic.  [default: standard]
+* `--profile <str>`: What the recommendation optimizes: balanced, max_quality, cheapest_acceptable or lowest_latency.  [default: balanced]
+* `--n-questions <int range>`: How many questions to write when you have none.  [default: 50; x>=1]
+* `--seed <int>`: Seed for writing questions.  [default: 0]
+* `--max-cost <float range>`: Total dollars to spend (writing questions plus the run). The run stops once it is reached.  [x>=0]
+* `--model <str>`: Model ref that writes the questions (default: the default generator model).
+* `-c, --config <path>`: Take models, providers, pricing, evaluation and selection settings from this config (its systems and dataset are not used).
+* `--output-dir <path>`: Where the run directory is created.  [default: results]
+* `--resume <path>`: Continue an earlier auto run in this directory: finished systems are kept, the rest are run.
+* `--mock`: Force local mock mode: nothing is paid for and the scores only validate the pipeline.
+* `--no-cache`: Do not read or write the persistent disk cache.
+* `-y, --yes`: Do not ask before spending more than evaluation.cost_confirm_threshold_usd.
+* `--open`: Open report.html in your browser when done.
+* `--help`: Show this message and exit.
 
 ## `ragbench demo`
 
@@ -123,39 +266,6 @@ $ ragbench label [OPTIONS]
 * `--force`: With --apply: replace an existing qrels.merged.jsonl.
 * `--help`: Show this message and exit.
 
-## `ragbench auto`
-
-From a folder of documents to a decision: profile them, write questions if you have none, run the preset, and recommend a system.
-
-Writes everything to one run directory (questions, results, recommendation.md, winner.yaml, report.html). If it stops (budget, a crash, Ctrl-C),
-`--resume RUN_DIR` continues without paying again for the systems that finished.
-
-**Usage**:
-
-```console
-$ ragbench auto [OPTIONS]
-```
-
-**Options**:
-
-* `--docs <path>`: Your documents: a folder, or one file.
-* `--questions <path>`: Your questions JSONL. Without it, questions are written from your documents (flagged needs_review).
-* `--qrels <path>`: Optional qrels JSONL for --questions.
-* `--preset <str>`: Which systems to compare: quick, standard, thorough, agentic.  [default: standard]
-* `--profile <str>`: What the recommendation optimizes: balanced, max_quality, cheapest_acceptable or lowest_latency.  [default: balanced]
-* `--n-questions <int range>`: How many questions to write when you have none.  [default: 50; x>=1]
-* `--seed <int>`: Seed for writing questions.  [default: 0]
-* `--max-cost <float range>`: Total dollars to spend (writing questions plus the run). The run stops once it is reached.  [x>=0]
-* `--model <str>`: Model ref that writes the questions (default: the default generator model).
-* `-c, --config <path>`: Take models, providers, pricing, evaluation and selection settings from this config (its systems and dataset are not used).
-* `--output-dir <path>`: Where the run directory is created.  [default: results]
-* `--resume <path>`: Continue an earlier auto run in this directory: finished systems are kept, the rest are run.
-* `--mock`: Force local mock mode: nothing is paid for and the scores only validate the pipeline.
-* `--no-cache`: Do not read or write the persistent disk cache.
-* `-y, --yes`: Do not ask before spending more than evaluation.cost_confirm_threshold_usd.
-* `--open`: Open report.html in your browser when done.
-* `--help`: Show this message and exit.
-
 ## `ragbench init`
 
 Start a benchmark of your own documents: write a ready-to-run config and a questions file to edit.
@@ -233,130 +343,6 @@ $ ragbench list-systems [OPTIONS]
 
 * `--help`: Show this message and exit.
 
-## `ragbench run`
-
-Run a single config.
-
-**Usage**:
-
-```console
-$ ragbench run [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
-* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
-* `--docs <path>`: Documents folder for --preset.
-* `--questions <path>`: Questions JSONL for --preset.
-* `--qrels <path>`: Optional qrels JSONL for --preset.
-* `--systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
-* `--mock`: Force local mock mode even if OPENAI_API_KEY is set.
-* `--max-workers <int range>`: Override evaluation.max_workers: questions answered at the same time within a system.  [x>=1]
-* `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
-* `--no-cache`: Do not read or write the persistent disk cache for this run.
-* `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
-* `--help`: Show this message and exit.
-
-## `ragbench compare`
-
-Run multiple systems from one config.
-
-**Usage**:
-
-```console
-$ ragbench compare [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
-* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
-* `--docs <path>`: Documents folder for --preset.
-* `--questions <path>`: Questions JSONL for --preset.
-* `--qrels <path>`: Optional qrels JSONL for --preset.
-* `--systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
-* `--mock`: Force local mock mode even if OPENAI_API_KEY is set.
-* `--max-workers <int range>`: Override evaluation.max_workers: questions answered at the same time within a system.  [x>=1]
-* `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
-* `--no-cache`: Do not read or write the persistent disk cache for this run.
-* `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
-* `--help`: Show this message and exit.
-
-## `ragbench estimate`
-
-Project what a run would cost and how long it would take, without spending anything.
-
-Runs every system on the offline mock models (corpus indexing in full, a sample of the questions) to measure prompts and call
-counts, then prices them with the configured models. Warns when the price table is old or a model has no price.
-
-**Usage**:
-
-```console
-$ ragbench estimate [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
-* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
-* `--docs <path>`: Documents folder for --preset.
-* `--questions <path>`: Questions JSONL for --preset.
-* `--qrels <path>`: Optional qrels JSONL for --preset.
-* `--systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
-* `--help`: Show this message and exit.
-
-## `ragbench recommend`
-
-Which system to deploy, from a finished run: ranked by your constraints and priorities, with the reasons.
-
-Starts from the run's own `selection:` settings; the options here override them. Exits with status 1 when no system qualifies.
-
-**Usage**:
-
-```console
-$ ragbench recommend [OPTIONS]
-```
-
-**Options**:
-
-* `--run <path>`: A finished run directory, e.g. results/<run>.  [required]
-* `--profile <str>`: balanced, max_quality, cheapest_acceptable or lowest_latency. Default: the run's `selection.profile`.
-* `--max-cost <float range>`: Highest acceptable mean cost per question, in dollars.  [x>=0]
-* `--max-latency <float range>`: Highest acceptable p95 latency, in milliseconds.  [x>=0]
-* `--min-faithfulness <float range>`: Lowest acceptable mean faithfulness (0-5).  [0<=x<=5]
-* `--min-answer-score <float range>`: Lowest acceptable mean answer score (0-5).  [0<=x<=5]
-* `--max-ingestion-cost <float range>`: Highest acceptable one-off indexing cost, in dollars.  [x>=0]
-* `--local-models`: Only systems whose models all run on this machine.
-* `--no-network`: Only systems that send no data off this machine (local models, no network tools).
-* `--export <path>`: Write the winner's runnable config to this file.
-* `--help`: Show this message and exit.
-
-## `ragbench evaluate`
-
-Alias for run/compare.
-
-**Usage**:
-
-```console
-$ ragbench evaluate [OPTIONS]
-```
-
-**Options**:
-
-* `-c, --config <path>`: YAML config to run. Systems with a `sweep:` are expanded into one system per combination.
-* `--preset <str>`: Use a ready-made list of systems (quick, standard, thorough, agentic) instead of the config's own; the dataset comes from --docs/--questions or the config.
-* `--docs <path>`: Documents folder for --preset.
-* `--questions <path>`: Questions JSONL for --preset.
-* `--qrels <path>`: Optional qrels JSONL for --preset.
-* `--systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
-* `--mock`: Force local mock mode even if OPENAI_API_KEY is set.
-* `--max-workers <int range>`: Override evaluation.max_workers: questions answered at the same time within a system.  [x>=1]
-* `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
-* `--no-cache`: Do not read or write the persistent disk cache for this run.
-* `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
-* `--help`: Show this message and exit.
-
 ## `ragbench cache`
 
 Inspect or clear the persistent cache of LLM responses and corpus embeddings.
@@ -406,4 +392,211 @@ $ ragbench cache clear [OPTIONS]
 * `--cache-dir <path>`: Cache directory (default: $RAGBENCH_CACHE_DIR or .ragbench_cache).
 * `--namespace <str>`: Only clear this namespace: `llm` or `embeddings`.
 * `-y, --yes`: Do not ask for confirmation.
+* `--help`: Show this message and exit.
+
+## `ragbench completion`
+
+Shell completion for the `ragbench` command.
+
+**Usage**:
+
+```console
+$ ragbench completion [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `show`: Print the completion script, to review it...
+* `install`: Install tab completion for your shell...
+
+### `ragbench completion show`
+
+Print the completion script, to review it or to source it yourself.
+
+**Usage**:
+
+```console
+$ ragbench completion show [OPTIONS]
+```
+
+**Options**:
+
+* `--shell <str>`: bash, zsh, fish, powershell, pwsh (default: the shell in $SHELL).
+* `--help`: Show this message and exit.
+
+### `ragbench completion install`
+
+Install tab completion for your shell (writes a script and, for bash and zsh, a line in your shell's startup file).
+
+**Usage**:
+
+```console
+$ ragbench completion install [OPTIONS]
+```
+
+**Options**:
+
+* `--shell <str>`: bash, zsh, fish, powershell, pwsh (default: the shell in $SHELL).
+* `--help`: Show this message and exit.
+
+## `ragbench report`
+
+Rebuild every report of a finished run (leaderboard.md, failures.md, qrels_audit.md, the recommendation, report.html) from its files.
+
+Nothing is re-run and nothing is paid for: a run directory holds everything its reports are made of.
+
+**Usage**:
+
+```console
+$ ragbench report [OPTIONS] {run}
+```
+
+**Arguments**:
+
+* `run`: A run directory, its name under --results-dir, `latest`, or part of a name.  [required]
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--open`: Open report.html in your browser when done.
+* `--help`: Show this message and exit.
+
+## `ragbench compare-runs`
+
+How a later run moved against an earlier one, per system: metric changes and whether an answer-score drop is real.
+
+**Usage**:
+
+```console
+$ ragbench compare-runs [OPTIONS] {a} {b}
+```
+
+**Arguments**:
+
+* `a`: The earlier (baseline) run: a directory, a name under --results-dir, or `latest`.  [required]
+* `b`: The later run.  [required]
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--min-drop <float range>`: When two runs share too few questions to test, flag an answer-score drop larger than this.  [default: 0.25; x>=0]
+* `--fail-on-regression`: Exit with status 1 when any system regressed (for CI).
+* `--json`: Print the comparison as JSON on stdout.
+* `--help`: Show this message and exit.
+
+## `ragbench doctor`
+
+Check Python, packages, optional extras, API keys (never shown), folders and the price table. Exits with status 1 if something is broken.
+
+**Usage**:
+
+```console
+$ ragbench doctor [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config <path>`: Also check every model this config calls against the price table and the credentials it needs.
+* `--results-dir <path>`: The folder runs are written to.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--cache-dir <path>`: Cache directory (default: $RAGBENCH_CACHE_DIR or .ragbench_cache).
+* `--json`: Print the checks as JSON on stdout.
+* `--help`: Show this message and exit.
+
+## `ragbench runs`
+
+List, inspect, remove and index the runs in a results folder.
+
+**Usage**:
+
+```console
+$ ragbench runs [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--json`: Print JSON on stdout instead of a table.
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `list`: A table of runs, newest first: date, name,...
+* `show`: One run in detail: its leaderboard,...
+* `rm`: Delete a run directory.
+* `index`: Write results/index.html: every run with...
+
+### `ragbench runs list`
+
+A table of runs, newest first: date, name, mode, systems, questions, winner, cost.
+
+**Usage**:
+
+```console
+$ ragbench runs list [OPTIONS]
+```
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--json`: Print JSON on stdout instead of a table.
+* `--help`: Show this message and exit.
+
+### `ragbench runs show`
+
+One run in detail: its leaderboard, recommendation and files.
+
+**Usage**:
+
+```console
+$ ragbench runs show [OPTIONS] {run}
+```
+
+**Arguments**:
+
+* `run`: A run directory, its name under --results-dir, `latest`, or part of a name.  [required]
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--json`: Print the run as JSON on stdout.
+* `--help`: Show this message and exit.
+
+### `ragbench runs rm`
+
+Delete a run directory. Only a directory that looks like a run is ever removed.
+
+**Usage**:
+
+```console
+$ ragbench runs rm [OPTIONS] {run}
+```
+
+**Arguments**:
+
+* `run`: A run directory or its name under --results-dir (a part of a name is not enough for a delete).  [required]
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `-y, --yes`: Delete without asking.
+* `--help`: Show this message and exit.
+
+### `ragbench runs index`
+
+Write results/index.html: every run with its winner and a link to its report, and a score-over-time line per system.
+
+**Usage**:
+
+```console
+$ ragbench runs index [OPTIONS]
+```
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--open`: Open the page in your browser.
 * `--help`: Show this message and exit.

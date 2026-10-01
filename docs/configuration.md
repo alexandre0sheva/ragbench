@@ -50,12 +50,13 @@ evaluation:
   # system_workers: 1, ingest_workers: 4, latency_probe_questions: 5  (see Concurrency)
   # judge: {...} (see Judge), stats: {n_boot: 2000, seed: 0, baseline: null} (see Statistics)
 # selection: {profile: balanced, constraints: {...}} (see Selection)
+# report: {max_embedded_mb: 4}  (see Report)
 # max_cost_usd: 25, cost_confirm_threshold_usd: 1.0  (see Estimating cost and capping it)
 ```
 
 ## Chunkers
 
-How documents are cut into chunks is a comparison axis of its own. Every system except `parent_doc` has a `chunker:` section; `type` picks the chunker and the common fields tune it (full option table: [systems.md](systems.md)).
+How documents are cut into chunks is a comparison axis of its own. A system that cuts documents into chunks has a `chunker:` section (`parent_doc` takes a parent/child form of it; systems that read whole documents or sentences have none, and [systems.md](systems.md) says which); `type` picks the chunker and the common fields tune it (full option table: [systems.md](systems.md)).
 
 | `type` | Splits on | `chunk_size` / `chunk_overlap` unit | Notes |
 | --- | --- | --- | --- |
@@ -154,6 +155,17 @@ selection:
 
 `ragbench recommend --run results/<run>` re-asks the question of a finished run, starting from its own `selection:` settings; `--profile`, `--max-cost`, `--max-latency`, `--min-faithfulness`, `--min-answer-score`, `--max-ingestion-cost`, `--local-models` and `--no-network` override them, and `--export winner.yaml` writes the winner's runnable config (see [cli.md](cli.md)). It exits with status 1 when no system qualifies. An unknown profile or constraint name is an error when the config loads.
 
+## Report
+
+`report:` tunes `report.html`. Its one option is the size of the question explorer's data:
+
+```yaml
+report:
+  max_embedded_mb: 4     # most per-question data (answers, contexts, traces) embedded in the page
+```
+
+The "Questions" section of the report ([methodology.md](methodology.md#reading-the-report)) is built from `per_question_results.jsonl`, with answers cut to 1,200 characters, context and trace previews to 260 and 300. When all of it fits in `max_embedded_mb` it is embedded and the page works from anywhere, including a `file://` URL or an email attachment. When it does not, the page keeps a reduced copy (shorter text and no trace previews, then scores only, then only the questions that failed or divided the systems most) and the complete data is written to `report_questions.json` next to `report.html`. The page loads that file by itself when it is served over http (for example `python -m http.server` in the run directory); opened from disk it stays with the reduced copy and says so. A value of 0 or less is an error when the config loads.
+
 ## Sweeps
 
 To explore an axis (chunk size × reranker × tool set) without writing a block per combination, give one system a `sweep:`. It becomes one system per combination, named `base[axis=value,...]`:
@@ -173,7 +185,7 @@ systems:
 - Every variant is validated like a hand-written system, a duplicate name is an error, and one sweep may not expand to more than 100 systems.
 - The run directory's `config.yaml` holds the **expanded** systems (a config without sweeps is copied verbatim, comments included), so `ragbench recommend` and `winner.yaml` work on variant names.
 
-`--systems hr,bm25` (or repeated `--systems`) runs only some of the systems of a config, after sweeps are expanded; a sweep's base name (`hr`) selects all of its variants, and a full variant name selects one.
+`--only hr,bm25` (or repeated `--only`; `--systems` is the older name) runs only some of the systems of a config, and `--skip bm25` leaves some out, after sweeps are expanded; a sweep's base name (`hr`) selects all of its variants, and a full variant name selects one. An unknown name is an error with a suggestion.
 
 ## Presets
 
@@ -215,7 +227,7 @@ evaluation:
 ```
 
 - **Confirmation.** Before a live run (never a mock one) `run` / `compare` print the estimate. Above the threshold they ask `Run it for about $X?`, unless you pass `--yes`; with no terminal to ask (a pipe, a cron job) or with `CI` set they refuse and tell you to pass `--yes`. If the estimate itself fails, the run goes ahead with a warning.
-- **Budget cap.** `max_cost_usd` counts what the run is charged (ingestion, answers and judging, at standalone prices, so it is an upper bound of real spend when the cache is warm). Once it is reached no new question or system starts; questions already running finish, so the total can end up over the cap by about one question's cost per worker. The run then writes the results of every system that **finished**, saves the answers of unfinished systems in `per_question_partial.jsonl`, leaves them out of the leaderboard and the recommendation (a mean over some questions cannot be compared with a mean over all of them), records the outcome under `budget` in `run_summary.json`, prints which systems were and were not finished, and exits with status 1. Raise the cap, run fewer systems (`--systems`) or questions, or estimate first.
+- **Budget cap.** `max_cost_usd` counts what the run is charged (ingestion, answers and judging, at standalone prices, so it is an upper bound of real spend when the cache is warm). Once it is reached no new question or system starts; questions already running finish, so the total can end up over the cap by about one question's cost per worker. The run then writes the results of every system that **finished**, saves the answers of unfinished systems in `per_question_partial.jsonl`, leaves them out of the leaderboard and the recommendation (a mean over some questions cannot be compared with a mean over all of them), records the outcome under `budget` in `run_summary.json`, prints which systems were and were not finished, and exits with status 1. Raise the cap, run fewer systems (`--only` / `--skip`) or questions, or estimate first.
 
 ## System options
 
@@ -383,7 +395,7 @@ The `adaptive` system sends each question to one of several pipelines you define
 
 ## Vector Store
 
-`retrieval.vector_store` selects the backend of every system that searches embeddings (`vector`, `hybrid`, `hybrid_rerank`, `rerank`, `parent_doc`, `hyde`, `llm_heavy`). The backend is a comparison axis like the chunker or the reranker:
+`retrieval.vector_store` selects the backend of every system that searches embeddings (the systems whose option table in [systems.md](systems.md) has a `vector_store` row). The backend is a comparison axis like the chunker or the reranker:
 
 | `vector_store` | Search | Install | Notes |
 | --- | --- | --- | --- |
@@ -402,4 +414,4 @@ retrieval:
 - `in_memory` is a deprecated alias of `numpy` (it logs a warning once). Chroma used to be the default and a mandatory dependency; configs that say `vector_store: chroma` keep working once `ragbench[chroma]` is installed.
 - `persist_directory` only applies to `chroma` and `qdrant`; setting it with another backend is a config error.
 - FAISS publishes no macOS wheel for Python 3.14 yet (Linux and Python 3.11-3.13 are fine).
-- Backends are pluggable: register a class with `@VECTOR_BACKENDS.register("name")` or an entry point in the `ragbench.vector_backends` group (see [extending.md](extending.md)).
+- Backends are pluggable: register a class with `@VECTOR_BACKENDS.register("name")` (see [extending.md](extending.md)).

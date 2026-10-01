@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 import threading
-from pathlib import Path
 
 import pandas as pd
 import pytest
+from dataset_support import write_pair_dataset
 
 from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document
@@ -16,7 +16,7 @@ from ragbench.models.cost import CostBreakdown
 from ragbench.models.llms import LLMResult, MockLLM
 from ragbench.models.prompts import CHECK_GROUNDED_MARKER, GRADE_CHUNKS_MARKER, NEXT_HOP_MARKER, REWRITE_QUERY_MARKER
 from ragbench.rag_systems import all_specs, create_rag_system
-from ragbench.utils.jsonl import read_jsonl, write_jsonl
+from ragbench.utils.jsonl import read_jsonl
 
 PER_CALL = 0.01
 QUESTION = "How do Zorblax turbines make energy?"
@@ -345,22 +345,8 @@ def test_both_systems_are_registered_as_agentic_and_reject_typos():
 # --- the evaluator ----------------------------------------------------------------------------------------------------------
 
 
-def _dataset(root: Path) -> None:
-    docs = root / "docs"
-    docs.mkdir(parents=True)
-    (docs / "doc_001.md").write_text("# Pricing\n\nHarborShield costs $200 per month for the marine module.\n")
-    (docs / "doc_002.md").write_text("# Roadmap\n\nClaimPilot ships in Q3 with claims triage workflows.\n")
-    write_jsonl(
-        root / "questions.jsonl",
-        [
-            {"id": "q_001", "question": "How much does HarborShield cost?", "reference_answer": "$200 per month.", "relevant_doc_ids": ["doc_001"], "category": "direct_fact"},
-            {"id": "q_002", "question": "When does ClaimPilot ship?", "reference_answer": "Q3.", "relevant_doc_ids": ["doc_002"], "category": "direct_fact"},
-        ],
-    )
-
-
 def test_the_evaluator_records_the_agent_block_and_summarizes_agentic_systems_only(tmp_path):
-    _dataset(tmp_path / "data")
+    write_pair_dataset(tmp_path / "data", ids=("q_001", "q_002"))
     config = tmp_path / "config.yaml"
     config.write_text(
         f"""

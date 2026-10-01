@@ -6,68 +6,173 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
-    name: Python ${{ matrix.python-version }}
+  lint:
+    name: Lint and types
     runs-on: ubuntu-latest
-    # 3.14 is best-effort until every dependency (notably chromadb's onnxruntime) ships wheels for it.
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,anthropic,pdf,docx]"
+      - name: Ruff
+        run: ruff check .
+      - name: Mypy
+        run: mypy
+
+  docs:
+    name: Generated docs are current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: docs/systems.md, docs/cli.md, docs/tools.md and the README system table match the code
+        run: python scripts/generate_docs.py --check
+      - name: Links resolve, and nothing is documented twice
+        run: python scripts/audit_docs.py
+
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    # 3.14 is best-effort until every dependency ships wheels for it.
     continue-on-error: ${{ matrix.python-version == '3.14' }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install package
+          cache: pip
+      - name: Install
         run: |
           python -m pip install --upgrade pip
-          # Optional extras are installed here so the real-SDK provider tests and the PDF / Word loader tests run (they skip without them).
+          # The SDK and loader extras are installed so the real-SDK provider tests and the PDF / Word loader tests run instead of skipping.
           python -m pip install -e ".[dev,anthropic,pdf,docx]"
+      - name: Tests with coverage (the floor is `fail_under` in pyproject.toml)
+        run: pytest --cov --cov-report=term --cov-report=xml
+      - name: Upload the coverage report
+        if: matrix.python-version == '3.13'
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
 
-      - name: Lint
-        run: ruff check .
-
-      - name: Type check
-        run: mypy
-
-      - name: Generated docs are current
-        run: python scripts/generate_docs.py --check
-
-      - name: Test
-        run: pytest
-
-      - name: Smoke test CLI
-        run: |
-          ragbench demo
-          ragbench inspect-dataset --docs data/demo/docs --questions data/demo/questions.jsonl --qrels data/demo/qrels.jsonl
-          ragbench run --config configs/recommended.yaml --mock --max-workers 2
-
-
-  backends:
-    name: Vector backends (chroma, faiss)
+  extras:
+    name: Tests with every optional extra
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-
-      - name: Install package with the optional vector backends
+          cache: pip
+      - name: Install with the vector backends, loaders and the Anthropic SDK
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,chroma,faiss,qdrant]"
+          python -m pip install -e ".[dev,anthropic,pdf,docx,chroma,faiss,qdrant]"
+      - name: Full test suite (backend tests and the live path run against real Chroma / FAISS / Qdrant)
+        run: pytest
 
-      - name: Backend tests and the live path (real Chroma on worker threads)
-        run: pytest tests/test_vector_backends.py tests/test_live_path.py
+  smoke:
+    name: CLI smoke test (mock mode)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install with no extras, as a first-time user would
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Environment check
+        run: ragbench doctor
+      - name: Documents to a decision, in one command
+        run: |
+          ragbench demo
+          ragbench auto --docs data/demo/docs --questions data/demo/questions.jsonl --qrels data/demo/qrels.jsonl --preset quick --mock --yes --output-dir smoke_results
+      - name: The run directory is complete and the history tools read it
+        run: |
+          run_dir=$(ls -d smoke_results/*/ | head -n 1)
+          test -f "$run_dir/report.html" && test -f "$run_dir/winner.yaml" && test -f "$run_dir/recommendation.json"
+          ragbench report "$run_dir"
+          ragbench runs --results-dir smoke_results
+          ragbench runs index --results-dir smoke_results
+          ragbench compare-runs "$run_dir" "$run_dir" --fail-on-regression
+      - name: A config run, with the old and the new flags
+        run: |
+          ragbench inspect-dataset --docs data/demo/docs --questions data/demo/questions.jsonl --qrels data/demo/qrels.jsonl
+          ragbench run --config configs/recommended.yaml --mock --max-workers 2 --json > run.json
+          python -c "import json; assert json.load(open('run.json'))['status'] == 'complete'"
+
+  build:
+    name: Package build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Build the sdist and wheel and check their metadata
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          twine check --strict dist/*
+      - name: The wheel carries the demo data, the report templates and the typing marker
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          for needed in ("ragbench/py.typed", "ragbench/reporting/templates/report.html.j2", "ragbench/reporting/templates/runs_index.html.j2", "ragbench/_data/demo/questions.jsonl"):
+              assert needed in names, f"missing from the wheel: {needed}"
+          PY
+      - name: The wheel installs and runs in a clean environment
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install dist/*.whl
+          cd "$(mktemp -d)"
+          /tmp/clean/bin/ragbench --version
+          /tmp/clean/bin/ragbench demo
+          /tmp/clean/bin/ragbench run --preset quick --docs data/demo/docs --questions data/demo/questions.jsonl --mock --max-workers 2
+
+  audit:
+    name: Dependency audit (advisory)
+    runs-on: ubuntu-latest
+    # Findings are worth reading, but a new advisory in a dependency must not block unrelated work.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: pip-audit
+        run: |
+          python -m pip install --upgrade pip pip-audit
+          python -m pip install -e ".[anthropic,pdf,docx]"
+          pip-audit --skip-editable

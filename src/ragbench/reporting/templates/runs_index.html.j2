@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RAGBench runs</title>
+<style>
+:root { color-scheme: light; --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #6b6a66; --hair: rgba(11,11,11,.10); --accent: #2a78d6; --warn: #fab219; --warn-wash: rgba(250,178,25,.13); --sans: system-ui, -apple-system, "Segoe UI", sans-serif; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --page: #0d0d0d; --surface: #1a1a19; --ink: #fff; --ink-2: #c3c2b7; --ink-3: #a9a8a0; --hair: rgba(255,255,255,.10); --accent: #3987e5; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.55 var(--sans); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 64px; }
+header { padding: 22px 0 14px; border-bottom: 2px solid var(--ink); }
+h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+h2 { margin: 40px 0 6px; font-size: 20px; }
+p.sub { margin: 4px 0 14px; color: var(--ink-3); font-size: 14px; max-width: 70ch; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--hair); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 9px 12px; border-bottom: 1px solid var(--hair); text-align: left; vertical-align: middle; }
+thead th { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+tbody tr:last-child > * { border-bottom: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+a { color: var(--accent); }
+.mono { font-family: var(--mono); font-size: 13px; }
+.pill { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .08em; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--ink); }
+.pill.mock, .pill.incomplete { border-color: var(--warn); background: var(--warn-wash); }
+.winner { font-weight: 650; }
+.muted { color: var(--ink-3); }
+svg.spark { display: block; }
+svg.spark .line { stroke: var(--ink-2); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+svg.spark .last { fill: var(--accent); }
+.empty { padding: 18px; border: 1px dashed var(--hair); border-radius: 10px; color: var(--ink-2); }
+footer { margin-top: 48px; font-size: 13px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>RAGBench runs</h1></header>
+  <h2>History</h2>
+  <p class="sub">{{ count }} run{{ '' if count == 1 else 's' }} in <code>{{ folder }}</code>, newest first. Mock runs only validate the pipeline, so compare scores across live runs.</p>
+  {% if runs %}
+  <div class="table-scroll"><table>
+    <thead><tr><th>Date (UTC)</th><th>Run</th><th>Mode</th><th class="n">Systems</th><th class="n">Questions</th><th>Winner</th><th class="n">Cost</th></tr></thead>
+    <tbody>
+    {% for run in runs %}
+      <tr>
+        <td class="mono">{{ run.when }}</td>
+        <td>{% if run.link %}<a href="{{ run.link }}">{{ run.name }}</a>{% else %}{{ run.name }}{% endif %}{% if run.status != 'complete' %} <span class="pill incomplete">INCOMPLETE</span>{% endif %}</td>
+        <td><span class="pill {{ 'mock' if run.mode == 'mock' }}">{{ run.mode | upper }}</span></td>
+        <td class="n">{{ run.systems }}</td>
+        <td class="n">{{ run.questions }}</td>
+        <td>{% if run.winner %}<span class="winner">{{ run.winner }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="n">{{ run.cost }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}<p class="empty">No runs yet. Start one with <code>ragbench run --config configs/all.yaml --mock</code>.</p>{% endif %}
+
+  {% if trends %}
+  <h2>Answer score over time</h2>
+  <p class="sub">One line per system name, oldest run on the left. Each line is scaled to its own range (at least one point of answer score), so compare the First and Latest columns, not the lines, across systems. A system appears under the same name in every run that includes it.</p>
+  <div class="table-scroll"><table>
+    <thead><tr><th>System</th><th>Trend</th><th class="n">Runs</th><th class="n">First</th><th class="n">Latest</th></tr></thead>
+    <tbody>
+    {% for t in trends %}
+      <tr><th scope="row" class="mono">{{ t.system }}</th><td>{{ t.svg | safe }}</td><td class="n">{{ t.runs }}</td><td class="n">{{ t.first }}</td><td class="n">{{ t.latest }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+  <footer>Written by <code>ragbench runs index</code>. Links are relative: move or zip this folder and they keep working.</footer>
+</div>
+</body>
+</html>

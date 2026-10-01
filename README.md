@@ -6,101 +6,28 @@
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Typed](https://img.shields.io/badge/typed-PEP%20561-informational.svg)](https://peps.python.org/pep-0561/)
 
-**RAGBench is an evaluation-first benchmark harness for Retrieval-Augmented Generation.** Run many retrieval architectures — lexical, vector, hybrid, reranked, parent-document, HyDE, LLM-driven and more (see [docs/systems.md](docs/systems.md)) — against the same dataset and questions. Get a leaderboard of retrieval quality, answer quality, faithfulness, latency, and cost.
+**RAGBench tells you which retrieval-augmented generation setup to deploy for *your* documents and *your* questions.** It runs many architectures (lexical, vector, hybrid, reranked, LLM-driven, tool-using agents and more) on the same data, scores retrieval, answers, cost and latency with confidence intervals, and ends with a recommendation and a runnable `winner.yaml`.
 
-It is not a demo chatbot. It answers a single question: *which RAG approach gives the best quality, cost, and speed tradeoff for **my** documents and **my** questions?*
-
-## Results at a glance
-
-Example live run on the bundled demo dataset (numbers below are from a v0.1.0 run with the six original systems on the earlier 45-question dataset; the bundled dataset now has 60 documents and 163 questions across 12 categories — run `ragbench compare --config configs/all.yaml` to produce fresh numbers for all eight systems):
-
-| System | Recall@5 | MRR@10 | nDCG@10 | Answer | Faithfulness | $/Q | Latency | Best for |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| `bm25` | 0.856 | 0.841 | 0.823 | 4.76 | 4.87 | $0.00041 | 1418 ms | Cheap lexical baseline |
-| `vector` | 0.878 | 0.822 | 0.816 | 4.91 | 5.00 | $0.00042 | 1465 ms | Semantic baseline |
-| `hybrid` | 0.856 | 0.867 | 0.837 | 4.79 | 4.98 | $0.00041 | 1449 ms | Balanced lexical + semantic |
-| `rerank` | 0.867 | **0.878** | **0.850** | 4.84 | 4.98 | $0.00043 | 1416 ms | Higher precision retrieval |
-| `parent_doc` | 0.867 | 0.822 | 0.815 | 4.89 | 4.98 | **$0.00038** | **1361 ms** | Small-to-big context |
-| `llm_heavy` | 0.867 | 0.878 | 0.850 | 4.90 | 4.98 | $0.00102 | 3083 ms | Quality-oriented expensive |
-
-**Takeaways from this run:**
-
-- `rerank` achieves the best ranking quality (MRR, nDCG) at near-baseline cost.
-- `llm_heavy` matches `rerank` on quality but costs **2.5×** more and is **2.2×** slower — the extra LLM hops do not pay off on this dataset.
-- `parent_doc` is the cost / latency winner with answer quality nearly tied with the leaders.
-- Bring your own dataset to find out which one wins on yours.
-
-```mermaid
-quadrantChart
-    title Quality vs Cost on the demo dataset
-    x-axis Lower cost --> Higher cost
-    y-axis Lower quality --> Higher quality
-    quadrant-1 Premium
-    quadrant-2 Sweet spot
-    quadrant-3 Avoid
-    quadrant-4 Wasteful
-    bm25: [0.10, 0.55]
-    vector: [0.15, 0.70]
-    hybrid: [0.12, 0.75]
-    rerank: [0.20, 0.92]
-    parent_doc: [0.05, 0.80]
-    llm_heavy: [0.95, 0.92]
-```
+It is not a demo chatbot, and it needs no API key to try: without one it runs on deterministic mock models so you can see the whole pipeline first.
 
 ## Quickstart
 
 ```bash
 pip install -e .
-ragbench auto --docs ./my_docs
+ragbench auto --docs ./my_docs --mock     # drop --mock for a real run: it estimates the cost and asks before spending
 ```
 
-One command from a folder of documents to a decision: it profiles your documents, writes questions from them if you have none (flagged `needs_review`; or bring your own with `--questions`), estimates the cost and asks before spending, runs the `standard` preset (`--preset quick|thorough|agentic`), and ends with the recommended system, a runnable `winner.yaml` and `report.html`, all in one `results/auto_<time>/` directory. Add `--mock` to try it free, `--max-cost 2.00` to cap the spending and `--profile max_quality|cheapest_acceptable|lowest_latency` to change what it optimizes. If it stops (budget, a crash), `ragbench auto --resume results/auto_<time>` continues without paying again for finished systems.
+`auto` profiles your documents, writes questions from them if you have none (flagged `needs_review`; bring your own with `--questions`), runs a preset of systems, and prints the recommended one with the paths of `winner.yaml`, `report.html` and `recommendation.md`. If it stops, `ragbench auto --resume RUN_DIR` continues without paying again. Prefer to write the config yourself? `ragbench init my_ds --docs ./my_docs` scaffolds one; `ragbench demo` and `ragbench run --config configs/all.yaml --mock` run the bundled demo.
 
-To run the bundled demo dataset, or your own config:
+Not sure which architecture to try first, or what to look at in the report? Start with [Choosing an architecture](docs/choosing-an-architecture.md).
 
-```bash
-ragbench demo
-ragbench compare --config configs/all.yaml
-```
+## What you get
 
-Or `ragbench compare --preset quick --docs my_docs/ --questions my_questions.jsonl` for three strong baselines on your data, and `ragbench estimate --config configs/all.yaml` to project the cost first; see [presets, sweeps and budgets](docs/configuration.md#sweeps).
+Each run writes one directory: a **recommendation** (which system to deploy under your constraints, the systems statistically tied with it, a runnable `winner.yaml`), a self-contained **`report.html`** (leaderboard with confidence whiskers, quality-against-cost chart, category heatmap, cost and latency by stage, failure types, and a drill-down into every question with the retrieved passages and the agent's steps), `leaderboard.md`, and the CSV and JSONL files all of it is built from. `ragbench report RUN` rebuilds any report from those files, `ragbench runs` lists past runs and `ragbench compare-runs A B` flags regressions.
 
-Every run ends with a **recommendation**: which system to deploy under your constraints, the systems that are statistically tied with it, and a ready-to-run `winner.yaml` (`ragbench recommend --run results/<run> --max-cost 0.002` re-asks it with other constraints; see [methodology](docs/methodology.md#selection)).
+<!-- Task 32: report screenshots go here (docs/assets/report-desktop-light.png, report-desktop-dark.png, report-mobile.png) -->
 
-Without an `OPENAI_API_KEY`, RAGBench runs in **mock mode** — deterministic hashing embeddings, mock LLM, heuristic judge — so reviewers can exercise the full pipeline immediately. With a key set in your shell or `.env`, it switches to real embeddings, generation, and LLM-as-a-judge. Models are `provider:model` refs (OpenAI, Claude via `pip install 'ragbench[anthropic]'`, any OpenAI-compatible server such as Ollama or vLLM, local `sentence-transformers` embeddings via `ragbench[local]`, cross-encoder reranking via `ragbench[rerank]`). The vector backend is exact NumPy by default; `ragbench[chroma]`, `ragbench[faiss]` and `ragbench[qdrant]` add others; see [configuration](docs/configuration.md#providers--model-refs).
-
-```bash
-# strong default baseline only
-ragbench run --config configs/recommended.yaml
-
-# inspect a custom dataset before running
-ragbench inspect-dataset --docs my_dataset/docs \
-    --questions my_dataset/questions.jsonl \
-    --qrels my_dataset/qrels.jsonl
-```
-
-## Architecture
-
-```mermaid
-flowchart LR
-    A[Documents] --> B[Chunkers]
-    B --> S1[BM25 index]
-    B --> S2[Vector index]
-    B --> S3[Hybrid RRF]
-    S1 --> D[RAG Systems]
-    S2 --> D
-    S3 --> D
-    Q[Questions and qrels] --> E[Evaluator]
-    D --> E
-    E --> M1[Retrieval metrics]
-    E --> M2[Answer judge]
-    E --> M3[Cost tracker]
-    M1 --> R[Reports]
-    M2 --> R
-    M3 --> R
-```
-
-## Compared systems
+## Systems
 
 <!-- systems:start -->
 | System | Description | Typical use |
@@ -127,59 +54,30 @@ flowchart LR
 | `llm_heavy` | LLM-driven ingestion metadata, query rewriting, and reranking | Higher-cost, quality-oriented experiments |
 <!-- systems:end -->
 
-All systems implement the same `BaseRAGSystem` interface and run on any user-supplied dataset — point any config at your own `docs/` + `questions.jsonl` and every approach above is directly comparable on your data. Options for each system are documented in [docs/systems.md](docs/systems.md).
-
-## Metrics
-
-RAGBench scores retrieval (Recall, MRR, nDCG at the document level), the context the generator actually saw, answer quality (LLM judge, token F1, exact match, abstention) and operations (cost, latency, steps, tool calls). Leaderboards show 95% confidence intervals, a paired significance test against a baseline and the Pareto-optimal systems, so a 0.02 gap on 50 questions is not presented as a winner. Definitions, the judge's design and its biases, cost accounting and limitations are in [docs/methodology.md](docs/methodology.md).
-
-## Outputs
-
-While a benchmark runs, the CLI shows live per-system progress (ingestion, then a question-by-question bar) and finishes with a leaderboard table in the terminal, with the best value in each column highlighted.
-
-Each run writes a timestamped directory containing `leaderboard.md`, `report.html`, `report_data.json`, `metrics_summary.csv`, `per_question_results.jsonl`, `retrieval_metrics.csv`, `answer_metrics.csv`, `cost_breakdown.csv`, `failures.md`, `qrels_audit.md`, `system_runtime.csv`, `significance.csv`, `stats.json`, `pareto.json`, `recommendation.md` / `recommendation.json`, `winner.yaml`, `run_summary.json`, and `run_manifest.json` (versions, git commit, config/dataset hashes).
-
-`report.html` is a self-contained page (no CDN, nothing loaded from the network, works offline and prints) built like a decision document: the run banner (mock or live, dataset, spend), the **recommendation** with a copyable `winner.yaml`, a quality-against-cost scatter with the Pareto frontier, a sortable leaderboard with confidence whiskers and significance markers, a category heatmap, stage-cost and latency charts, agent and tool panels when there are any, failure types, a label audit and the reproducibility footer. It follows your light or dark setting, every chart has a table view, and `report_data.json` next to it holds the same data for other tools. How to read it: [methodology](docs/methodology.md#reading-the-report). It is rebuilt from the run's files, so it can be regenerated later.
-
-`qrels_audit.md` is a dataset-quality aid: it surfaces cases where a system was judged to answer well but retrieved documents were not labeled relevant. Treat those rows as candidates for human review, not automatic ground-truth edits.
-
-## Bring your own dataset
-
-```bash
-ragbench init my_ds --docs path/to/your/documents   # writes my_ds/ragbench.yaml and a questions.jsonl to edit
-ragbench run --config my_ds/ragbench.yaml --mock    # free pipeline check; drop --mock for the real run
-```
-
-Put real questions in `my_ds/questions.jsonl` (labels are optional: without `relevant_doc_ids` retrieval metrics are skipped and answers are still judged). No questions yet? `ragbench generate-questions` writes a reviewable set from your documents, and `ragbench label` proposes relevance labels for a finished run. Have questions elsewhere? `ragbench import` converts a CSV, a BEIR dataset or Markdown Q/A pairs, and `ragbench inspect-dataset` profiles the result (sizes, label coverage, suggested chunk sizes, projected cost, likely problems). Formats, importers and label-free mode: [docs/dataset-format.md](docs/dataset-format.md).
-
-## Parallel runs
-
-Systems, questions, ingestion and embedding batches run concurrently (`--system-workers`, `--max-workers`; results are identical to a sequential run), optional rate limits keep you under provider quotas, and live runs re-time a few questions one at a time for clean latency. See [Concurrency](docs/configuration.md#concurrency).
-
-## Caching
-
-Live runs cache paid calls on disk (`.ragbench_cache/`), so re-running an unchanged benchmark costs almost nothing, and systems in one run share corpus embeddings. A cache hit is still charged at standalone prices, so `$/Q` stays comparable ([why](docs/methodology.md#cost-accounting)). See [Caching](docs/configuration.md#caching) for the rules and `ragbench cache stats|clear`.
+Every system implements the same interface and runs on any dataset. Options and trade-offs: [docs/systems.md](docs/systems.md).
 
 ## Documentation
 
-- [Configuration guide](docs/configuration.md)
-- [RAG systems and their options](docs/systems.md) *(generated)*
-- [Command-line reference](docs/cli.md) *(generated)*
-- [Dataset format](docs/dataset-format.md)
-- [Methodology: metrics, judge, cost accounting, limitations](docs/methodology.md)
-- [Extending RAGBench](docs/extending.md)
-- [GitHub setup](docs/github-setup.md)
-- [Release checklist](docs/release-checklist.md)
+- [Choosing an architecture](docs/choosing-an-architecture.md): which systems to try for your corpus, questions, budget and privacy needs, and how to read the result
+- [Configuration](docs/configuration.md): config sections, presets, sweeps, budgets, caching, concurrency, model providers
+- [Dataset format](docs/dataset-format.md): documents, questions, qrels, importers, generating questions and labels
+- [Methodology](docs/methodology.md): metrics, the judge, statistics, cost accounting, how to read the report, limitations
+- [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*
+- [Extending RAGBench](docs/extending.md): new systems, tools, chunkers, rerankers, loaders, vector backends and model providers
+- [Changelog](CHANGELOG.md) and the [release checklist](docs/release-checklist.md)
 
-## Cost warning
-
-Live runs spend real money, and LLM-heavy and agentic systems spend the most. Prices are approximate and overridable; see [Cost accounting](docs/methodology.md#cost-accounting) and [`pricing:`](docs/configuration.md#pricing).
+Live runs spend real money, and LLM-heavy and agentic systems spend the most; see [cost accounting](docs/methodology.md#cost-accounting) and how to cap spending in [configuration](docs/configuration.md#estimating-cost-and-capping-it).
 
 ## Roadmap
 
-- Persistent vector store adapters (Postgres / pgvector, Qdrant)
-- Web dashboard for comparing historical runs
+Not built yet:
 
-## License
+- GraphRAG-style retrieval over an entity graph
+- Persistent vector store adapters for Postgres / pgvector
+- Multilingual evaluation: language-aware chunking, and question sets and judges per language
+- Tools that call MCP servers
+- A web dashboard server for comparing runs (today: the static `results/index.html` from `ragbench runs index`)
 
-[MIT](LICENSE) — see [CONTRIBUTING.md](CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) before opening a PR.
+## Contributing and license
+
+[CONTRIBUTING.md](CONTRIBUTING.md) explains the workflow and the checks a change must pass; please read the [Code of Conduct](CODE_OF_CONDUCT.md) too. Released under the [MIT license](LICENSE).

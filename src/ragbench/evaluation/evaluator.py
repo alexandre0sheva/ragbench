@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Callable
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -42,10 +41,10 @@ from ragbench.models.errors import ModelInitError
 from ragbench.models.refs import missing_credentials, resolve_run_mode, warm_up_modules
 from ragbench.rag_systems import create_rag_system
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
-from ragbench.rag_systems.trace import STAGE_KEYS, UNTRACKED, mean_by_stage, stage_costs, step_to_dict
+from ragbench.rag_systems.trace import stage_costs, step_to_dict
 from ragbench.registry import SYSTEMS, VECTOR_BACKENDS
 from ragbench.reporting.html_report import write_report
-from ragbench.reporting.markdown_report import write_failures, write_leaderboard, write_qrels_audit
+from ragbench.reporting.markdown_report import stage_summary, write_failures, write_leaderboard, write_qrels_audit
 from ragbench.reporting.notices import build_notices
 from ragbench.runtime import (
     ExecutionSettings,
@@ -79,6 +78,17 @@ class BenchmarkRunError(Exception):
 
 def _error_info(exc: BaseException) -> dict[str, str]:
     return {"type": type(exc).__name__, "message": str(exc)[:500]}
+
+
+def _location(metadata: dict[str, Any]) -> dict[str, Any]:
+    """Where in its document a retrieved chunk came from (`page`, `heading`), for the report's question explorer; empty when the chunker did not record it."""
+    out: dict[str, Any] = {}
+    if metadata.get("page") is not None:
+        out["page"] = metadata["page"] if metadata.get("page_end") in (None, metadata["page"]) else f"{metadata['page']}-{metadata['page_end']}"
+    path = metadata.get("heading_path")
+    if path:
+        out["heading"] = " > ".join(str(part) for part in path)
+    return out
 
 
 class BenchmarkEvaluator:
@@ -580,6 +590,7 @@ class BenchmarkEvaluator:
                 "score": chunk.score,
                 "in_context": chunk.chunk_id in in_context,
                 "text_preview": truncate(chunk.text, 260),
+                **_location(chunk.metadata),
             }
             for chunk in answer.retrieval_result.chunks
         ]
@@ -783,7 +794,7 @@ class BenchmarkEvaluator:
     def _write_report(self) -> None:
         """`report.html` and `report_data.json`, built from the files this run just wrote (so the same call can rebuild a report later)."""
         try:
-            write_report(self.output_dir)
+            write_report(self.output_dir, max_embedded_mb=self.config.report.max_embedded_mb)
         except Exception as exc:  # the results are already on disk; a page that cannot be drawn must not turn the run into an error
             logger.warning("Could not write the HTML report: %s: %s", type(exc).__name__, exc)
 
@@ -808,27 +819,7 @@ class BenchmarkEvaluator:
         )
 
     def _build_stage_summary(self, per_question_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Mean per-question cost and latency by stage for each system (failed questions excluded)."""
-
-        def rollup(steps: list[dict[str, Any]], value: Callable[[dict[str, Any]], float]) -> dict[str, float]:
-            rolled = dict.fromkeys(STAGE_KEYS, 0.0)
-            for step in steps:
-                rolled[UNTRACKED if step["name"] == UNTRACKED else step["kind"]] += value(step)
-            return rolled
-
-        rows: list[dict[str, Any]] = []
-        for cfg in self.reported_systems:
-            ok = [row for row in per_question_rows if row["system"] == cfg.resolved_name and row["error"] is None]
-            if not ok:
-                continue
-            rows.append(
-                {
-                    "system": cfg.resolved_name,
-                    "cost": mean_by_stage([rollup(row["steps"], lambda step: step["cost"]["total_cost"]) for row in ok]),
-                    "latency_ms": mean_by_stage([rollup(row["steps"], lambda step: step["latency_ms"]) for row in ok]),
-                }
-            )
-        return rows
+        return stage_summary(per_question_rows, [cfg.resolved_name for cfg in self.reported_systems])
 
     def _build_qrels_audit(self, per_question_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         primary_k = self.config.evaluation.resolved_primary_k

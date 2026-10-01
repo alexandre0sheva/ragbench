@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from dataset_support import write_pair_dataset
 
 from ragbench.evaluation.checkpoint import CHECKPOINT_DIR, CheckpointStore
 from ragbench.evaluation.evaluator import run_benchmark
@@ -26,25 +27,10 @@ class Recorder(ProgressListener):
         self.restored.append(name)
 
 
-def _dataset(root: Path) -> dict:
-    docs = root / "docs"
-    docs.mkdir(parents=True)
-    (docs / "doc_001.md").write_text("# Pricing\n\nHarborShield costs $200 per month for the marine module.\n")
-    (docs / "doc_002.md").write_text("# Roadmap\n\nClaimPilot ships in Q3 with claims triage workflows.\n")
-    write_jsonl(
-        root / "questions.jsonl",
-        [
-            {"id": "q1", "question": "How much does HarborShield cost?", "reference_answer": "$200 per month.", "relevant_doc_ids": ["doc_001"]},
-            {"id": "q2", "question": "When does ClaimPilot ship?", "reference_answer": "Q3.", "relevant_doc_ids": ["doc_002"]},
-        ],
-    )
-    return {"documents_path": str(docs), "questions_path": str(root / "questions.jsonl")}
-
-
 def _config(root: Path, systems: list[dict] | None = None, **evaluation) -> Path:
     config = {
         "run": {"name": "resume", "output_dir": str(root / "results")},
-        "dataset": _dataset(root) if not (root / "docs").exists() else {"documents_path": str(root / "docs"), "questions_path": str(root / "questions.jsonl")},
+        "dataset": write_pair_dataset(root),
         "systems": systems
         or [
             {"type": "bm25", "name": "bm25", "chunker": {"type": "word", "chunk_size": 40, "chunk_overlap": 0}, "retrieval": {"top_k": 3}},

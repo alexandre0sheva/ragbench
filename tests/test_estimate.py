@@ -12,8 +12,8 @@ from paid_fakes import EMBEDDING, GENERATOR, JUDGE, PRICING
 from paid_fakes import install as install_paid_fakes
 from typer.testing import CliRunner
 
-from ragbench import cli
 from ragbench.cli import app
+from ragbench.cli import run as cli
 from ragbench.config.loader import load_config
 from ragbench.config.schema import EvaluationConfig
 from ragbench.evaluation.budget import BudgetExceededError, BudgetGuard
@@ -321,7 +321,7 @@ def live_cli(tmp_path, monkeypatch):
 
     monkeypatch.setattr(cli, "run_benchmark", stub_run)
     monkeypatch.setattr(cli, "resolve_run_mode", lambda config, force_mock: "live")
-    monkeypatch.setattr(cli, "_print_run_summary", lambda output_dir: None)
+    monkeypatch.setattr(cli, "print_run_summary", lambda output_dir: None)
     monkeypatch.delenv("CI", raising=False)
 
     def with_estimate(total: float) -> Path:
@@ -351,7 +351,7 @@ def test_yes_ci_and_the_threshold_decide_whether_a_live_run_proceeds(live_cli, m
 
 def test_a_person_at_a_terminal_is_asked(live_cli, monkeypatch):
     path = live_cli(5.0)
-    monkeypatch.setattr(cli, "_is_interactive", lambda: True)
+    monkeypatch.setattr(cli, "is_interactive", lambda: True)
     declined = CliRunner().invoke(app, ["compare", "--config", str(path)], input="n\n")
     assert declined.exit_code == 1 and "Cancelled" in declined.output and _FakeRun.calls == 0
     accepted = CliRunner().invoke(app, ["compare", "--config", str(path)], input="y\n")

@@ -1,0 +1,251 @@
+{
+ "sections": [
+  "recommendation",
+  "tradeoff",
+  "leaderboard-section",
+  "categories",
+  "costs",
+  "agents",
+  "failures",
+  "audit",
+  "questions",
+  "repro"
+ ],
+ "headings": [
+  "h2: Recommendation",
+  "h2: Quality against latency",
+  "h2: Leaderboard",
+  "h2: By question category",
+  "h2: Cost and latency",
+  "h3: How long it takes",
+  "h2: Agents, tools and routing",
+  "h3: Tool usage",
+  "h2: How systems fail",
+  "h2: Label audit",
+  "h2: Questions",
+  "h2: Reproducibility"
+ ],
+ "tables": [
+  "table",
+  "leaderboard",
+  "table",
+  "table",
+  "table",
+  "table",
+  "table",
+  "q-table"
+ ],
+ "charts": [
+  "Answer score (0-5) against Average latency (ms), one mark per system",
+  "answer score by system and category",
+  "recall@5 by system and category",
+  "Latency per system: p50 and p95",
+  "failed questions by system, split into parts"
+ ],
+ "scripts": [
+  "report-data",
+  "questions-data",
+  "behavior"
+ ],
+ "details": [
+  "All the reasons",
+  "Table view",
+  "Columns",
+  "Table view",
+  "Table view",
+  "Table view",
+  "Configuration that ran"
+ ],
+ "leaderboard_headers": [
+  "System",
+  "Recall@5",
+  "MRR@10",
+  "nDCG@10",
+  "Answer",
+  "Faithful",
+  "F1",
+  "Ctx recall",
+  "$/Q",
+  "$/correct",
+  "Latency",
+  "p95",
+  "Correct",
+  "Complete",
+  "Relevant",
+  "Cites",
+  "EM",
+  "Keywords",
+  "Ctx prec",
+  "Abstain prec",
+  "Abstain recall",
+  "False refusals",
+  "Judge fallback",
+  "Steps",
+  "LLM calls",
+  "Tool calls",
+  "Tool errors",
+  "Budget hit",
+  "Answered",
+  "Failed"
+ ],
+ "buttons": [
+  "theme-toggle",
+  "copy-yaml",
+  "q-reset",
+  "q-more"
+ ],
+ "data_keys": {
+  "agents": {
+   "routes": "list",
+   "rows": "[\u2026]",
+   "tools": "[\u2026]"
+  },
+  "baseline": "str",
+  "cost": {
+   "budget": {
+    "completed_systems": "\u2026",
+    "incomplete_systems": "\u2026",
+    "max_cost_usd": "\u2026",
+    "spent_usd": "\u2026",
+    "stopped": "\u2026"
+   },
+   "cache_hit_rate": "null",
+   "cache_hits": "int",
+   "charged_usd": "float",
+   "real_spend_usd": "float",
+   "saved_usd": "float"
+  },
+  "dataset": {
+   "categories": "[\u2026]",
+   "documents": "int",
+   "label_free": "bool",
+   "labeled_questions": "int",
+   "mock_generated": "int",
+   "needs_review": "int",
+   "questions": "int",
+   "synthetic": "int",
+   "warnings": "list"
+  },
+  "failure_other_detail": {},
+  "failures": {
+   "keys": "[\u2026]",
+   "systems": "[\u2026]"
+  },
+  "heatmap": {
+   "answer_score": "[\u2026]",
+   "categories": "[\u2026]",
+   "question_counts": {
+    "date_arithmetic": "\u2026",
+    "direct_fact": "\u2026",
+    "exact_match": "\u2026",
+    "multi_hop": "\u2026",
+    "numeric": "\u2026",
+    "unanswerable": "\u2026"
+   },
+   "recall": "[\u2026]",
+   "recall_k": "int",
+   "systems": "[\u2026]"
+  },
+  "latency": [
+   {
+    "p50": "\u2026",
+    "p95": "\u2026",
+    "source": "\u2026",
+    "system": "\u2026"
+   }
+  ],
+  "leaderboard": {
+   "columns": "[\u2026]",
+   "rows": "[\u2026]"
+  },
+  "notices": [
+   "str"
+  ],
+  "qrels_audit": {
+   "by_system": {
+    "agent": "\u2026",
+    "bm25": "\u2026",
+    "vector": "\u2026"
+   },
+   "candidates": "int",
+   "questions": "int"
+  },
+  "questions": {
+   "detail": "str",
+   "embedded": "int",
+   "file": "null",
+   "total": "int"
+  },
+  "recommendation": {
+   "closest_miss": "null",
+   "constraints": {},
+   "infeasible": {},
+   "pareto": "[\u2026]",
+   "profile": "str",
+   "quality_metric": "str",
+   "reasons": "[\u2026]",
+   "summary": "str",
+   "tied_with_winner": "[\u2026]",
+   "weights": {
+    "cost": "\u2026",
+    "latency": "\u2026",
+    "quality": "\u2026"
+   },
+   "winner": "str",
+   "winner_facts": {
+    "answer_score": "\u2026",
+    "cost_per_question": "\u2026",
+    "faithfulness": "\u2026",
+    "latency_ms_p95": "\u2026"
+   },
+   "winner_yaml": "str"
+  },
+  "reproducibility": {
+   "config_yaml": "str",
+   "manifest": {
+    "config_hash": "\u2026",
+    "dataset_hash": "\u2026",
+    "dependencies": "\u2026",
+    "finished_utc": "\u2026",
+    "git_dirty": "\u2026",
+    "git_sha": "\u2026",
+    "mode": "\u2026",
+    "models_used": "\u2026",
+    "platform": "\u2026",
+    "python": "\u2026",
+    "ragbench_version": "\u2026",
+    "seed": "\u2026",
+    "started_utc": "\u2026"
+   }
+  },
+  "run": {
+   "config_hash": "str",
+   "dataset_hash": "str",
+   "errors": "int",
+   "finished_utc": "str",
+   "git_dirty": "null",
+   "git_sha": "null",
+   "id": "str",
+   "latency_source": "str",
+   "mode": "str",
+   "models_used": "[\u2026]",
+   "pricing_as_of": "str",
+   "primary_k": "int",
+   "python": "str",
+   "ragbench_version": "str",
+   "started_utc": "str",
+   "systems": "int",
+   "wall_time_s": "float"
+  },
+  "scatter": {
+   "points": "[\u2026]",
+   "x_metric": "str"
+  },
+  "schema": "int",
+  "stages": {
+   "all_zero": "bool",
+   "keys": "list",
+   "systems": "[\u2026]"
+  }
+ }
+}

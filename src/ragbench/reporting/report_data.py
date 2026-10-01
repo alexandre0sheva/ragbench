@@ -20,6 +20,7 @@ import pandas as pd
 from ragbench.rag_systems.trace import STAGE_KEYS, UNTRACKED
 from ragbench.reporting import charts
 from ragbench.reporting.columns import MISSING, Column, extra_columns, format_cell, is_missing, leaderboard_columns, to_float
+from ragbench.reporting.explorer_data import DEFAULT_MAX_EMBEDDED_MB, QuestionsPayload, build_questions
 from ragbench.reporting.notices import build_notices
 
 SCHEMA_VERSION = 1
@@ -61,6 +62,7 @@ class ReportError(ValueError):
 class ReportBuild:
     data: dict[str, Any]
     view: dict[str, Any]
+    questions: QuestionsPayload | None = None  # the explorer's data: the page's copy, and the complete one when the page's had to be cut down
 
 
 def _json_safe(value: Any) -> Any:
@@ -336,7 +338,7 @@ def _scatter(summary: list[dict[str, Any]], order: list[str], kinds: dict[str, s
     return {"x_metric": "cost" if use_cost else "latency", "points": points}
 
 
-def build_report(run_dir: Path) -> ReportBuild:
+def build_report(run_dir: Path, max_embedded_mb: float = DEFAULT_MAX_EMBEDDED_MB) -> ReportBuild:
     summary_path = run_dir / "metrics_summary.csv"
     summary = _read_csv(summary_path)
     if not summary:
@@ -373,7 +375,9 @@ def build_report(run_dir: Path) -> ReportBuild:
     failures = _failures(grouped, order)
     tools, routes = _read_csv(run_dir / "tool_usage.csv"), _read_csv(run_dir / "routes.csv")
     agents = _agents(summary, order, tools, routes)
-    audit = _qrels_audit(_read_csv(run_dir / "qrels_audit.csv"), order)
+    audit_rows = _read_csv(run_dir / "qrels_audit.csv")
+    audit = _qrels_audit(audit_rows, order)
+    questions = build_questions(rows_all, order, audit_rows, int(max_embedded_mb * 1024 * 1024)) if rows_all else None
 
     cost_rows = _read_csv(run_dir / "cost_breakdown.csv")
     documents = max((int(r["num_documents"]) for r in cost_rows if r.get("stage") == "ingestion" and r.get("num_documents") is not None), default=None)
@@ -442,7 +446,8 @@ def build_report(run_dir: Path) -> ReportBuild:
         "failures": failures,
         "failure_other_detail": dict(_failure_detail(rows_all)),
         "qrels_audit": audit,
+        "questions": {"total": questions.embedded["total"], "embedded": questions.embedded["shown"], "detail": questions.embedded["detail"], "file": questions.embedded["file"]} if questions else None,
         "reproducibility": {"manifest": manifest, "config_yaml": config_text},
     }
     view = {"whiskers": whiskers, "repo_text": REPO_TEXT, "stage_slots": STAGE_SLOTS, "stage_names": STAGE_NAMES, "failure_slots": {**FAILURE_SLOTS, "other": "sgray"}, "failure_names": FAILURE_NAMES}
-    return ReportBuild(_json_safe(data), view)
+    return ReportBuild(_json_safe(data), view, questions)

@@ -176,7 +176,7 @@ def lookup_price(product: str, quantity: int = 1) -> str:
 - A parameter named `ctx` (or annotated `ToolContext`) receives the per-question context (`ctx.corpus`, `ctx.now`, `ctx.state`) and is hidden from the model.
 - Return a `str` (used as is), any JSON-serialisable value (serialised), or a `ToolResult` (to set `data`, `cost_usd` or `error` yourself).
 - Options for a custom tool: `description` (overrides the docstring), `side_effects` (`none` default, `network`, `filesystem`), `timeout_s`.
-- A custom tool cannot reuse a built-in's name. Packages can also contribute tools to the registry through the `ragbench.tools` entry-point group, which makes them valid in `requires_tools` too.
+- A custom tool cannot reuse a built-in's name. Packages can also contribute tools to the registry (see [extending.md](extending.md#plugins-from-other-packages)), which makes them valid in `requires_tools` too.
 
 ## Safety model
 

@@ -218,7 +218,7 @@ Profiles bundle weights with this policy: `balanced` (quality 0.6, cost 0.2, lat
 
 ## Reading the report
 
-`report.html` is a decision document, top to bottom. It is built only from the files in the run directory (`report_data.json` next to it holds the same numbers), makes no network request, and every chart has a "Table view" with the same values.
+`report.html` is a decision document, top to bottom (`ragbench report RUN` rebuilds it, and every other report, from the run directory without re-running anything). It is built only from the files in the run directory (`report_data.json` next to it holds the same numbers), makes no network request (the one exception is reading `report_questions.json` from next to it, when the question data was too big to embed and the page is served over http), and every chart has a "Table view" with the same values.
 
 1. **Banner**: mock or live, the dataset (questions, categories, how many have labels), spend (charged at standalone prices, and what caches avoided), and every run-level warning: mock scores, unpriced models, self-preference, judge fallbacks, concurrent latency and unreviewed synthetic questions.
 2. **Recommendation**: the system to deploy under the profile and constraints, the systems statistically tied with it ([Selection](#selection)), the reasons, and its `winner.yaml` with a copy button.
@@ -226,7 +226,8 @@ Profiles bundle weights with this policy: `balanced` (quality 0.6, cost 0.2, lat
 4. **Leaderboard**: whiskers are the 95% intervals of [Statistics](#statistics); ▲ / ▼ / ≈ mark a system as better, worse or not clearly different from the baseline on that metric (Holm-adjusted). Shading is the best value in a column, and is left off a column where every system is equal. "Columns" adds more metrics; "—" is a missing value, never 0.
 5. **Categories**: mean answer score (or recall) by question category, darker = higher on a scale that spans the values shown, so read it within one chart. A category with few questions is noisy: the question count is in the column header.
 6. **Cost and latency**: cost by stage (answering only, no judge) and p50 / p95 latency. **Agents and tools** appears only when a system has steps or tools. **Failures** counts questions by failure type ([Failure types](#failure-types)). **Label audit** counts answers judged well supported although retrieval missed labeled documents.
-7. **Reproducibility**: versions, config and dataset hashes, models, the price table's date and the configuration that ran.
+7. **Questions**: every question in a filterable table (search, category, system, failure type, "score below", "systems disagree" = best and worst answer scores at least 2 points apart). Open a row (Enter, or click) to see the systems side by side: the reference answer, each answer, the judge's scores and reasoning, the retrieved contexts (green: labeled relevant; amber: not labeled but the answer was judged right and grounded, the [label audit](#failure-types)'s candidates; dashed: ranked but never shown to the generator) with page and heading where the chunker recorded them, and the trace with each step's latency, cost and input and output previews. Keys: ↑ ↓ move, Enter opens, Esc closes, `/` searches. How much of this the page holds is capped by `report.max_embedded_mb` ([configuration.md](configuration.md#report)); the page says when it is showing a reduced copy.
+8. **Reproducibility**: versions, config and dataset hashes, models, the price table's date and the configuration that ran.
 
 ## Synthetic questions and pooled labels
 

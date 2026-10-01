@@ -144,17 +144,32 @@ def split_system_names(values: Sequence[str]) -> list[str]:
     return [name for name in names if name]
 
 
-def select_systems(raw: dict[str, Any], wanted: Sequence[str]) -> dict[str, Any]:
-    """`raw` keeping only the named systems (config order). A sweep's base name (`hr`) selects all of its variants (`hr[...]`)."""
+def _matches(name: str, request: str) -> bool:
+    return name == request or name.startswith(request + "[")
+
+
+def _system_names(raw: dict[str, Any], wanted: Sequence[str], flag: str) -> tuple[list[dict[str, Any]], list[str]]:
+    """The config's systems with their names, after checking that every requested name (or sweep base name) exists."""
     systems = raw.get("systems") or []
     names = [str(system.get("name") or system.get("type")) for system in systems]
-
-    def matches(name: str, request: str) -> bool:
-        return name == request or name.startswith(request + "[")
-
     for request in wanted:
-        if not any(matches(name, request) for name in names):
+        if not any(_matches(name, request) for name in names):
             close = difflib.get_close_matches(request, names, n=1, cutoff=0.6)
             hint = f" Did you mean '{close[0]}'?" if close else ""
-            raise ValueError(f"--systems: no system named '{request}'.{hint} Available: {', '.join(names)}")
-    return {**raw, "systems": [system for system, name in zip(systems, names, strict=True) if any(matches(name, request) for request in wanted)]}
+            raise ValueError(f"{flag}: no system named '{request}'.{hint} Available: {', '.join(names)}")
+    return systems, names
+
+
+def select_systems(raw: dict[str, Any], wanted: Sequence[str]) -> dict[str, Any]:
+    """`raw` keeping only the named systems (config order). A sweep's base name (`hr`) selects all of its variants (`hr[...]`)."""
+    systems, names = _system_names(raw, wanted, "--only")
+    return {**raw, "systems": [system for system, name in zip(systems, names, strict=True) if any(_matches(name, request) for request in wanted)]}
+
+
+def skip_systems(raw: dict[str, Any], unwanted: Sequence[str]) -> dict[str, Any]:
+    """`raw` without the named systems (a sweep's base name drops all of its variants). Skipping every system is an error."""
+    systems, names = _system_names(raw, unwanted, "--skip")
+    kept = [system for system, name in zip(systems, names, strict=True) if not any(_matches(name, request) for request in unwanted)]
+    if not kept:
+        raise ValueError(f"--skip: that leaves no system to run (skipped: {', '.join(unwanted)}).")
+    return {**raw, "systems": kept}

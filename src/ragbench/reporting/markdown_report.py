@@ -1,10 +1,35 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ragbench.rag_systems.trace import STAGE_KEYS
+from ragbench.rag_systems.trace import STAGE_KEYS, UNTRACKED, mean_by_stage
 from ragbench.reporting.columns import Column, format_cell, leaderboard_columns
+
+
+def stage_summary(per_question_rows: list[dict[str, Any]], systems: list[str]) -> list[dict[str, Any]]:
+    """Mean per-question cost and latency by stage for each system, in the order of `systems` (failed questions excluded)."""
+
+    def rollup(steps: list[dict[str, Any]], value: Callable[[dict[str, Any]], float]) -> dict[str, float]:
+        rolled = dict.fromkeys(STAGE_KEYS, 0.0)
+        for step in steps:
+            rolled[UNTRACKED if step["name"] == UNTRACKED else step["kind"]] += value(step)
+        return rolled
+
+    rows: list[dict[str, Any]] = []
+    for name in systems:
+        ok = [row for row in per_question_rows if row["system"] == name and row["error"] is None]
+        if not ok:
+            continue
+        rows.append(
+            {
+                "system": name,
+                "cost": mean_by_stage([rollup(row["steps"], lambda step: step["cost"]["total_cost"]) for row in ok]),
+                "latency_ms": mean_by_stage([rollup(row["steps"], lambda step: step["latency_ms"]) for row in ok]),
+            }
+        )
+    return rows
 
 
 def _best_for(system_type: str) -> str:

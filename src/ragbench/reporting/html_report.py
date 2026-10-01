@@ -16,6 +16,7 @@ from jinja2 import Environment, select_autoescape
 
 from ragbench.reporting import charts
 from ragbench.reporting.columns import MISSING
+from ragbench.reporting.explorer_data import DEFAULT_MAX_EMBEDDED_MB, QUESTIONS_FILE, script_json
 from ragbench.reporting.report_data import FAILURE_NAMES, FAILURE_OTHER, ReportBuild, build_report, money
 
 TEMPLATES = "ragbench.reporting"
@@ -24,12 +25,6 @@ _ENV = Environment(autoescape=select_autoescape(default=True, default_for_string
 
 def _asset(name: str) -> str:
     return (resources.files(TEMPLATES) / "templates" / name).read_text(encoding="utf-8")
-
-
-def _blob(data: dict[str, Any]) -> str:
-    """The data as JSON that is safe inside a `<script>` element (no `</script>`, no HTML comments, no line-separator characters)."""
-    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    return text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
 
 
 def _num(value: float | None, fmt: str = "{:.2f}") -> str:
@@ -162,10 +157,12 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         sections.append(("agents", "Agents and tools"))
     if failures:
         sections += [("failures", "Failures"), ("audit", "Label audit")]
+    if build.questions:
+        sections.append(("questions", "Questions"))
     sections.append(("repro", "Reproducibility"))
     numbers = {key: f"{n:02d}" for n, (key, _) in enumerate(sections, start=1)}
     sec = {"recommendation": numbers.get("recommendation"), "tradeoff": numbers["tradeoff"], "leaderboard": numbers["leaderboard-section"], "categories": numbers.get("categories"),
-           "costs": numbers["costs"], "agents": numbers.get("agents"), "failures": numbers.get("failures"), "audit": numbers.get("audit"), "repro": numbers["repro"]}
+           "costs": numbers["costs"], "agents": numbers.get("agents"), "failures": numbers.get("failures"), "audit": numbers.get("audit"), "questions": numbers.get("questions"), "repro": numbers["repro"]}
     return {
         "css": _asset("report.css"),
         "js": _asset("report.js"),
@@ -203,7 +200,9 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         "sections": [{"id": key, "title": title, "number": numbers[key]} for key, title in sections],
         "sec": sec,
         "repo_text": view["repo_text"],
-        "blob": _blob(data),
+        "blob": script_json(data),
+        "questions": build.questions.embedded if build.questions else None,
+        "questions_blob": script_json(build.questions.embedded) if build.questions else "",
     }
 
 
@@ -211,10 +210,19 @@ def render_report(build: ReportBuild) -> str:
     return _ENV.from_string(_asset("report.html.j2")).render(**_view(build))
 
 
-def write_report(run_dir: Path, path: Path | None = None) -> Path:
-    """Write `report.html` (default: in `run_dir`) and `report_data.json` next to it, from the files of the finished run in `run_dir`."""
-    build = build_report(run_dir)
+def write_report(run_dir: Path, path: Path | None = None, max_embedded_mb: float = DEFAULT_MAX_EMBEDDED_MB) -> Path:
+    """Write `report.html` (default: in `run_dir`) and `report_data.json` next to it, from the files of the finished run in `run_dir`.
+
+    The question explorer's data is embedded up to `max_embedded_mb`; beyond that the page keeps a reduced copy and the complete data is written to
+    `report_questions.json` beside it (a stale one from an earlier build is removed when everything fits).
+    """
+    build = build_report(run_dir, max_embedded_mb)
     target = path or run_dir / "report.html"
     target.write_text(render_report(build), encoding="utf-8")
     (target.parent / "report_data.json").write_text(json.dumps(build.data, ensure_ascii=False, indent=1), encoding="utf-8")
+    questions_file = target.parent / QUESTIONS_FILE
+    if build.questions and build.questions.full is not None:
+        questions_file.write_text(json.dumps(build.questions.full, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    else:
+        questions_file.unlink(missing_ok=True)
     return target

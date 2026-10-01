@@ -142,11 +142,11 @@ The built-in `cross_encoder` reranker is local. A hosted reranking API (Cohere, 
 
 ## Document loaders
 
-A loader turns one file into documents: `loader(path, context) -> list[Document]`, registered for a file extension with `@LOADERS.register(".ext", aliases=(".other",))` (one module per format under `documents/loaders/`, or an entry point in the `ragbench.loaders` group). Build documents with `make_document(path, context, title, text, extra_metadata, doc_id=None)` so ids follow the usual rules (files of many rows use `doc_id=f"{base}#{row}"`). Decode bytes with `decode_bytes` (or `read_text_file`) to get the shared encoding fallbacks; report recoverable problems with `context.warn(message)`; raise `DocumentLoadError` for a file that cannot be used (it is raised or skipped according to `dataset.on_error`); raise `MissingExtraError` when an optional library is missing (always fatal). Put character spans your format knows about (PDF pages) in `metadata["page_spans"]` as `[start, end, page]` triples to give chunks a `page`.
+A loader turns one file into documents: `loader(path, context) -> list[Document]`, registered for a file extension with `@LOADERS.register(".ext", aliases=(".other",))` (one module per format under `documents/loaders/`). Build documents with `make_document(path, context, title, text, extra_metadata, doc_id=None)` so ids follow the usual rules (files of many rows use `doc_id=f"{base}#{row}"`). Decode bytes with `decode_bytes` (or `read_text_file`) to get the shared encoding fallbacks; report recoverable problems with `context.warn(message)`; raise `DocumentLoadError` for a file that cannot be used (it is raised or skipped according to `dataset.on_error`); raise `MissingExtraError` when an optional library is missing (always fatal). Put character spans your format knows about (PDF pages) in `metadata["page_spans"]` as `[start, end, page]` triples to give chunks a `page`.
 
 ## Vector backends
 
-A backend is a class registered with `@VECTOR_BACKENDS.register("name")` (one file per backend under `stores/index/`, or an entry point in the `ragbench.vector_backends` group). It is constructed with `(collection_name=, persist_directory=)`, receives unit-length vectors in `build(ids, vectors, payloads)`, and returns `(row index, cosine score)` pairs, best first, from `search(query, top_k)`. Declare the class attributes `backend`, `approximate`, `persistent` (honours `persist_directory`) and `import_modules` (libraries to import on the main thread before worker threads start). Check the optional library in `__init__` with `require_extra(...)` so a missing extra fails when the system is built, and never fall back to another backend. `stores/index/faiss_index.py` is the smallest complete example.
+A backend is a class registered with `@VECTOR_BACKENDS.register("name")` (one file per backend under `stores/index/`). It is constructed with `(collection_name=, persist_directory=)`, receives unit-length vectors in `build(ids, vectors, payloads)`, and returns `(row index, cosine score)` pairs, best first, from `search(query, top_k)`. Declare the class attributes `backend`, `approximate`, `persistent` (honours `persist_directory`) and `import_modules` (libraries to import on the main thread before worker threads start). Check the optional library in `__init__` with `require_extra(...)` so a missing extra fails when the system is built, and never fall back to another backend. `stores/index/faiss_index.py` is the smallest complete example.
 
 ## Model providers
 
@@ -173,25 +173,47 @@ def make_llm(model: str, *, providers) -> LLM:    # `providers`: the config's en
 
 `my_provider:some-model` is then a valid ref everywhere. Messages and `tools` use the OpenAI chat shapes; translate them inside the provider and fill `LLMResult.tool_calls` (see `models/providers/anthropic.py` for a worked translation). Keep retries (`call_with_retry`) and `limiter_for("<provider>")` around every request, import optional SDKs lazily (raise `MissingExtraError` naming the extra), and add a price row to `models/cost.py` if the provider bills per token.
 
+## Tools
+
+A tool is a typed function an agent can call. Most are just a Python function pointed to from the config (`tools: [{name: my_tool, path: "pkg.module:function"}]`); [tools.md](tools.md#your-own-tools) covers the signature rules, the context argument, side effects and the safety model. To ship a tool as a package, register a class in `TOOLS` (`@TOOLS.register("name")`, see `src/ragbench/tools/calculator.py` for the smallest one) or use the entry point below.
+
 ## Plugins from other packages
 
-A separate package can contribute components without touching this repository by declaring entry points:
+A separate package can contribute components without touching this repository by declaring entry points. This table is the one list of the groups; each component is described in its own section above.
+
+| Entry-point group | Contributes | The entry point names |
+| --- | --- | --- |
+| `ragbench.systems` | RAG systems | a `BaseRAGSystem` subclass |
+| `ragbench.chunkers` | chunkers | a `BaseChunker` subclass |
+| `ragbench.rerankers` | rerankers | a reranker class |
+| `ragbench.loaders` | document loaders | a loader function; the entry point's name is the file extension **with** its dot (`".epub"`, quoted in TOML) |
+| `ragbench.vector_backends` | vector backends | a backend class |
+| `ragbench.llm_providers` | chat model providers | a factory `f(model, *, providers) -> LLM` |
+| `ragbench.embedders` | embedding providers | a factory returning an `EmbeddingModel` |
+| `ragbench.tools` | agent tools | a tool class |
 
 ```toml
 [project.entry-points."ragbench.systems"]
 my_rag = "my_package.rag:MyRAGSystem"
 
-[project.entry-points."ragbench.chunkers"]
-my_chunker = "my_package.chunking:MyChunker"
-
-[project.entry-points."ragbench.rerankers"]
-my_reranker = "my_package.rerank:MyReranker"
-
-[project.entry-points."ragbench.loaders"]             # extension -> loader function, e.g. ".epub" = "my_package.epub:load_epub"
-epub = "my_package.epub:load_epub"
-
-[project.entry-points."ragbench.llm_providers"]      # and "ragbench.embedders" for embedding providers
-my_provider = "my_package.llm:make_llm"
+[project.entry-points."ragbench.loaders"]
+".epub" = "my_package.epub:load_epub"
 ```
 
-Plugins are loaded when `ragbench.rag_systems` is imported. A plugin that fails to import is skipped with a warning, and a name that is already taken is ignored. Give a plugin system a `spec` to get config validation and documentation; without one its `retrieval:` section is accepted as-is.
+Plugins are loaded when the component's package is imported (`ragbench.rag_systems` for systems, chunkers and rerankers). A plugin that fails to import is skipped with a warning, and a name that is already taken is ignored. Give a plugin system a `spec` to get config validation and documentation; without one its `retrieval:` section is accepted as-is.
+
+## How a run flows
+
+```mermaid
+flowchart LR
+    D[Documents] --> L[Loaders] --> C[Chunkers]
+    C --> S[Systems: indexes, retrieval, agents and tools]
+    S --> T[Step trace: latency, tokens, cost]
+    Q[Questions and qrels] --> E[Evaluator]
+    S --> E
+    T --> E
+    E --> M[Metrics, judge, statistics]
+    M --> R[Recommendation and reports]
+```
+
+The evaluator asks every system the same questions, scores each answer, and writes the files all reports are rebuilt from (`ragbench report RUN`).

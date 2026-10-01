@@ -175,6 +175,7 @@ def render_cli_md() -> str:
     from ragbench.cli import app
 
     command = get_command(app)
+    command.commands = {name: sub for name, sub in command.commands.items() if not getattr(sub, "hidden", False)}  # deprecated aliases are not documented
     context = click.Context(command, info_name="ragbench")
     body = get_docs_for_click(obj=command, ctx=context, name="ragbench")
     return f"{BANNER}\n\n{body.strip()}\n"

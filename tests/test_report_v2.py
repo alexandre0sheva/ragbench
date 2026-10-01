@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+from dataset_support import write_tiny_dataset
 from paid_fakes import EMBEDDING, GENERATOR, JUDGE, PRICING
 from paid_fakes import install as install_paid_fakes
 
@@ -22,28 +23,10 @@ DEMO = ROOT / "data" / "demo"
 WORD_CHUNKER = {"type": "word", "chunk_size": 40, "chunk_overlap": 0}
 
 
-def _dataset(root: Path, category: str = "fact") -> dict:
-    docs = root / "docs"
-    docs.mkdir(parents=True, exist_ok=True)
-    (docs / "doc_001.md").write_text("# Pricing\n\nHarborShield costs $200 per month for the marine module.\n")
-    (docs / "doc_002.md").write_text("# Roadmap\n\nClaimPilot ships in Q3 with claims triage workflows.\n")
-    (docs / "doc_003.md").write_text("# Support\n\nSupport is available around the clock for every plan.\n")
-    write_jsonl(
-        root / "questions.jsonl",
-        [
-            {"id": "q1", "question": "How much does HarborShield cost?", "reference_answer": "$200 per month.", "relevant_doc_ids": ["doc_001"], "category": category},
-            {"id": "q2", "question": "When does ClaimPilot ship?", "reference_answer": "Q3.", "relevant_doc_ids": ["doc_002"], "category": category},
-            {"id": "q3", "question": "Who is the CEO of Atlantis?", "answerable": False, "category": "unanswerable"},
-            {"id": "q4", "question": "Is support available at night?", "reference_answer": "Yes, around the clock.", "relevant_doc_ids": ["doc_003"], "category": category},
-        ],
-    )
-    return {"documents_path": str(docs), "questions_path": str(root / "questions.jsonl")}
-
-
 def _run(root: Path, systems: list[dict], *, category: str = "fact", **extra) -> Path:
     config = {
         "run": {"name": "rep", "output_dir": str(root / "results")},
-        "dataset": _dataset(root, category),
+        "dataset": write_tiny_dataset(root, category=category),
         "systems": systems,
         "evaluation": {"max_workers": 1, "latency_probe_questions": 0, **extra.pop("evaluation", {})},
         **extra,
@@ -193,7 +176,7 @@ def test_a_run_with_cost_draws_the_stage_chart_and_puts_cost_on_the_axis(tmp_pat
     models = {"generator": GENERATOR, "embedding": EMBEDDING}
     config = {
         "run": {"name": "paid", "output_dir": str(tmp_path / "results")},
-        "dataset": _dataset(tmp_path),
+        "dataset": write_tiny_dataset(tmp_path),
         "systems": [
             {"type": "bm25", "name": "bm25", "models": models, "chunker": WORD_CHUNKER},
             {"type": "vector", "name": "vector", "models": models, "chunker": WORD_CHUNKER, "retrieval": {"vector_store": "numpy"}},
@@ -215,7 +198,10 @@ def test_a_run_with_cost_draws_the_stage_chart_and_puts_cost_on_the_axis(tmp_pat
 
 def test_the_demo_report_stays_small(tmp_path):
     run = _run_demo(tmp_path)
-    assert (run / "report.html").stat().st_size < 600 * 1024
+    html = _html(run)
+    explorer = html.split('id="questions-data">')[1].split("</script>")[0]
+    assert len(html.encode()) - len(explorer.encode()) < 600 * 1024  # the report itself; the question explorer's data is capped separately (report.max_embedded_mb)
+    assert len(explorer.encode()) < 4 * 1024 * 1024
 
 
 def _run_demo(tmp_path: Path) -> Path:
@@ -233,14 +219,14 @@ def _run_demo(tmp_path: Path) -> Path:
 # -- self-contained, escaped, accessible -----------------------------------------------------------
 
 
-def test_the_page_loads_nothing_from_the_network_and_has_exactly_two_scripts(eleven):
+def test_the_page_loads_nothing_from_the_network_and_has_exactly_three_scripts(eleven):
     html = _html(eleven)
     scan = _scan(html)
     assert [ref for ref in scan.refs if not ref.startswith("#")] == []  # no src, no outgoing href
     stripped = html.replace("http://www.w3.org/2000/svg", "")
     assert not re.search(r"https?://", stripped), "no URL at all, other than the SVG namespace"
     assert not re.search(r"url\(\s*[\"']?(https?:|//)|@import", html)
-    assert scan.scripts == 2  # the data blob and the behavior; nothing else runs
+    assert scan.scripts == 3  # the report data, the question data and the behavior; nothing else runs
 
 
 def test_hostile_text_in_names_and_categories_is_escaped_everywhere(tmp_path):
@@ -249,7 +235,7 @@ def test_hostile_text_in_names_and_categories_is_escaped_everywhere(tmp_path):
     run = _run(tmp_path, systems, category=hostile)
     html = _html(run)
     scan = _scan(html)
-    assert scan.scripts == 2 and "<img src=x" not in html and hostile not in html
+    assert scan.scripts == 3 and "<img src=x" not in html and hostile not in html
     assert "&lt;script&gt;" in html  # shown, not executed
     blob = html.split('id="report-data">')[1].split("</script>")[0]
     assert "<" not in blob and ">" not in blob and json.loads(blob)["schema"] == 1  # safe inside a script element, and still valid JSON
@@ -305,7 +291,7 @@ def test_an_empty_run_directory_is_an_error_not_an_empty_page(tmp_path):
 
 def test_notices_and_the_synthetic_question_flag_reach_the_banner(tmp_path):
     root = tmp_path
-    data = _dataset(root)
+    data = write_tiny_dataset(root)
     rows = read_jsonl(root / "questions.jsonl")
     for row in rows:
         row["metadata"] = {"synthetic": True, "needs_review": True, "generator": "mock-template", "mock": True}
@@ -313,7 +299,7 @@ def test_notices_and_the_synthetic_question_flag_reach_the_banner(tmp_path):
     config = {"run": {"name": "syn", "output_dir": str(root / "results")}, "dataset": data, "systems": [_system("bm25")], "evaluation": {"max_workers": 1}}
     (root / "c.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
     html = _html(run_benchmark(root / "c.yaml", force_mock=True, max_workers=1))
-    assert "Synthetic questions — review recommended" in html and "4 of 4 questions" in html and "mock templates" in html
+    assert "Synthetic questions — review recommended" in html and "8 of 8 questions" in html and "mock templates" in html
 
 
 def test_the_heatmap_and_leaderboard_values_agree_with_the_csvs(eleven):
