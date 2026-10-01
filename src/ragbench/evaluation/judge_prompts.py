@@ -12,12 +12,12 @@ from collections.abc import Sequence
 from ragbench.datasets.schema import Question
 from ragbench.rag_systems.base import RetrievedChunk
 
-JUDGE_PROMPT_VERSION = "v2"
+JUDGE_PROMPT_VERSION = "v3"
 MAX_CONTEXT_CHARS = 12000
 
 SYSTEM_PROMPT = """You are a strict RAG evaluation judge. You grade one model answer to one question.
 
-Ground every judgment only in the material you are given: the reference answer (when there is one) and the retrieved context. Do not use your own knowledge to decide what is true. If the reference answer is null the question has no answer in the documents, and the only correct response is to say so.
+Ground every judgment only in the material you are given: the reference answer (when there is one) and the retrieved context. Do not use your own knowledge to decide what is true. The field "answerable" says whether the documents can answer the question. If it is false, the only correct response is to say so. If it is true and the reference answer is null, no reference exists: grade correctness and completeness against the retrieved context alone (does the answer say what the context says about the question, and does it use what the context offers), and rely on the other axes as usual.
 
 Score each axis from 0 to 5 (decimals are allowed) with these anchors:
 - correctness: does the answer state what the reference answer states? 0 = contradicts it or says nothing relevant, 3 = right in substance but with a wrong or missing detail, 5 = fully matches. For an unanswerable question, 5 = a clear refusal and 0 = a confident answer.
@@ -37,6 +37,7 @@ def build_messages(question: Question, answer: str, contexts: Sequence[Retrieved
     context_text = "\n\n".join(f"[{chunk.doc_id} | {chunk.chunk_id}]\n{chunk.text}" for chunk in contexts)
     payload = {
         "question": question.question,
+        "answerable": question.is_answerable,
         "reference_answer": question.reference_answer,
         "model_answer": answer,
         "retrieved_context": context_text[:MAX_CONTEXT_CHARS],

@@ -20,6 +20,9 @@ class Question(BaseModel):
     # The route an `adaptive` system should send this question to (`default`, `lexical`, `computation`, `multi_hop`, or a route name of your own).
     # Metadata only: it never changes retrieval or scoring, it lets the run report the router's accuracy.
     routing_hint: str | None = None
+    # Whether the documents can answer the question. None keeps the legacy rule (answerable exactly when `relevant_doc_ids` is non-empty); set it
+    # explicitly for a question that has an answer but no relevance labels (label-free mode, see docs/dataset-format.md) or to mark one unanswerable.
+    answerable: bool | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("requires_tools")
@@ -34,7 +37,7 @@ class Question(BaseModel):
 
     @property
     def is_answerable(self) -> bool:
-        return bool(self.relevant_doc_ids)
+        return self.answerable if self.answerable is not None else bool(self.relevant_doc_ids)
 
 
 class Qrel(BaseModel):
@@ -43,7 +46,18 @@ class Qrel(BaseModel):
     relevance: int = 1
 
 
+def has_relevance_labels(question: Question, qrels: dict[str, int]) -> bool:
+    """Whether retrieval can be scored for this question: it lists relevant documents, or its qrels grade one above 0."""
+    return bool(question.relevant_doc_ids) or any(grade > 0 for grade in qrels.values())
+
+
 class Dataset(BaseModel):
     questions: list[Question]
     qrels: dict[str, dict[str, int]] = Field(default_factory=dict)
+    # True when no question has a relevance label at all (no `relevant_doc_ids`, no positive qrels): retrieval metrics are skipped and answers are judged alone.
+    label_free: bool = False
+
+    @property
+    def labeled_questions(self) -> int:
+        return sum(has_relevance_labels(question, self.qrels.get(question.id, {})) for question in self.questions)
 

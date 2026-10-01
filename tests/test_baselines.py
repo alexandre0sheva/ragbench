@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from pathlib import Path
 
 import numpy as np
@@ -368,7 +369,7 @@ def test_leaderboard_and_report_show_an_em_dash_for_the_floor_baseline(mixed_run
 
     assert cells.count("—") >= 3 and "0.000" not in cells[1:4]
     html = (mixed_run / "report.html").read_text(encoding="utf-8")
-    assert "floor" in html and "NaN" not in html
+    assert "floor" in html and "NaN" not in re.sub(r"<script.*?</script>", "", html, flags=re.S)  # shown values, not the page's own script
 
 
 def test_per_question_rows_of_a_non_retrieving_system_have_no_retrieval_failures(mixed_run):

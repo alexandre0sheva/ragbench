@@ -5,9 +5,11 @@ The active runtime is a plain module global (not a ContextVar): worker threads s
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from ragbench.cache.store import DiskCache
@@ -21,6 +23,12 @@ class CacheRuntime:
 
 
 _ACTIVE: CacheRuntime | None = None
+
+
+def open_cache_runtime(config: CacheConfig) -> CacheRuntime:
+    """The persistent cache `config` describes (`RAGBENCH_CACHE_DIR` overrides its directory). The caller closes `runtime.disk`."""
+    cache_dir = Path(os.environ.get("RAGBENCH_CACHE_DIR") or config.dir)
+    return CacheRuntime(disk=DiskCache(cache_dir / "cache.sqlite3", ttl_days=config.ttl_days), config=config)
 
 
 def active_cache() -> CacheRuntime | None:

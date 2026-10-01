@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RAGBench report {{ run.id }}</title>
+<style>
+{{ css | safe }}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the report</a>
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand"><strong>RAGBench</strong><span>evaluation report</span></div>
+    <div class="tools"><button type="button" class="btn" id="theme-toggle" aria-pressed="false">Theme: auto</button></div>
+  </header>
+
+  <main id="main">
+    <!-- run banner -->
+    <section class="banner" aria-labelledby="run-title">
+      <p class="eyebrow">Run</p>
+      <h1 id="run-title">{{ run.id }}</h1>
+      <dl class="facts">
+        <div><dt>Mode</dt><dd><span class="pill {{ 'mock' if run.mode == 'mock' }}">{{ run.mode | upper }}</span>{% if run.mode == 'mock' %}<small>scripted model, heuristic judge</small>{% endif %}</dd></div>
+        <div><dt>Date</dt><dd>{{ started }}<small>took {{ '%.1f' | format(run.wall_time_s) }} s</small></dd></div>
+        <div><dt>Dataset</dt><dd>{{ dataset.questions if dataset.questions is not none else '—' }} questions · {{ dataset.categories | length }} categor{{ 'y' if dataset.categories | length == 1 else 'ies' }}{% if dataset.documents %} · {{ dataset.documents }} documents{% endif %}<small>{% if dataset.label_free %}label-free: retrieval metrics are blank{% elif dataset.labeled_questions is not none %}{{ dataset.labeled_questions }} with relevance labels{% endif %}</small></dd></div>
+        <div><dt>Systems</dt><dd>{{ run.systems }} compared{% if run.errors %} · <strong>{{ run.errors }} failed questions</strong>{% endif %}<small>{{ run.models_used | join(', ') if run.models_used else '' }}</small></dd></div>
+        <div><dt>Spend</dt><dd>{{ money(cost.charged_usd) if cost.charged_usd is not none else '—' }} charged<small>{% if cost.real_spend_usd is not none %}real spend {{ money(cost.real_spend_usd) }}{% endif %}{% if cost.cache_hits %} · cache reused {{ cost.cache_hits }} results{% if cost.saved_usd %} (~{{ money(cost.saved_usd) }} avoided){% endif %}{% endif %}{% if cost.budget and cost.budget.max_cost_usd %} · cap {{ money(cost.budget.max_cost_usd) }}{% endif %}</small></dd></div>
+        <div><dt>Versions</dt><dd>ragbench {{ run.ragbench_version or '—' }}<small>Python {{ run.python or '—' }}{% if run.pricing_as_of %} · prices as of {{ run.pricing_as_of }}{% endif %}</small></dd></div>
+      </dl>
+      {% for notice in notices %}
+      <p class="notice" role="note"><span class="icon" aria-hidden="true">⚠</span><span><strong>Heads up.</strong> {{ notice }}</span></p>
+      {% endfor %}
+      {% if dataset.needs_review %}
+      <p class="notice" role="note"><span class="icon" aria-hidden="true">⚠</span><span><strong>Synthetic questions — review recommended.</strong> {{ dataset.needs_review }} of {{ dataset.questions }} questions were written by a generator and are still flagged <code>needs_review</code>. Scores on unreviewed synthetic questions measure the generator's taste as much as the systems.{% if dataset.mock_generated %} {{ dataset.mock_generated }} are mock templates.{% endif %}</span></p>
+      {% endif %}
+      {% if run.mode != 'mock' and run.latency_source == 'concurrent' %}
+      <p class="notice" role="note"><span class="icon" aria-hidden="true">⚠</span><span><strong>Latency is from concurrent requests</strong>, so it includes queueing. Keep <code>evaluation.latency_probe_questions</code> above 0 for a clean measurement.</span></p>
+      {% endif %}
+      <nav class="toc" aria-label="Sections">{% for s in sections %}<a href="#{{ s.id }}"><span class="mono">{{ s.number }}</span>{{ s.title }}</a>{% endfor %}</nav>
+    </section>
+
+    {% if rec %}
+    <section class="block" id="recommendation" aria-labelledby="h-recommendation">
+      <header><span class="num">{{ sec.recommendation }}</span><h2 id="h-recommendation">Recommendation</h2></header>
+      <div class="hero">
+        {% if rec.winner %}
+        <p class="kicker">Deploy · {{ rec.profile }} profile</p>
+        <p class="hero-name">{{ rec.winner }}</p>
+        <p class="hero-summary">{{ rec.summary }}</p>
+        <dl class="hero-facts">
+          <div><dt>Answer score</dt><dd>{{ '%.2f' | format(rec.winner_facts.answer_score) if rec.winner_facts.answer_score is not none else '—' }} <small>/ 5</small></dd></div>
+          <div><dt>Cost per question</dt><dd>{{ money(rec.winner_facts.cost_per_question) }}</dd></div>
+          <div><dt>Latency p95</dt><dd>{{ '%.0f' | format(rec.winner_facts.latency_ms_p95) if rec.winner_facts.latency_ms_p95 is not none else '—' }} <small>ms</small></dd></div>
+          <div><dt>Faithfulness</dt><dd>{{ '%.2f' | format(rec.winner_facts.faithfulness) if rec.winner_facts.faithfulness is not none else '—' }} <small>/ 5</small></dd></div>
+        </dl>
+        {% else %}
+        <p class="kicker">No recommendation · {{ rec.profile }} profile</p>
+        <p class="hero-name none">No system meets your constraints</p>
+        <p class="hero-summary">{{ rec.summary }}</p>
+        {% endif %}
+        <div class="chips">
+          <span>Statistically tied on quality:</span>{% for name in rec.tied_with_winner %}<span class="chip">{{ name }}</span>{% else %}<span class="chip">none</span>{% endfor %}
+        </div>
+        <div class="chips">
+          <span>Constraints:</span>{% for label in constraint_labels %}<span class="chip">{{ label }}</span>{% else %}<span class="chip">none set</span>{% endfor %}
+        </div>
+        {% if rec.reasons | length > 2 or rec.infeasible %}
+        <details class="more"><summary>All the reasons</summary>
+          <ul>{% for line in rec.reasons %}<li>{{ line }}</li>{% endfor %}{% for name, why in rec.infeasible.items() %}<li><strong>{{ name }}</strong> is out: {{ why | join('; ') }}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+        {% if rec.winner_yaml %}
+        <div class="yaml">
+          <div class="yaml-head"><span>winner.yaml</span><button type="button" class="btn" id="copy-yaml">Copy</button></div>
+          <pre id="winner-yaml" tabindex="0">{{ rec.winner_yaml }}</pre>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="block" id="tradeoff" aria-labelledby="h-tradeoff">
+      <header><span class="num">{{ sec.tradeoff }}</span><h2 id="h-tradeoff">Quality against {{ 'cost' if scatter.x_metric == 'cost' else 'latency' }}</h2></header>
+      <div class="card">
+        <p class="sub">Higher is better answers; further left is {{ 'cheaper' if scatter.x_metric == 'cost' else 'faster' }}.{% if scatter.x_metric == 'cost' %} Bubble area is average latency.{% else %} Every system cost $0 here (mock runs and local models are free), so the horizontal axis is latency.{% endif %} The line is the cost-quality frontier: what extra spend buys.</p>
+        <ul class="legend">
+          <li><span class="sw dot fill-accent"></span>Recommended</li>
+          <li><span class="sw dot ring"></span>Statistically tied with it</li>
+          <li><span class="sw dot fill-ink"></span>Pareto-optimal</li>
+          <li><span class="sw dot fill-muted"></span>Other systems</li>
+          <li><span class="sw line"></span>Frontier</li>
+        </ul>
+        <div class="chart-scroll" tabindex="0" role="region" aria-label="Scatter chart of answer score against {{ scatter.x_metric }}">{{ scatter_svg | safe }}</div>
+        <details class="tableview"><summary>Table view</summary>
+          <div class="table-scroll"><table>
+            <thead><tr><th>System</th><th>Mark</th><th class="n">Answer score</th><th class="n">{{ 'Cost per question' if scatter.x_metric == 'cost' else 'Latency (ms)' }}</th>{% if scatter.x_metric == 'cost' %}<th class="n">Latency (ms)</th>{% endif %}</tr></thead>
+            <tbody>{% for row in scatter_table %}<tr><th scope="row">{{ row.name }}</th><td>{{ row.kind }}</td><td class="n">{{ row.quality }}</td><td class="n">{{ row.x }}</td>{% if scatter.x_metric == 'cost' %}<td class="n">{{ row.latency }}</td>{% endif %}</tr>{% endfor %}</tbody>
+          </table></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="block" id="leaderboard-section" aria-labelledby="h-leaderboard">
+      <header><span class="num">{{ sec.leaderboard }}</span><h2 id="h-leaderboard">Leaderboard</h2></header>
+      <p class="lede">Ordered as the recommendation ranks them. Whiskers are 95% bootstrap confidence intervals over your questions.{% if baseline %} Markers compare each system with <strong>{{ baseline }}</strong>: ▲ better, ▼ worse, ≈ no clear difference (paired bootstrap, Holm-adjusted). Hover a marker for the numbers.{% endif %}</p>
+      <div class="controls">
+        <details class="picker" id="column-picker"><summary class="btn">Columns</summary>
+          <div class="list">{% for column in leaderboard.columns %}<label><input type="checkbox" value="{{ column.key }}" {{ 'checked' if column.default }}> {{ column.header }}</label>{% endfor %}</div>
+        </details>
+        <span class="hint" style="margin:0">Click a column header to sort.</span>
+      </div>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Leaderboard table">
+        <table id="leaderboard">
+          <thead><tr>
+            <th scope="col" class="sys"><button type="button" data-sort data-kind="text">System</button></th>
+            {% for column in leaderboard.columns %}<th scope="col" class="n" data-col="{{ column.key }}" {{ 'hidden' if not column.default }}><button type="button" data-sort data-kind="num" title="{{ 'Higher' if column.higher_is_better else 'Lower' }} is better">{{ column.header }}</button></th>{% endfor %}
+          </tr></thead>
+          <tbody>
+            {% for row in leaderboard.rows %}
+            <tr>
+              <th scope="row"><span class="sysname">{{ row.system }}</span>{% if row.badges %}<span class="badges">{% for badge in row.badges %}<span class="badge {{ badge }}">{{ badge }}</span>{% endfor %}</span>{% endif %}</th>
+              {% for cell in row.cells %}{% set column = leaderboard.columns[loop.index0] %}
+              <td class="n{{ ' best' if cell.best }}" data-col="{{ cell.key }}" data-value="{{ '' if cell.raw is none else cell.raw }}" {{ 'hidden' if not column.default }}>
+                <span class="cellwrap"><span>{{ cell.text }}{% if cell.sig %}<span class="sig" title="{{ cell.sig.tip }}" aria-hidden="true">{{ cell.sig.symbol }}</span><span class="sr">{{ cell.sig.tip }}</span>{% endif %}</span>{{ whiskers.get((row.system, cell.key), '') | safe }}</span>
+                {% if cell.ci %}<span class="sr">95% interval {{ cell.ci[0] }} to {{ cell.ci[1] }}</span>{% endif %}
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">Shaded: best in the column. Missing values show "—", never 0: a system that retrieves nothing has no retrieval score, and a label-free question has no recall.</p>
+    </section>
+
+    {% if heat %}
+    <section class="block" id="categories" aria-labelledby="h-categories">
+      <header><span class="num">{{ sec.categories }}</span><h2 id="h-categories">By question category</h2></header>
+      <div class="card">
+        <p class="sub">Where each system is strong or weak. Darker is higher; the scale spans the values shown, so compare within a chart, not between the two. Empty cells have no data.</p>
+        {% if heat.recall_svg %}<div class="toggle" role="group" aria-label="Metric"><button type="button" class="btn" data-heat-button="answer" aria-pressed="true">Answer score</button><button type="button" class="btn" data-heat-button="recall" aria-pressed="false">Recall@{{ heat.recall_k }}</button></div>{% endif %}
+        <div data-heat="answer"><div class="chart-scroll" tabindex="0" role="region" aria-label="Heatmap of answer score by system and category">{{ heat.answer_svg | safe }}</div>
+          <p class="ramp"><span>{{ heat.answer_lo }}</span><span class="steps" aria-hidden="true"><i class="c0"></i><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i><i class="c5"></i><i class="c6"></i></span><span>{{ heat.answer_hi }}</span><span>answer score</span></p></div>
+        {% if heat.recall_svg %}<div data-heat="recall" hidden><div class="chart-scroll" tabindex="0" role="region" aria-label="Heatmap of recall by system and category">{{ heat.recall_svg | safe }}</div>
+          <p class="ramp"><span>{{ heat.recall_lo }}</span><span class="steps" aria-hidden="true"><i class="c0"></i><i class="c1"></i><i class="c2"></i><i class="c3"></i><i class="c4"></i><i class="c5"></i><i class="c6"></i></span><span>{{ heat.recall_hi }}</span><span>recall@{{ heat.recall_k }}</span></p></div>{% endif %}
+        <details class="tableview"><summary>Table view</summary>
+          <div class="table-scroll"><table>
+            <thead><tr><th>System</th>{% for c in heat_table.categories %}<th class="n">{{ c }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in heat_table.rows %}<tr><th scope="row">{{ row.system }}</th>{% for cell in row.cells %}<td class="n">{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          </table></div>
+          <p class="hint">Answer score{% if heat.recall_svg %}; recall@{{ heat.recall_k }} is in the toggle above and in <code>report_data.json</code>{% endif %}.</p>
+        </details>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="block" id="costs" aria-labelledby="h-costs">
+      <header><span class="num">{{ sec.costs }}</span><h2 id="h-costs">Cost and latency</h2></header>
+      <div class="{{ 'grid-2' if stage_svg else '' }}">
+        {% if stage_svg %}
+        <div class="card">
+          <h3>Where the money goes</h3>
+          <p class="sub">Average cost of answering one question, by stage. Judging is not included.</p>
+          <ul class="legend">{% for key in stage_legend %}<li><span class="sw {{ key.slot }}"></span>{{ key.name }}</li>{% endfor %}</ul>
+          <div class="chart-scroll" tabindex="0" role="region" aria-label="Stacked bars of cost per stage">{{ stage_svg | safe }}</div>
+          <details class="tableview"><summary>Table view</summary><div class="table-scroll"><table>
+            <thead><tr><th>System</th>{% for key in stage_legend %}<th class="n">{{ key.name }}</th>{% endfor %}<th class="n">Total</th></tr></thead>
+            <tbody>{% for row in stage_table %}<tr><th scope="row">{{ row.system }}</th>{% for v in row.cells %}<td class="n">{{ v }}</td>{% endfor %}<td class="n">{{ row.total }}</td></tr>{% endfor %}</tbody>
+          </table></div></details>
+        </div>
+        {% else %}
+        <p class="lede">No cost was recorded: mock runs and local models are free, so there is nothing to split by stage.</p>
+        {% endif %}
+        <div class="card">
+          <h3>How long it takes</h3>
+          <p class="sub">Per-question latency, p50 and p95.{% if run.latency_source == 'concurrent' %} Measured while questions ran concurrently.{% endif %}</p>
+          <ul class="legend"><li><span class="sw lat-short"></span>p50 (typical)</li><li><span class="sw lat-long"></span>p95 (slow tail)</li></ul>
+          <div class="chart-scroll" tabindex="0" role="region" aria-label="Bars of latency per system">{{ latency_svg | safe }}</div>
+          <details class="tableview"><summary>Table view</summary><div class="table-scroll"><table>
+            <thead><tr><th>System</th><th class="n">p50 (ms)</th><th class="n">p95 (ms)</th><th>Source</th></tr></thead>
+            <tbody>{% for row in latency_table %}<tr><th scope="row">{{ row.system }}</th><td class="n">{{ row.p50 }}</td><td class="n">{{ row.p95 }}</td><td>{{ row.source }}</td></tr>{% endfor %}</tbody>
+          </table></div></details>
+        </div>
+      </div>
+      <p class="hint">Cost is charged at standalone prices even when a cache avoided the call, so systems stay comparable; real savings are in the banner.</p>
+    </section>
+
+    {% if agents %}
+    <section class="block" id="agents" aria-labelledby="h-agents">
+      <header><span class="num">{{ sec.agents }}</span><h2 id="h-agents">Agents, tools and routing</h2></header>
+      {% if agents.rows %}
+      <div class="table-scroll"><table>
+        <thead><tr><th>System</th>{% for h in agent_headers %}<th class="n">{{ h }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in agent_table %}<tr><th scope="row">{{ row.system }}</th>{% for cell in row.cells %}<td class="n">{{ cell.text }}{% if cell.bar is not none %} <span class="bar-cell" style="width: {{ cell.bar }}px" aria-hidden="true"></span>{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table></div>
+      <p class="hint">Steps and calls are means per question. A high budget-hit share means the loop ran out of budget before it finished; tool errors are calls that returned an error observation.</p>
+      {% endif %}
+      {% if agents.tools %}
+      <h3 style="margin:22px 0 8px;font-size:16px">Tool usage</h3>
+      <div class="table-scroll"><table>
+        <thead><tr><th>System</th><th>Tool</th><th class="n">Calls</th><th class="n">Errors</th><th class="n">Questions using it</th><th class="n">Avg latency (ms)</th></tr></thead>
+        <tbody>{% for t in agents.tools %}<tr><th scope="row">{{ t.system }}</th><td>{{ t.tool }}</td><td class="n">{{ t.calls }}</td><td class="n">{{ t.errors }}</td><td class="n">{{ t.questions_using }}</td><td class="n">{{ '%.1f' | format(t.avg_latency_ms) if t.avg_latency_ms is not none else '—' }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% endif %}
+      {% if agents.routes %}
+      <h3 style="margin:22px 0 8px;font-size:16px">Routing</h3>
+      <div class="table-scroll"><table>
+        <thead><tr><th>System</th><th>Route</th><th class="n">Questions</th><th class="n">Share</th><th class="n">Answer score</th><th class="n">Precision</th><th class="n">Recall</th></tr></thead>
+        <tbody>{% for r in agents.routes %}<tr><th scope="row">{{ r.system }}</th><td>{{ r.route }}</td><td class="n">{{ r.questions }}</td><td class="n">{{ '%.0f%%' | format(r.share * 100) if r.share is not none else '—' }}</td><td class="n">{{ '%.2f' | format(r.avg_answer_score) if r.avg_answer_score is not none else '—' }}</td><td class="n">{{ '%.2f' | format(r.precision) if r.precision is not none else '—' }}</td><td class="n">{{ '%.2f' | format(r.recall) if r.recall is not none else '—' }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    {% if failures %}
+    <section class="block" id="failures" aria-labelledby="h-failures">
+      <header><span class="num">{{ sec.failures }}</span><h2 id="h-failures">How systems fail</h2></header>
+      <div class="card">
+        <p class="sub">Questions that did not end well, by failure type (the questions that went fine are left out). Types are defined in the methodology; "Other" folds in {{ other_types }}.</p>
+        {% if failure_svg %}
+        <ul class="legend">{% for key in failure_legend %}<li><span class="sw {{ key.slot }}"></span>{{ key.name }}</li>{% endfor %}</ul>
+        <div class="chart-scroll" tabindex="0" role="region" aria-label="Stacked bars of failures per system">{{ failure_svg | safe }}</div>
+        {% else %}<p class="empty">No classified failures: every question ended well.</p>{% endif %}
+        <details class="tableview"><summary>Table view</summary><div class="table-scroll"><table>
+          <thead><tr><th>System</th><th class="n">Questions</th>{% for key in failure_legend %}<th class="n">{{ key.name }}</th>{% endfor %}<th class="n">Failed</th></tr></thead>
+          <tbody>{% for row in failure_table %}<tr><th scope="row">{{ row.system }}</th><td class="n">{{ row.questions }}</td>{% for v in row.cells %}<td class="n">{{ v }}</td>{% endfor %}<td class="n">{{ row.total }}</td></tr>{% endfor %}</tbody>
+        </table></div></details>
+      </div>
+    </section>
+
+    <section class="block" id="audit" aria-labelledby="h-audit">
+      <header><span class="num">{{ sec.audit }}</span><h2 id="h-audit">Label audit</h2></header>
+      {% if audit.candidates %}
+      <p class="lede"><strong>{{ audit.candidates }}</strong> answer{{ '' if audit.candidates == 1 else 's' }} to <strong>{{ audit.questions }}</strong> question{{ '' if audit.questions == 1 else 's' }} were judged well supported even though retrieval missed documents the labels name. Those are candidates for a label review, not automatic corrections: the answer may simply have used another good document. The list is in <code>qrels_audit.md</code>.</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>System</th><th class="n">High severity</th><th class="n">Medium</th></tr></thead>
+        <tbody>{% for name, counts in audit.by_system.items() %}<tr><th scope="row">{{ name }}</th><td class="n">{{ counts.get('high', 0) }}</td><td class="n">{{ counts.get('medium', 0) }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      {% else %}<p class="empty">No candidates: where retrieval missed a labeled document, the answers were not confidently right anyway.</p>{% endif %}
+    </section>
+    {% endif %}
+
+    <section class="block" id="repro" aria-labelledby="h-repro">
+      <header><span class="num">{{ sec.repro }}</span><h2 id="h-repro">Reproducibility</h2></header>
+      <dl class="repro">
+        <div><dt>ragbench</dt><dd>{{ run.ragbench_version or '—' }}</dd></div>
+        <div><dt>Python</dt><dd>{{ run.python or '—' }}</dd></div>
+        <div><dt>Git</dt><dd>{{ (run.git_sha or '—')[:12] }}{{ ' (modified)' if run.git_dirty else '' }}</dd></div>
+        <div><dt>Config hash</dt><dd>{{ (run.config_hash or '—')[:16] }}</dd></div>
+        <div><dt>Dataset hash</dt><dd>{{ (run.dataset_hash or '—')[:16] }}</dd></div>
+        <div><dt>Models</dt><dd>{{ run.models_used | join(', ') if run.models_used else '—' }}</dd></div>
+        <div><dt>Prices as of</dt><dd>{{ run.pricing_as_of or '—' }}</dd></div>
+        <div><dt>Started</dt><dd>{{ run.started_utc or '—' }}</dd></div>
+      </dl>
+      {% if config_yaml %}<details class="more"><summary>Configuration that ran</summary><pre class="config" tabindex="0">{{ config_yaml }}</pre></details>{% endif %}
+      <p class="hint">How to read every number here: the methodology page of the docs (<code>docs/methodology.md</code>). This page is self-contained; the same data is in <code>report_data.json</code> next to it.</p>
+    </section>
+  </main>
+
+  <footer>RAGBench · {{ repo_text }}</footer>
+</div>
+<script type="application/json" id="report-data">{{ blob | safe }}</script>
+<script>
+{{ js | safe }}
+</script>
+</body>
+</html>

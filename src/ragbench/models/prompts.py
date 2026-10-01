@@ -24,3 +24,10 @@ FORCE_ANSWER_MARKER = "You cannot use any more tools"
 
 # The adaptive system's LLM router.
 ROUTE_QUESTION_MARKER = "Choose the route that should handle the question below"
+
+# Dataset synthesis and pooled labeling (`ragbench generate-questions`, `ragbench label`); the text around them lives in `datasets/prompts.py`.
+WRITE_QUESTION_MARKER = "Write one question that the document below answers"
+WRITE_MULTIHOP_MARKER = "Write one question that needs both documents below to answer"
+PARAPHRASE_QUESTION_MARKER = "Rewrite the question below so that it avoids the words"
+WRITE_UNANSWERABLE_MARKER = "Write one question that none of the documents below answers"
+GRADE_DOCUMENT_MARKER = "Grade how well the document below answers the question"

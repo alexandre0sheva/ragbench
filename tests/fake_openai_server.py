@@ -61,6 +61,13 @@ class FakeOpenAIServer:
                     if json_mode and "evaluation judge" in system:
                         with outer._lock:
                             outer.stats["judge_calls"] += 1
+                            first_user = next((m["content"] for m in body["messages"] if m["role"] == "user"), "")
+                            try:
+                                asked = json.loads(first_user)
+                            except ValueError:
+                                asked = None
+                            if isinstance(asked, dict) and asked.get("answerable") is True and asked.get("reference_answer") is None:
+                                outer.stats["judge_calls_reference_free"] += 1
                         text, prompt_tokens, completion_tokens = JUDGE_REPLY, 100, 30
                     else:
                         result = outer._llm.generate(body["messages"], json_mode=json_mode)

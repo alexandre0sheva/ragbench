@@ -51,11 +51,19 @@ quadrantChart
 
 ```bash
 pip install -e .
+ragbench auto --docs ./my_docs
+```
+
+One command from a folder of documents to a decision: it profiles your documents, writes questions from them if you have none (flagged `needs_review`; or bring your own with `--questions`), estimates the cost and asks before spending, runs the `standard` preset (`--preset quick|thorough|agentic`), and ends with the recommended system, a runnable `winner.yaml` and `report.html`, all in one `results/auto_<time>/` directory. Add `--mock` to try it free, `--max-cost 2.00` to cap the spending and `--profile max_quality|cheapest_acceptable|lowest_latency` to change what it optimizes. If it stops (budget, a crash), `ragbench auto --resume results/auto_<time>` continues without paying again for finished systems.
+
+To run the bundled demo dataset, or your own config:
+
+```bash
 ragbench demo
 ragbench compare --config configs/all.yaml
 ```
 
-No config yet? `ragbench compare --preset quick --docs my_docs/ --questions my_questions.jsonl` runs three strong baselines on your data (`standard`, `thorough` and `agentic` add more), and `ragbench estimate --config configs/all.yaml` projects the cost first; see [presets, sweeps and budgets](docs/configuration.md#sweeps).
+Or `ragbench compare --preset quick --docs my_docs/ --questions my_questions.jsonl` for three strong baselines on your data, and `ragbench estimate --config configs/all.yaml` to project the cost first; see [presets, sweeps and budgets](docs/configuration.md#sweeps).
 
 Every run ends with a **recommendation**: which system to deploy under your constraints, the systems that are statistically tied with it, and a ready-to-run `winner.yaml` (`ragbench recommend --run results/<run> --max-cost 0.002` re-asks it with other constraints; see [methodology](docs/methodology.md#selection)).
 
@@ -129,35 +137,20 @@ RAGBench scores retrieval (Recall, MRR, nDCG at the document level), the context
 
 While a benchmark runs, the CLI shows live per-system progress (ingestion, then a question-by-question bar) and finishes with a leaderboard table in the terminal, with the best value in each column highlighted.
 
-Each run writes a timestamped directory containing `leaderboard.md`, `report.html`, `metrics_summary.csv`, `per_question_results.jsonl`, `retrieval_metrics.csv`, `answer_metrics.csv`, `cost_breakdown.csv`, `failures.md`, `qrels_audit.md`, `system_runtime.csv`, `significance.csv`, `stats.json`, `pareto.json`, `recommendation.md` / `recommendation.json`, `winner.yaml`, `run_summary.json`, and `run_manifest.json` (versions, git commit, config/dataset hashes).
+Each run writes a timestamped directory containing `leaderboard.md`, `report.html`, `report_data.json`, `metrics_summary.csv`, `per_question_results.jsonl`, `retrieval_metrics.csv`, `answer_metrics.csv`, `cost_breakdown.csv`, `failures.md`, `qrels_audit.md`, `system_runtime.csv`, `significance.csv`, `stats.json`, `pareto.json`, `recommendation.md` / `recommendation.json`, `winner.yaml`, `run_summary.json`, and `run_manifest.json` (versions, git commit, config/dataset hashes).
 
-`report.html` is a self-contained page (no CDN, works offline) with winner summary cards, a sortable leaderboard, comparison bar charts, per-category quality, cost breakdown, and failure analysis. It adapts to light and dark mode.
+`report.html` is a self-contained page (no CDN, nothing loaded from the network, works offline and prints) built like a decision document: the run banner (mock or live, dataset, spend), the **recommendation** with a copyable `winner.yaml`, a quality-against-cost scatter with the Pareto frontier, a sortable leaderboard with confidence whiskers and significance markers, a category heatmap, stage-cost and latency charts, agent and tool panels when there are any, failure types, a label audit and the reproducibility footer. It follows your light or dark setting, every chart has a table view, and `report_data.json` next to it holds the same data for other tools. How to read it: [methodology](docs/methodology.md#reading-the-report). It is rebuilt from the run's files, so it can be regenerated later.
 
 `qrels_audit.md` is a dataset-quality aid: it surfaces cases where a system was judged to answer well but retrieved documents were not labeled relevant. Treat those rows as candidates for human review, not automatic ground-truth edits.
 
 ## Bring your own dataset
 
-```text
-my_dataset/
-  docs/
-    policy.md
-    contract.pdf
-    product_notes.md
-  questions.jsonl
-  qrels.jsonl   # optional — graded relevance
-```
-
-Documents can be `.md`, `.txt`, `.rst`, `.html`, `.pdf`, `.docx`, `.csv`/`.tsv` or `.json`/`.jsonl` (PDF and Word need the optional extras `ragbench[pdf]` and `ragbench[docx]`); see [dataset-format.md](docs/dataset-format.md) for formats, ignore rules and error handling. Point a config at the dataset (copy any of `configs/*.yaml`) and run `ragbench compare --config my_config.yaml`.
-
-Before running, sanity-check the dataset — `inspect-dataset` validates qrels coverage, missing document references, duplicate ids, and empty documents:
-
 ```bash
-ragbench inspect-dataset --docs my_dataset/docs \
-    --questions my_dataset/questions.jsonl \
-    --qrels my_dataset/qrels.jsonl
+ragbench init my_ds --docs path/to/your/documents   # writes my_ds/ragbench.yaml and a questions.jsonl to edit
+ragbench run --config my_ds/ragbench.yaml --mock    # free pipeline check; drop --mock for the real run
 ```
 
-See [docs/dataset-format.md](docs/dataset-format.md) for the schema reference.
+Put real questions in `my_ds/questions.jsonl` (labels are optional: without `relevant_doc_ids` retrieval metrics are skipped and answers are still judged). No questions yet? `ragbench generate-questions` writes a reviewable set from your documents, and `ragbench label` proposes relevance labels for a finished run. Have questions elsewhere? `ragbench import` converts a CSV, a BEIR dataset or Markdown Q/A pairs, and `ragbench inspect-dataset` profiles the result (sizes, label coverage, suggested chunk sizes, projected cost, likely problems). Formats, importers and label-free mode: [docs/dataset-format.md](docs/dataset-format.md).
 
 ## Parallel runs
 

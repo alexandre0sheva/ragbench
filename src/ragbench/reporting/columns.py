@@ -93,3 +93,33 @@ def format_cell(column: Column, row: Mapping[str, Any], sep: str = " ") -> str:
         if lo is not None and hi is not None:
             text += f"{sep}[{column.fmt.format(lo)}, {column.fmt.format(hi)}]"
     return text
+
+
+# Columns the leaderboard can show on request (hidden until picked): (key, header, format, higher is better).
+_EXTRA_COLUMNS: tuple[tuple[str, str, str, bool], ...] = (
+    ("correctness", "Correct", "{:.2f}", True),
+    ("completeness", "Complete", "{:.2f}", True),
+    ("relevance", "Relevant", "{:.2f}", True),
+    ("citation_quality", "Cites", "{:.2f}", True),
+    ("exact_match", "EM", "{:.2f}", True),
+    ("keyword_recall", "Keywords", "{:.2f}", True),
+    ("context_precision", "Ctx prec", "{:.2f}", True),
+    ("abstain_precision", "Abstain prec", "{:.2f}", True),
+    ("abstain_recall", "Abstain recall", "{:.2f}", True),
+    ("false_refusal_rate", "False refusals", "{:.2f}", False),
+    ("judge_fallback_rate", "Judge fallback", "{:.2f}", False),
+    ("avg_steps", "Steps", "{:.1f}", False),
+    ("avg_llm_calls", "LLM calls", "{:.1f}", False),
+    ("avg_tool_calls", "Tool calls", "{:.1f}", False),
+    ("tool_error_rate", "Tool errors", "{:.2f}", False),
+    ("budget_exhausted_rate", "Budget hit", "{:.2f}", False),
+    ("route_accuracy", "Route acc.", "{:.2f}", True),
+    ("n_ok", "Answered", "{:.0f}", True),
+    ("n_error", "Failed", "{:.0f}", False),
+)
+
+
+def extra_columns(keys: Iterable[str], shown: Iterable[Column]) -> list[Column]:
+    """The optional leaderboard columns this run has values for and `shown` does not already include."""
+    keys, taken = set(keys), {column.key for column in shown}
+    return [Column(key, header, fmt, higher) for key, header, fmt, higher in _EXTRA_COLUMNS if key in keys and key not in taken]

@@ -158,6 +158,8 @@ def heuristic_judge(question: Question, answer: str, contexts: list[RetrievedChu
     supported_words = sum(1 for t in content_words if t in context_norm)
     support_ratio = supported_words / max(1, len(content_words))
     faithfulness = 5.0 * min(1.0, support_ratio)
+    if not question.reference_answer and not question.expected_keywords:
+        correctness = faithfulness  # nothing to compare with (label-free question): the context is the only yardstick
     cited_doc_ids = set(re.findall(r"\[(doc_[A-Za-z0-9_-]+)\]", answer))
     citation_quality = 5.0 if cited_doc_ids.intersection(question.relevant_doc_ids) else (2.0 if cited_doc_ids else 0.0)
     if refused:

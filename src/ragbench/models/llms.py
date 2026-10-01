@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from ragbench.models import mock_agent
+from ragbench.models import mock_agent, mock_synthesis
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.defaults import DEFAULT_GENERATOR_MODEL
 from ragbench.models.errors import ModelInitError
@@ -337,6 +337,7 @@ for _name, _predicate, _respond in (
     ("route_question", lambda prompt, json_mode: ROUTE_QUESTION_MARKER in prompt, _mock_route),
 ):
     MockLLM.register_responder(_predicate, _respond, name=_name)
+mock_synthesis.register(MockLLM)
 
 
 def create_llm(

@@ -158,7 +158,7 @@ def test_live_run_through_an_openai_compatible_endpoint_needs_no_openai_key(tmp_
     assert (summary["judge_fallback_rate"] == 0).all()
     assert "Self-preference" not in (out / "leaderboard.md").read_text(), "the judge is a different model than the generators"
     row = json.loads((out / "per_question_results.jsonl").read_text().splitlines()[0])
-    assert row["answer_judge"]["metadata"]["samples"] == 2 and row["answer_judge"]["metadata"]["prompt_version"] == "v2"
+    assert row["answer_judge"]["metadata"]["samples"] == 2 and row["answer_judge"]["metadata"]["prompt_version"] == "v3"
     assert (summary["latency_source"] == "probe").all()
 
 
@@ -184,3 +184,148 @@ def test_live_run_with_parallel_systems_stops_cleanly_at_its_budget(tmp_path):
     out = sorted((tmp_path / "results").iterdir())[-1]
     budget = json.loads((out / "run_summary.json").read_text())["budget"]
     assert budget["stopped"] is True and budget["spent_usd"] > 0 and set(budget["incomplete_systems"]) >= {"vector", "hybrid_rerank"}
+
+
+def test_live_label_free_run_judges_answers_and_leaves_retrieval_blank(tmp_path):
+    """Label-free questions over the real client path: no labels anywhere, half without a reference answer, and the judge is told so."""
+    shutil.copytree(ROOT / "data" / "demo", tmp_path / "demo")
+    demo = [json.loads(line) for line in (tmp_path / "demo" / "questions.jsonl").read_text().splitlines()]
+    answerable = [row for row in demo if row["relevant_doc_ids"]][:6]
+    rows = [{"id": row["id"], "question": row["question"], **({"reference_answer": row["reference_answer"]} if number % 2 == 0 else {})} for number, row in enumerate(answerable)]
+    (tmp_path / "free.jsonl").write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    config = {
+        "run": {"name": "label_free_live", "output_dir": str(tmp_path / "results")},
+        "dataset": {"documents_path": str(tmp_path / "demo" / "docs"), "questions_path": str(tmp_path / "free.jsonl")},
+        "systems": [
+            {"type": "bm25", "name": "bm25", "retrieval": {"top_k": 5}},
+            {"type": "vector", "name": "vector", "retrieval": {"vector_store": "numpy", "top_k": 5}},
+        ],
+        "evaluation": {"max_workers": 4, "latency_probe_questions": 0},
+    }
+    path = tmp_path / "free.yaml"
+    path.write_text(yaml.safe_dump(config), encoding="utf-8")
+    with FakeOpenAIServer() as server:
+        out, run = _run(path, server, tmp_path)
+        stats = dict(server.stats)
+
+    assert run["mode"] == "live" and run["num_errors"] == 0
+    assert {key: run["dataset"][key] for key in ("questions", "labeled_questions", "label_free")} == {"questions": 6, "labeled_questions": 0, "label_free": True}
+    summary = pd.read_csv(out / "metrics_summary.csv").set_index("system")
+    assert summary["retrieval_recall@5"].isna().all() and (summary["n_ok"] == 6).all()
+    assert (summary["answer_score"] > 3.9).all() and (summary["judge_fallback_rate"] == 0).all()
+    assert stats["judge_calls"] == 12 and stats["judge_calls_reference_free"] == 6, "the three questions without a reference reach the judge as answerable with a null reference"
+    assert json.loads((out / "recommendation.json").read_text())["winner"] in summary.index, "a label-free run still ends with a recommendation"
+
+
+def test_live_generate_questions_and_label_use_the_real_client_and_the_disk_cache(tmp_path):
+    """`generate-questions` and `label` over real HTTP: valid questions, grades through the cache, and a re-run that costs (almost) nothing."""
+    from ragbench.evaluation.evaluator import run_benchmark
+
+    shutil.copytree(ROOT / "data" / "demo", tmp_path / "demo")
+    docs, questions = tmp_path / "demo" / "docs", tmp_path / "questions.jsonl"
+    env = {
+        **os.environ,
+        "OPENAI_API_KEY": "sk-local-fake-key-not-real",
+        "OPENAI_BASE_URL": "",
+        "RAGBENCH_CACHE_DIR": str(tmp_path / "cache"),
+        "CI": "",
+    }
+
+    def cli(server: FakeOpenAIServer, *args: str) -> subprocess.CompletedProcess[str]:
+        server.reset()
+        done = subprocess.run(
+            [sys.executable, "-m", "ragbench.cli", *args, "--yes"],
+            env={**env, "OPENAI_BASE_URL": server.base_url},
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+        assert done.returncode == 0, f"{done.stdout[-1500:]}\n{done.stderr[-1500:]}"
+        return done
+
+    with FakeOpenAIServer() as server:
+        cli(server, "generate-questions", "--docs", str(docs), "--out", str(questions), "--n", "16", "--seed", "3")
+        cold_generation = dict(server.stats)
+        rows = [json.loads(line) for line in questions.read_text().splitlines()]
+        assert len(rows) == 16 and all(row["metadata"]["needs_review"] and "mock" not in row["metadata"] for row in rows)
+        assert {row["metadata"]["generator"] for row in rows} == {"gpt-6-luna"}  # a live run, not the template generator
+        assert cold_generation["/v1/chat/completions"] >= 16
+
+        cli(server, "generate-questions", "--docs", str(docs), "--out", str(questions), "--n", "16", "--seed", "3", "--force")
+        assert server.stats["/v1/chat/completions"] < 0.2 * cold_generation["/v1/chat/completions"], "the same request is served from the disk cache"
+        assert [json.loads(line) for line in questions.read_text().splitlines()] == rows
+
+        # A finished run to label (mock models: the point here is the grading calls).
+        config = {
+            "run": {"name": "to_label", "output_dir": str(tmp_path / "results")},
+            "dataset": {"documents_path": str(docs), "questions_path": str(questions)},
+            "systems": [{"type": "bm25", "name": "bm25"}, {"type": "vector", "name": "vector", "retrieval": {"vector_store": "numpy"}}],
+            "evaluation": {"max_questions": 5, "max_workers": 2, "latency_probe_questions": 0},
+        }
+        (tmp_path / "to_label.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
+        run_dir = run_benchmark(tmp_path / "to_label.yaml", force_mock=True, max_workers=2)
+
+        cli(server, "label", "--run", str(run_dir), "--top-k", "3", "--apply")
+        cold_label = dict(server.stats)
+        proposed = [json.loads(line) for line in (run_dir / "qrels.proposed.jsonl").read_text().splitlines()]
+        assert proposed and all(row["relevance"] in (0, 1, 2, 3) for row in proposed)
+        assert cold_label["/v1/chat/completions"] >= len(proposed) and "> **Mock grader.**" not in (run_dir / "qrels_review.md").read_text()
+        assert (run_dir / "qrels.merged.jsonl").exists()
+
+        cli(server, "label", "--run", str(run_dir), "--top-k", "3")
+        assert server.stats["/v1/chat/completions"] < 0.2 * cold_label["/v1/chat/completions"], "grades are cached"
+
+
+def test_live_auto_run_checkpoints_on_worker_threads_and_resume_runs_only_the_missing_system(tmp_path):
+    """`ragbench auto` over real HTTP with systems on parallel threads: checkpoints written from those threads, then a resume (cache off, so
+    restoration and not caching is what saves the calls) that re-runs the one system whose checkpoint is gone."""
+    from ragbench.evaluation.checkpoint import CheckpointStore
+
+    shutil.copytree(ROOT / "data" / "demo" / "docs", tmp_path / "docs")
+    (tmp_path / "base.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "run": {"name": "base", "output_dir": str(tmp_path / "unused")},
+                "dataset": {"documents_path": str(tmp_path / "docs"), "questions_path": str(tmp_path / "unused.jsonl")},
+                "systems": [{"type": "bm25", "name": "bm25"}],
+                "evaluation": {"max_workers": 3, "system_workers": 3, "latency_probe_questions": 2},
+            }
+        ),
+        encoding="utf-8",
+    )
+    env = {**os.environ, "OPENAI_API_KEY": "sk-local-fake-key-not-real", "RAGBENCH_CACHE_DIR": str(tmp_path / "cache"), "CI": ""}
+
+    def cli(server: FakeOpenAIServer, *args: str) -> None:
+        server.reset()
+        done = subprocess.run(
+            [sys.executable, "-m", "ragbench.cli", "auto", *args, "--yes", "--no-cache"],
+            env={**env, "OPENAI_BASE_URL": server.base_url},
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+        assert done.returncode == 0, f"{done.stdout[-1500:]}\n{done.stderr[-1500:]}"
+
+    with FakeOpenAIServer() as server:
+        cli(server, "--docs", str(tmp_path / "docs"), "--config", str(tmp_path / "base.yaml"), "--preset", "quick", "--n-questions", "8", "--output-dir", str(tmp_path / "results"))
+        cold = dict(server.stats)
+        (run_dir,) = [path for path in (tmp_path / "results").iterdir() if path.is_dir()]
+        store = CheckpointStore(run_dir)
+        assert all(store.path_for(name).exists() for name in ("bm25", "vector", "hybrid_rerank"))
+        assert json.loads((run_dir / "run_summary.json").read_text())["mode"] == "live" and json.loads((run_dir / "run_summary.json").read_text())["num_errors"] == 0
+        assert cold["/v1/embeddings"] > 0 and cold["/v1/chat/completions"] > 16
+        kept = {name: store.path_for(name).stat().st_mtime_ns for name in ("bm25", "hybrid_rerank")}
+        store.path_for("vector").unlink()
+
+        cli(server, "--resume", str(run_dir))
+        resumed = dict(server.stats)
+
+    assert {name: store.path_for(name).stat().st_mtime_ns for name in kept} == kept and store.path_for("vector").exists()
+    assert resumed["/v1/chat/completions"] < 0.6 * cold["/v1/chat/completions"], "two of the three systems (and the question writing) were not paid for again"
+    assert resumed["/v1/embeddings"] < cold["/v1/embeddings"]
+    summary = pd.read_csv(run_dir / "metrics_summary.csv").set_index("system")
+    assert list(summary.index) == ["bm25", "vector", "hybrid_rerank"] and (summary["n_ok"] == 8).all()
+    assert (summary["latency_source"] == "probe").all(), "restored systems keep the latency probe of the attempt that measured them"
+    assert json.loads((run_dir / "recommendation.json").read_text())["winner"] in summary.index

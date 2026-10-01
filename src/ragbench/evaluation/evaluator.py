@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from collections.abc import Callable
+from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
@@ -13,16 +13,18 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from ragbench.cache import CacheRuntime, DiskCache, activate_cache, summarize_cache
+from ragbench.cache import CacheRuntime, activate_cache, open_cache_runtime, summarize_cache
 from ragbench.config.loader import load_config, load_config_dict
 from ragbench.config.schema import ExperimentConfig, SystemConfig
 from ragbench.config.sweep import expand_sweeps
 from ragbench.datasets.loader import load_dataset
+from ragbench.datasets.schema import has_relevance_labels
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import load_dataset_documents
 from ragbench.evaluation.answer_judge import AnswerJudge
 from ragbench.evaluation.answer_metrics import answer_metrics, is_refusal, refusal_metrics
 from ragbench.evaluation.budget import BudgetExceededError, BudgetGuard
+from ragbench.evaluation.checkpoint import Checkpoint, CheckpointStore, context_hash
 from ragbench.evaluation.context_metrics import context_precision, context_recall_doc
 from ragbench.evaluation.failure_analysis import classify_failure
 from ragbench.evaluation.manifest import build_manifest, dataset_hash, utc_now_iso
@@ -42,7 +44,7 @@ from ragbench.rag_systems import create_rag_system
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
 from ragbench.rag_systems.trace import STAGE_KEYS, UNTRACKED, mean_by_stage, stage_costs, step_to_dict
 from ragbench.registry import SYSTEMS, VECTOR_BACKENDS
-from ragbench.reporting.html_report import write_html_report
+from ragbench.reporting.html_report import write_report
 from ragbench.reporting.markdown_report import write_failures, write_leaderboard, write_qrels_audit
 from ragbench.reporting.notices import build_notices
 from ragbench.runtime import (
@@ -100,9 +102,13 @@ class BenchmarkEvaluator:
         use_cache: bool = True,
         system_workers: int | None = None,
         raw_config: dict[str, Any] | None = None,
+        run_dir: Path | None = None,
     ):
         self.config_path = config_path
         self.use_cache = use_cache
+        # With `run_dir` the run lives in that directory instead of a new timestamped one, checkpoints each system as it finishes, and picks
+        # up the checkpoints of an earlier attempt there (see evaluation/checkpoint.py).
+        self.run_dir = run_dir
         # `raw_config` is a config assembled in code (a preset, or a file narrowed with `--systems`) instead of read from `config_path`.
         self._config_given = raw_config is not None
         if raw_config is None:
@@ -141,6 +147,10 @@ class BenchmarkEvaluator:
             suffix += 1
             self.run_id = f"{self.config.run.name}_{timestamp}_{suffix}"
         self.output_dir = self.config.run.output_dir / self.run_id
+        if run_dir is not None:
+            self.run_id, self.output_dir = run_dir.name, run_dir
+        self.checkpoints = CheckpointStore(run_dir) if run_dir is not None else None
+        self.restored_systems: list[str] = []  # systems taken from checkpoints instead of being run in this attempt
 
     def run(self) -> Path:
         """Execute the configured benchmark and return the output directory path."""
@@ -179,9 +189,7 @@ class BenchmarkEvaluator:
         self.cache_reason = self._cache_disabled_reason()
         if self.cache_reason is not None:
             return None
-        cache_dir = Path(os.environ.get("RAGBENCH_CACHE_DIR") or self.config.cache.dir)
-        disk = DiskCache(cache_dir / "cache.sqlite3", ttl_days=self.config.cache.ttl_days)
-        return CacheRuntime(disk=disk, config=self.config.cache)
+        return open_cache_runtime(self.config.cache)
 
     def _run(self) -> Path:
         run_start = perf_counter()
@@ -206,6 +214,15 @@ class BenchmarkEvaluator:
             self.models_used.add(judge.llm.model_name)
 
         self._qrels, self._judge = dataset.qrels, judge
+        labeled = sum(has_relevance_labels(question, dataset.qrels.get(question.id, {})) for question in questions)
+        self.dataset_info = {
+            "questions": len(questions),
+            "labeled_questions": labeled,
+            "label_free": dataset.label_free,
+            "synthetic_questions": sum(bool(q.metadata.get("synthetic")) for q in questions),
+            "needs_review_questions": sum(bool(q.metadata.get("needs_review")) for q in questions),
+            "mock_questions": sum(bool(q.metadata.get("mock")) for q in questions),
+        }
         warm_up_imports(self._modules_to_warm_up())
         per_question_rows: list[dict[str, Any]] = []
         retrieval_rows: list[dict[str, Any]] = []
@@ -220,8 +237,10 @@ class BenchmarkEvaluator:
             ingest_workers=self.config.evaluation.ingest_workers,
             latency_probe_questions=self.config.evaluation.latency_probe_questions,
         )
-        runner = SystemRunner(self, settings, self.progress)
-        all_outcomes = runner.run_all(self.config.systems, documents, questions)
+        runner = SystemRunner(self, settings, self.progress, on_system_done=self._checkpoint if self.checkpoints is not None else None)
+        restored, restored_probes = self._restore_checkpoints(questions)
+        fresh = {outcome.name: outcome for outcome in runner.run_all([cfg for cfg in self.config.systems if cfg.resolved_name not in restored], documents, questions)}
+        all_outcomes = [restored[cfg.resolved_name] if cfg.resolved_name in restored else fresh[cfg.resolved_name] for cfg in self.config.systems]
         # A system the spending cap stopped partway (or never started) has results over fewer questions than the others: they are
         # set aside rather than compared. Everything below works on the systems that finished.
         outcomes = [outcome for outcome in all_outcomes if outcome.complete]
@@ -231,7 +250,11 @@ class BenchmarkEvaluator:
             self._reported = [cfg for cfg in self.config.systems if cfg.resolved_name in done]
         # Timings from the parallel pass include queueing behind other threads. A live run therefore re-times a few
         # questions one at a time afterwards; mock runs skip it (their latencies are microseconds of CPU).
-        self.probe_results = runner.probe(outcomes, questions) if self._should_probe(questions) and not unfinished else {}
+        fresh_probes = runner.probe(outcomes, questions) if self._should_probe(questions) and not unfinished else {}
+        self.probe_results = {**restored_probes, **fresh_probes}
+        if self.checkpoints is not None:
+            for name, probe in fresh_probes.items():
+                self.checkpoints.save_probe(name, asdict(probe))
         self._collect(outcomes, per_question_rows, retrieval_rows, answer_rows, cost_rows, ingestion_rows, system_runtime_rows)
 
         run_wall_time_ms = (perf_counter() - run_start) * 1000
@@ -243,6 +266,55 @@ class BenchmarkEvaluator:
         if failed:
             raise BenchmarkRunError(self.output_dir, failed, self.config.evaluation.max_error_rate)
         return self.output_dir
+
+    def _context_hash(self, system_config: SystemConfig) -> str:
+        return context_hash(system_config, self.config, self.dataset_digest, self.mode)
+
+    def _checkpoint(self, outcome: SystemOutcome) -> None:
+        """Save a system that just finished cleanly (every question answered, none failed); anything else is re-run on resume."""
+        assert self.checkpoints is not None
+        if outcome.system is None or not outcome.complete or any(result["per_question"]["error"] is not None for result in outcome.results):
+            return
+        system_config = next(cfg for cfg in self.config.systems if cfg.resolved_name == outcome.name)
+        try:
+            self.checkpoints.save(
+                Checkpoint(
+                    system=outcome.name,
+                    system_type=outcome.system_type,
+                    ingestion_row=outcome.ingestion_row,
+                    results=outcome.results,
+                    runtime_row=outcome.runtime_row,
+                    models_used=sorted(_model_names(outcome.system)),
+                    generator_model=self.generator_models.get(outcome.name),
+                ),
+                self._context_hash(system_config),
+            )
+        except (OSError, TypeError) as exc:  # a checkpoint is a convenience: failing to write one must not fail the run
+            logger.warning("Could not checkpoint system %s: %s", outcome.name, exc)
+
+    def _restore_checkpoints(self, questions: list) -> tuple[dict[str, SystemOutcome], dict[str, ProbeResult]]:
+        """The systems an earlier attempt of this run finished in the same context, as outcomes; the rest must be run."""
+        restored: dict[str, SystemOutcome] = {}
+        probes: dict[str, ProbeResult] = {}
+        if self.checkpoints is None:
+            return restored, probes
+        (self.output_dir / "per_question_partial.jsonl").unlink(missing_ok=True)  # left by an earlier budget stop; rewritten if it happens again
+        for position, system_config in enumerate(self.config.systems, start=1):
+            name = system_config.resolved_name
+            checkpoint = self.checkpoints.load(name, self._context_hash(system_config))
+            if checkpoint is None or len(checkpoint.results) != len(questions):
+                continue
+            restored[name] = SystemOutcome(position, name, checkpoint.system_type, None, checkpoint.ingestion_row, checkpoint.results, checkpoint.runtime_row, restored=True)
+            self.models_used.update(checkpoint.models_used)
+            if checkpoint.generator_model is not None:
+                self.generator_models[name] = checkpoint.generator_model
+            if checkpoint.probe:
+                probes[name] = ProbeResult(**checkpoint.probe)
+            spent = float((checkpoint.ingestion_row or {}).get("total_cost", 0.0)) + sum(float(r["per_question"]["cost"]["total_cost"]) for r in checkpoint.results)
+            self.budget.charge(spent)  # the spending cap is a cap on the whole run, so what the earlier attempt charged still counts
+            self.restored_systems.append(name)
+            self.progress.system_restored(name, len(checkpoint.results))
+        return restored, probes
 
     def _write_config_copy(self) -> None:
         """`config.yaml` in the run directory: the file as written when nothing changed (comments and all), else the config as it ran
@@ -281,6 +353,7 @@ class BenchmarkEvaluator:
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
             summary["budget"] = budget
             summary_path.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+            self._write_report()  # now that the summary says the run stopped at its budget
         cap = self.config.evaluation.max_cost_usd or 0.0
         return BudgetExceededError(self.output_dir, cap, self.budget.spent, completed, incomplete)
 
@@ -412,7 +485,9 @@ class BenchmarkEvaluator:
         spec = system.spec
         # A system that retrieves nothing has no retrieval metrics (an empty dict); its rows get blanks, never zeros.
         retrieves = spec is None or spec.retrieves
-        retrieval_metrics = compute_retrieval_metrics(ranked, question.relevant_doc_ids, qrels=qrels, k_values=evaluation.k_values) if retrieves else {}
+        # ... and so does a question that has an answer but no labels to score the ranking against (label-free mode); an unanswerable one still scores 0.
+        scorable = retrieves and (has_relevance_labels(question, qrels) or not question.is_answerable)
+        retrieval_metrics = compute_retrieval_metrics(ranked, question.relevant_doc_ids, qrels=qrels, k_values=evaluation.k_values) if scorable else {}
         context_chunks = [chunk for chunk in ranked if chunk.chunk_id in in_context]
         # Same notion of "relevant" as the retrieval metrics: the question's own list, else the positive qrels.
         relevant = question.relevant_doc_ids or [doc_id for doc_id, grade in qrels.items() if grade > 0]
@@ -673,6 +748,8 @@ class BenchmarkEvaluator:
                     "primary_k": self.config.evaluation.resolved_primary_k,
                     "embedding_cache": EMBEDDING_CACHE.stats(),
                     "cache": cache_summary,
+                    "dataset": getattr(self, "dataset_info", {}),
+                    "notices": notices,
                     "dataset_warnings": getattr(self, "dataset_warnings", []),
                     "document_warnings": self.document_warnings,
                     "outputs": {
@@ -690,33 +767,6 @@ class BenchmarkEvaluator:
             encoding="utf-8",
         )
 
-        category_df = answer_df.groupby(["system", "category"], as_index=False)[["answer_score", "faithfulness"]].mean() if not answer_df.empty else pd.DataFrame()
-        per_question_df = pd.DataFrame(per_question_rows)
-        if not per_question_df.empty:
-            classified_failures_df = per_question_df[per_question_df["failure_type"] != "no_failure"]
-            failures_df = classified_failures_df.groupby(["system", "failure_type"], as_index=False).size().rename(columns={"size": "count"})
-        else:
-            failures_df = pd.DataFrame()
-        write_html_report(
-            self.output_dir / "report.html",
-            run_id=self.run_id,
-            summary_rows=summary_rows,
-            category_rows=category_df.to_dict("records") if not category_df.empty else [],
-            cost_rows=self._build_cost_summary(ingestion_rows, cost_rows),
-            failure_rows=failures_df.to_dict("records") if not failures_df.empty else [],
-            config_text=yaml.safe_dump(self.raw_config, sort_keys=False),
-            run_meta={
-                "mode": self.mode,
-                "notices": notices,
-                "unknown_priced_models": unknown_priced,
-                "primary_k": self.config.evaluation.resolved_primary_k,
-                "num_systems": len(self.reported_systems),
-                "num_questions": len({row["question_id"] for row in per_question_rows}) if per_question_rows else 0,
-                "run_wall_time_ms": run_wall_time_ms,
-                "cache_hits": in_process["hits"] + cache_summary.get("hits", 0),
-                "cache_saved_usd": in_process["saved_cost_usd"] + cache_summary.get("saved_cost_usd", 0.0),
-            },
-        )
         manifest = build_manifest(
             config_path=self.config_path,
             raw_config=self.raw_config,
@@ -728,6 +778,14 @@ class BenchmarkEvaluator:
         )
         (self.output_dir / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         self._write_recommendation()
+        self._write_report()  # last: it reads the recommendation, the manifest and every other file above
+
+    def _write_report(self) -> None:
+        """`report.html` and `report_data.json`, built from the files this run just wrote (so the same call can rebuild a report later)."""
+        try:
+            write_report(self.output_dir)
+        except Exception as exc:  # the results are already on disk; a page that cannot be drawn must not turn the run into an error
+            logger.warning("Could not write the HTML report: %s: %s", type(exc).__name__, exc)
 
     def _write_recommendation(self) -> None:
         """Which system to deploy (`recommendation.json` / `.md`, and `winner.yaml` when there is one), from this run's results."""
@@ -748,22 +806,6 @@ class BenchmarkEvaluator:
             seed=settings.seed,
             baseline=settings.baseline,
         )
-
-    @staticmethod
-    def _build_cost_summary(ingestion_rows: list[dict[str, Any]], cost_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        summary: dict[str, dict[str, float]] = {}
-        for row in ingestion_rows:
-            entry = summary.setdefault(row["system"], {"ingestion_cost": 0.0, "query_cost": 0.0, "judge_cost": 0.0, "total_cost": 0.0})
-            entry["ingestion_cost"] += float(row.get("total_cost", 0.0))
-            entry["total_cost"] += float(row.get("total_cost", 0.0))
-        for row in cost_rows:
-            entry = summary.setdefault(row["system"], {"ingestion_cost": 0.0, "query_cost": 0.0, "judge_cost": 0.0, "total_cost": 0.0})
-            judge = float(row.get("judge_cost", 0.0))
-            total = float(row.get("total_cost", 0.0))
-            entry["judge_cost"] += judge
-            entry["query_cost"] += total - judge
-            entry["total_cost"] += total
-        return [{"system": system, **costs} for system, costs in summary.items()]
 
     def _build_stage_summary(self, per_question_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Mean per-question cost and latency by stage for each system (failed questions excluded)."""
@@ -957,11 +999,12 @@ def run_benchmark(
     use_cache: bool = True,
     system_workers: int | None = None,
     raw_config: dict[str, Any] | None = None,
+    run_dir: Path | None = None,
 ) -> Path:
     """Convenience wrapper: build a `BenchmarkEvaluator` and run it.
 
     Returns the timestamped output directory containing leaderboard, reports,
-    and per-question results.
+    and per-question results. With `run_dir` the run uses that directory and can be resumed there.
     """
     return BenchmarkEvaluator(
         config_path,
@@ -971,4 +1014,5 @@ def run_benchmark(
         use_cache=use_cache,
         system_workers=system_workers,
         raw_config=raw_config,
+        run_dir=run_dir,
     ).run()

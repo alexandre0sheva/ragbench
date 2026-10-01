@@ -18,6 +18,8 @@ class ProgressListener:
 
     def latency_probe(self, name: str, done: int, total: int) -> None: ...
 
+    def system_restored(self, name: str, num_questions: int) -> None: ...
+
 
 class SerializedProgress(ProgressListener):
     """Forwards every hook to `inner` under one lock, so listeners never have to be thread-safe themselves.
@@ -52,3 +54,7 @@ class SerializedProgress(ProgressListener):
     def latency_probe(self, name: str, done: int, total: int) -> None:
         with self._lock:
             self._inner.latency_probe(name, done, total)
+
+    def system_restored(self, name: str, num_questions: int) -> None:
+        with self._lock:
+            self._inner.system_restored(name, num_questions)

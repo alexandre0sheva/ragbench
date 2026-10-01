@@ -80,7 +80,7 @@ ragbench = "ragbench.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ragbench = ["py.typed"]
+ragbench = ["py.typed", "reporting/templates/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ragbench.datasets.schema import Dataset, Qrel, Question
+from ragbench.datasets.schema import Dataset, Qrel, Question, has_relevance_labels
 from ragbench.utils.jsonl import read_jsonl
 
 
@@ -25,5 +25,17 @@ def load_qrels(path: Path | None, questions: list[Question]) -> dict[str, dict[s
 def load_dataset(questions_path: Path, qrels_path: Path | None = None) -> Dataset:
     questions = load_questions(questions_path)
     qrels = load_qrels(qrels_path, questions)
-    return Dataset(questions=questions, qrels=qrels)
-
+    dataset = Dataset(questions=questions, qrels=qrels)
+    if questions and not any(has_relevance_labels(question, qrels.get(question.id, {})) for question in questions):
+        # Nothing is labeled, so "no relevant documents" cannot mean "unanswerable": questions not marked `answerable: false` are assumed to have answers.
+        dataset.label_free = True
+        dataset.questions = [question if question.answerable is not None else question.model_copy(update={"answerable": True}) for question in questions]
+    else:
+        # A question labeled only through the qrels file (no `relevant_doc_ids`, as `ragbench label --apply` writes them) has relevant documents, so it has an answer.
+        dataset.questions = [
+            question.model_copy(update={"answerable": True})
+            if question.answerable is None and not question.relevant_doc_ids and has_relevance_labels(question, qrels.get(question.id, {}))
+            else question
+            for question in questions
+        ]
+    return dataset

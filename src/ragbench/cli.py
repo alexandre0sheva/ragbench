@@ -26,13 +26,14 @@ from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import DocumentLoadError, load_documents
 from ragbench.documents.preview import DEFAULT_MIN_TOKENS, chunk_stats, stats_as_dict
 from ragbench.documents.tokenizer import count_tokens
-from ragbench.evaluation.budget import BudgetExceededError
+from ragbench.evaluation.budget import BudgetExceededError, BudgetGuard
 from ragbench.evaluation.estimate import Estimate, confirmation_decision, estimate_run
 from ragbench.evaluation.evaluator import BenchmarkRunError, ProgressListener, run_benchmark
-from ragbench.models.errors import MissingExtraError, ModelInitError
+from ragbench.models.errors import MissingExtraError, ModelInitError, RagbenchModelError
 from ragbench.models.refs import resolve_run_mode
 from ragbench.reporting.columns import format_cell, is_missing, leaderboard_columns
 from ragbench.utils.env import load_project_env
+from ragbench.utils.text import estimate_tokens
 
 app = typer.Typer(help="RAGBench: evaluation-first RAG benchmark framework.")
 console = Console()
@@ -189,6 +190,9 @@ class _RichProgress(ProgressListener):
         suffix = f"measuring latency {done}/{total}" if done < total else "latency measured"
         self.progress.update(self.tasks[name], description=f"[bold]{name}[/bold] · done in {self.finished.get(name, '?')} · {suffix}")
 
+    def system_restored(self, name: str, num_questions: int) -> None:
+        self.tasks[name] = self.progress.add_task(f"[bold]{name}[/bold] · restored from the earlier attempt", total=num_questions, completed=num_questions)
+
 
 def _execute_benchmark(
     config: Path,
@@ -199,7 +203,8 @@ def _execute_benchmark(
     system_workers: int | None = None,
     raw_config: dict[str, Any] | None = None,
     yes: bool = False,
-) -> None:
+    run_dir: Path | None = None,
+) -> Path:
     load_project_env(config)
     loaded = _load_experiment(config, raw_config)
     _mock_warning(loaded, force_mock=mock)
@@ -224,6 +229,7 @@ def _execute_benchmark(
                 use_cache=use_cache,
                 system_workers=system_workers,
                 raw_config=raw_config,
+                run_dir=run_dir,
             )
     except BudgetExceededError as exc:
         _print_run_summary(exc.output_dir)
@@ -243,7 +249,8 @@ def _execute_benchmark(
         console.print(f"[red]{escape(str(exc))}[/red]")  # messages name extras like ragbench[anthropic], which Rich would read as markup
         raise typer.Exit(2) from exc
     _print_run_summary(output_dir)
-    console.print(f"[green]{done_message}[/green] Results: [bold]{output_dir}[/bold]")
+    console.print(f"[green]{done_message}[/green] Results: [bold]{output_dir}[/bold]", soft_wrap=True)
+    return output_dir
 
 
 def _recommendation_panel(data: dict[str, Any], footer: str | None = None) -> Panel:
@@ -349,6 +356,59 @@ def demo(
         console.print(f"[yellow]{stats['modified']} file(s) differ from the bundled copy and were kept; use --overwrite to restore them.[/yellow]")
 
 
+def _distribution(values: Any, unit: str = "") -> str:
+    return f"min {values.min:,.0f} · median {values.p50:,.0f} · p95 {values.p95:,.0f} · max {values.max:,.0f}{unit}"
+
+
+def _print_profile(profile: Any, label_free: bool) -> None:
+    from ragbench.datasets.profile import DatasetProfile
+
+    assert isinstance(profile, DatasetProfile)
+    table = Table(title="Dataset Summary")
+    table.add_column("Metric")
+    table.add_column("Value", justify="right")
+    documents, questions, qrels = profile.documents, profile.questions, profile.qrels
+    table.add_row("Documents", str(documents.count))
+    table.add_row("Corpus size", f"~{documents.total_tokens:,} tokens")
+    table.add_row("Tokens per document", _distribution(documents.tokens))
+    language = f"{documents.language} ({documents.language_confidence:.0%})" if documents.language != "unknown" else "unknown"
+    table.add_row("Language (guess)", language)
+    table.add_row("Questions", str(questions.count))
+    table.add_row("Words per question", _distribution(questions.words))
+    table.add_row("Answerable questions", f"{questions.answerable} ({questions.answerable_ratio:.0%})")
+    table.add_row("Not-in-context questions", str(questions.unanswerable))
+    table.add_row("Qrel rows", str(qrels.qrel_rows))
+    console.print(table)
+
+    coverage = Table(title="Qrels coverage")
+    coverage.add_column("Metric")
+    coverage.add_column("Value", justify="right")
+    coverage.add_row("Questions with relevance labels", f"{qrels.labeled_questions} of {questions.count} ({qrels.labeled_share:.0%})")
+    coverage.add_row("Answerable, no labels (retrieval not scored)", str(qrels.unlabeled_answerable))
+    coverage.add_row("Documents some question points to", f"{qrels.documents_referenced} of {documents.count} ({qrels.corpus_coverage:.0%})")
+    console.print(coverage)
+    if label_free:
+        console.print("[yellow]Label-free dataset: retrieval metrics will be blank; answers are judged against the reference answer or the retrieved context.[/yellow]")
+
+    for title, column, counts in (
+        ("Categories", "Category", questions.categories),
+        ("Difficulty", "Difficulty", questions.difficulties),
+        ("Answer types", "Answer type", questions.answer_types),
+    ):
+        if title != "Categories" and set(counts) <= {"unknown"}:
+            continue
+        balance = Table(title=title)
+        balance.add_column(column)
+        balance.add_column("Count", justify="right")
+        for name, count in counts.items():
+            balance.add_row(name, str(count))
+        console.print(balance)
+
+    if profile.chunk_sizes:
+        console.print(f"[bold]Suggested chunk sizes[/bold] (tokens): {', '.join(map(str, profile.chunk_sizes))}. {escape(profile.chunk_size_note)}")
+        console.print("[dim]Compare them with a sweep: `sweep: {chunker.chunk_size: [...]}` (docs/configuration.md#sweeps).[/dim]")
+
+
 @app.command("inspect-dataset")
 def inspect_dataset(
     docs: Path = typer.Option(..., "--docs", help="Document folder."),
@@ -357,8 +417,12 @@ def inspect_dataset(
     include: list[str] | None = typer.Option(None, "--include", help="Only load files matching this glob (repeatable)."),
     exclude: list[str] | None = typer.Option(None, "--exclude", help="Skip files matching this glob (repeatable)."),
     on_error: str = typer.Option("raise", "--on-error", help="`raise` (fail on a file that cannot be loaded) or `skip` (warn and go on)."),
+    estimate_cost: bool = typer.Option(True, "--estimate/--no-estimate", help="Also project the cost of the `standard` preset (runs each system once on the mock models; a few seconds)."),
 ) -> None:
-    """Show dataset counts, categories, answerability, and qrels coverage."""
+    """Profile a dataset: sizes and balance, label coverage, suggested chunk sizes, projected cost and likely problems."""
+    from ragbench.config.schema import DatasetConfig
+    from ragbench.datasets.profile import profile_dataset, projected_standard_cost
+
     if on_error not in ("raise", "skip"):
         console.print("[red]--on-error must be 'raise' or 'skip'.[/red]")
         raise typer.Exit(2)
@@ -368,38 +432,474 @@ def inspect_dataset(
     except (DocumentLoadError, ValueError, FileNotFoundError, MissingExtraError) as exc:
         console.print(f"[red]{escape(str(exc))}[/red]")
         raise typer.Exit(2) from exc
-    dataset = load_dataset(questions, qrels)
-    categories: dict[str, int] = {}
-    for question in dataset.questions:
-        categories[question.category] = categories.get(question.category, 0) + 1
-    answerable = sum(1 for question in dataset.questions if question.is_answerable)
-    qrel_count = sum(len(v) for v in dataset.qrels.values())
-    table = Table(title="Dataset Summary")
-    table.add_column("Metric")
-    table.add_column("Value", justify="right")
-    table.add_row("Documents", str(len(documents)))
-    table.add_row("Questions", str(len(dataset.questions)))
-    table.add_row("Answerable questions", str(answerable))
-    table.add_row("Not-in-context questions", str(len(dataset.questions) - answerable))
-    table.add_row("Qrel rows", str(qrel_count))
-    console.print(table)
-    cat_table = Table(title="Categories")
-    cat_table.add_column("Category")
-    cat_table.add_column("Count", justify="right")
-    for category, count in sorted(categories.items()):
-        cat_table.add_row(category, str(count))
-    console.print(cat_table)
+    try:
+        dataset = load_dataset(questions, qrels)
+    except (FileNotFoundError, ValueError) as exc:  # ValidationError is a ValueError
+        console.print(f"[red]{escape(str(exc))}[/red]")
+        raise typer.Exit(2) from exc
+    profile = profile_dataset(documents, dataset)
+    _print_profile(profile, dataset.label_free)
     if load_warnings:
         console.print(f"[yellow]{len(load_warnings)} document loading warning(s):[/yellow]")
         for message in load_warnings:
             console.print(f"  [yellow]•[/yellow] {escape(message)}", soft_wrap=True)
-    warnings = validate_dataset(documents, dataset)
+    warnings = [*validate_dataset(documents, dataset), *profile.warnings]
     if warnings:
         console.print(f"[yellow]Found {len(warnings)} dataset issue(s):[/yellow]")
         for warning in warnings:
-            console.print(f"  [yellow]•[/yellow] {warning}")
+            console.print(f"  [yellow]•[/yellow] {escape(warning)}", soft_wrap=True)
     else:
         console.print("[green]No dataset issues found.[/green]")
+    if estimate_cost:
+        try:
+            with console.status("Projecting the cost of the standard preset…"):
+                projected = projected_standard_cost(
+                    DatasetConfig(documents_path=docs, questions_path=questions, qrels_path=qrels, include=include, exclude=exclude, on_error=on_error)
+                )
+        except Exception as exc:  # noqa: BLE001 (advice only: a failure here must not hide the profile above)
+            console.print(f"[yellow]Could not project the cost: {escape(str(exc))}[/yellow]")
+        else:
+            console.print("\n[bold]Projected cost[/bold] of `--preset standard` with the default models:")
+            _print_estimate(projected)
+
+
+def _confirm_spend(total_usd: float, what: str, yes: bool, threshold: float) -> None:
+    """Before a paid command: ask (or refuse, or just go) when its estimated cost is above the confirmation threshold; the rule `run` uses."""
+    decision = confirmation_decision(total_usd, threshold, yes=yes, interactive=_is_interactive(), ci=_in_ci())
+    console.print(f"[dim]Estimated cost of {what}: about {_money(total_usd)} (confirmation threshold {_money(threshold)}).[/dim]")
+    if decision == "proceed":
+        return
+    if decision == "refuse":
+        raise _fail(
+            f"The estimated cost {_money(total_usd)} is above the {_money(threshold)} confirmation threshold and there is no one to ask. "
+            "Re-run with --yes to go ahead, or pass --max-cost to cap the spending."
+        )
+    if not typer.confirm(f"Go ahead for about {_money(total_usd)}?", default=False):
+        raise _fail("Cancelled. Nothing was spent.", code=1)
+
+
+def _load_optional_config(config: Path | None) -> ExperimentConfig | None:
+    """A config given only for its `providers:`, `pricing:` and `cache:` sections (the dataset and systems in it are not used)."""
+    return _load_experiment(config, None) if config is not None else None
+
+
+def _run_generation(
+    documents: list[Any],
+    *,
+    n: int,
+    shares: dict[str, float],
+    ref: str,
+    seed: int,
+    loaded: ExperimentConfig | None,
+    mock: bool,
+    max_cost: float | None,
+    no_cache: bool,
+    yes: bool,
+) -> tuple[Any, bool, float]:
+    """Write synthetic questions: with the model `ref` (estimate, confirm, cache) or, in mock mode / without a key, from templates.
+
+    Returns the `SynthesisResult`, whether it ran live, and what the cache avoided. Shared by `generate-questions` and `auto`.
+    """
+    from ragbench.cache import activate_cache, open_cache_runtime
+    from ragbench.config.schema import CacheConfig, EvaluationConfig
+    from ragbench.datasets.synthesis import allocate, estimate_generation_cost, generate_questions
+    from ragbench.models import cost as pricing
+    from ragbench.models.llms import create_llm
+    from ragbench.models.refs import parse_model_ref, provider_reachable
+    from ragbench.runtime import RuntimeContext, activate_runtime
+
+    try:
+        live = not mock and provider_reachable(parse_model_ref(ref)[0])
+    except ValueError as exc:
+        raise _fail(str(exc)) from exc
+    providers = loaded.providers if loaded else {}
+    pricing.clear_pricing_overrides()
+    pricing.reset_unknown_priced_models()
+    pricing.register_pricing({name: price.model_dump() for name, price in loaded.pricing.items()} if loaded else {})
+    cache_runtime = None
+    try:
+        if live:
+            from ragbench.datasets.synthesis import allocate
+
+            estimate = estimate_generation_cost(documents, n, shares, ref)
+            if ref in pricing.unknown_priced_models() or estimate == 0:
+                console.print(f"[yellow]No price is registered for {escape(ref)}: the cost is shown as $0. Add one under `pricing:` (pass --config).[/yellow]")
+            _confirm_spend(estimate, f"writing {n} questions ({', '.join(f'{count} {name}' for name, count in allocate(n, shares).items())})", yes, (loaded.evaluation if loaded else EvaluationConfig()).cost_confirm_threshold_usd)
+            cache_config = loaded.cache if loaded else CacheConfig()
+            cache_runtime = open_cache_runtime(cache_config) if cache_config.enabled and not no_cache else None
+            with activate_cache(cache_runtime), activate_runtime(RuntimeContext(providers=providers)):
+                try:
+                    llm = create_llm(ref, providers=providers)
+                    with console.status(f"Writing {n} questions with {ref}…"):
+                        result = generate_questions(documents, n=n, mix=shares, llm=llm, seed=seed, budget=BudgetGuard(max_cost))
+                except (RagbenchModelError, MissingExtraError) as exc:
+                    raise _fail(f"The model failed: {exc}") from exc
+        else:
+            console.print("[yellow]Mock mode: template questions, no model called. They validate the pipeline and say nothing about real quality.[/yellow]")
+            result = generate_questions(documents, n=n, mix=shares, llm=None, seed=seed)
+        saved = cache_runtime.disk.stats()["saved_cost_usd"] if cache_runtime is not None else 0.0
+    finally:
+        if cache_runtime is not None:
+            cache_runtime.disk.close()
+        pricing.clear_pricing_overrides()
+    return result, live, saved
+
+
+@app.command("generate-questions")
+def generate_questions_command(
+    docs: Path = typer.Option(..., "--docs", help="Your documents: a folder, or one file."),
+    out: Path = typer.Option(..., "--out", help="Questions JSONL to write, e.g. questions.jsonl."),
+    n: int = typer.Option(100, "--n", min=1, help="How many questions to write."),
+    mix: str | None = typer.Option(None, "--mix", help="Category shares, e.g. single_hop=0.4,multi_hop=0.2,paraphrase=0.15,numeric=0.1,unanswerable=0.15 (the default)."),
+    model: str | None = typer.Option(None, "--model", help="Model ref that writes the questions (default: the default generator model)."),
+    seed: int = typer.Option(0, "--seed", help="Same seed, same documents sampled, same questions."),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Read `providers:`, `pricing:` and `cache:` from this config (needed for openai_compatible: models)."),
+    mock: bool = typer.Option(False, "--mock", help="Write template questions with no model (pipeline validation only). Also used when the model's API key is missing."),
+    max_cost: float | None = typer.Option(None, "--max-cost", min=0, help="Stop writing once this many dollars were charged (partial results are kept)."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before a live run whose estimated cost is above the confirmation threshold."),
+    force: bool = typer.Option(False, "--force", help="Replace --out if it exists (it may hold questions you reviewed)."),
+) -> None:
+    """Write questions for documents that have none: single-hop, multi-hop, paraphrased, numeric and unanswerable, each flagged `needs_review`."""
+    from ragbench.datasets.synthesis import MOCK_GENERATOR, parse_mix
+    from ragbench.models.defaults import DEFAULT_GENERATOR_MODEL
+    from ragbench.utils.jsonl import write_jsonl
+
+    load_project_env(docs)
+    if out.exists() and not force:
+        raise _fail(f"{out} already exists. Use --force to replace it (reviewed questions would be lost), or pick another --out.")
+    try:
+        shares = parse_mix(mix)
+        documents = load_documents(docs)
+        loaded = _load_optional_config(config)
+        ref = model or DEFAULT_GENERATOR_MODEL
+    except (ValueError, FileNotFoundError, DocumentLoadError, MissingExtraError) as exc:
+        raise _fail(str(exc)) from exc
+    result, live, saved = _run_generation(documents, n=n, shares=shares, ref=ref, seed=seed, loaded=loaded, mock=mock, max_cost=max_cost, no_cache=no_cache, yes=yes)
+    if not result.rows:
+        raise _fail("No question could be written. " + " ".join(result.warnings))
+    write_jsonl(out, result.rows)
+
+    table = Table(title=f"Questions written to {out}", title_justify="left")
+    table.add_column("Category", style="bold")
+    table.add_column("Asked for", justify="right")
+    table.add_column("Written", justify="right")
+    for name, wanted in result.requested.items():
+        table.add_row(name, str(wanted), str(result.made.get(name, 0)))
+    table.add_section()
+    table.add_row("Total", str(sum(result.requested.values())), str(len(result.rows)))
+    console.print(table)
+    if live:
+        spent = f"{_money(result.cost_usd)} charged at standalone prices over {result.calls} model calls" + (f"; the cache avoided {_money(saved)}" if saved else "")
+        console.print(f"[dim]Generator {escape(result.generator)} · {spent}.[/dim]")
+    else:
+        console.print(f"[dim]Generator {MOCK_GENERATOR} (mock).[/dim]")
+    for warning in result.warnings:
+        console.print(f"  [yellow]•[/yellow] {escape(warning)}", soft_wrap=True)
+    console.print(
+        f"[bold]Review them:[/bold] every row is flagged `metadata.needs_review`. Read the file, fix or delete bad questions, then check it with "
+        f"`ragbench inspect-dataset --docs {docs} --questions {out}`.",
+        soft_wrap=True,
+    )
+    if result.stopped_by_budget:
+        console.print(f"[red]Stopped at --max-cost {_money(max_cost or 0)}: {len(result.rows)} of {n} questions were written.[/red]")
+        raise typer.Exit(1)
+
+
+@app.command("label")
+def label_command(
+    run: Path = typer.Option(..., "--run", help="A finished run directory, e.g. results/<run>."),
+    top_k: int = typer.Option(10, "--top-k", min=1, help="Pool the first K distinct documents each system retrieved, per question."),
+    judge_model: str | None = typer.Option(None, "--judge-model", help="Model ref that grades relevance (default: the run's judge model)."),
+    out: Path | None = typer.Option(None, "--out", help="Directory for the outputs (default: the run directory)."),
+    apply: bool = typer.Option(False, "--apply", help="Also write qrels.merged.jsonl: your labels plus the proposed grades for documents they do not mention."),
+    mock: bool = typer.Option(False, "--mock", help="Grade with a word-overlap stand-in, no model (pipeline validation only). Also used when the model's API key is missing."),
+    max_cost: float | None = typer.Option(None, "--max-cost", min=0, help="Stop grading once this many dollars were charged (partial proposals are written)."),
+    max_workers: int = typer.Option(4, "--max-workers", min=1, help="Documents graded at the same time."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before a live run whose estimated cost is above the confirmation threshold."),
+    force: bool = typer.Option(False, "--force", help="With --apply: replace an existing qrels.merged.jsonl."),
+) -> None:
+    """Propose relevance labels for a run by pooling: every system's top documents, graded 0-3 by an LLM. Never changes your qrels."""
+    from ragbench.cache import activate_cache, open_cache_runtime
+    from ragbench.datasets.pooling import (
+        MERGED_NAME,
+        LabelError,
+        build_pool,
+        estimate_grading_cost,
+        grade_pool,
+        load_run,
+        write_label_outputs,
+    )
+    from ragbench.models import cost as pricing
+    from ragbench.models.llms import create_llm
+    from ragbench.models.refs import parse_model_ref, provider_reachable
+    from ragbench.runtime import RuntimeContext, activate_runtime
+
+    load_project_env(run)
+    destination = out or run
+    if apply and (destination / MERGED_NAME).exists() and not force:
+        raise _fail(f"{destination / MERGED_NAME} already exists. Use --force to replace it, or pick another --out.")
+    try:
+        data = load_run(run)
+        plan = build_pool(data, top_k)
+        ref = judge_model or data.config.evaluation.judge_model
+        live = not mock and provider_reachable(parse_model_ref(ref)[0])
+    except (LabelError, ValueError, ValidationError) as exc:
+        raise _fail(str(exc)) from exc
+    pricing.clear_pricing_overrides()
+    pricing.reset_unknown_priced_models()
+    pricing.register_pricing({name: price.model_dump() for name, price in data.config.pricing.items()})
+    console.print(f"{len(plan.questions)} questions · {plan.pairs} (question, document) pairs pooled from {len({s for r in data.rankings.values() for s in r})} systems at top {top_k}")
+    if plan.skipped_unanswerable:
+        console.print(f"[dim]{plan.skipped_unanswerable} unanswerable question(s) skipped.[/dim]")
+    cache_runtime = None
+    try:
+        if live:
+            estimate = estimate_grading_cost(data, plan, ref)
+            if estimate == 0:
+                console.print(f"[yellow]No price is registered for {escape(ref)}: the cost is shown as $0. Add one under `pricing:` in the run's config.[/yellow]")
+            _confirm_spend(estimate, f"grading {plan.pairs} documents with {ref}", yes, data.config.evaluation.cost_confirm_threshold_usd)
+            cache_runtime = open_cache_runtime(data.config.cache) if data.config.cache.enabled and not no_cache else None
+        else:
+            console.print("[yellow]Mock grader: word overlap, no model called. The proposals only validate the pipeline; do not use them as labels.[/yellow]")
+        progress = Progress(SpinnerColumn(), TextColumn("Grading"), BarColumn(), MofNCompleteColumn(), TimeElapsedColumn(), console=console, transient=True)
+        with activate_cache(cache_runtime), activate_runtime(RuntimeContext(providers=data.config.providers)), progress:
+            task = progress.add_task("grade", total=plan.pairs)
+            try:
+                llm = create_llm(ref, force_mock=not live, providers=data.config.providers)
+                graded = grade_pool(data, plan, llm, workers=max_workers, budget=BudgetGuard(max_cost) if max_cost is not None else None, progress=lambda done, total: progress.update(task, completed=done))
+            except (RagbenchModelError, MissingExtraError) as exc:
+                raise _fail(f"The grader failed: {exc}") from exc
+        saved = cache_runtime.disk.stats()["saved_cost_usd"] if cache_runtime is not None else 0.0
+    finally:
+        if cache_runtime is not None:
+            cache_runtime.disk.close()
+        pricing.clear_pricing_overrides()
+    files = write_label_outputs(destination, data, plan, graded, top_k=top_k, judge_model=ref if live else "mock grader", mock=not live, apply=apply)
+
+    distribution = {grade: sum(1 for judgments in graded.grades.values() for j in judgments.values() if j.grade == grade) for grade in range(4)}
+    console.print(f"[green]Graded {sum(distribution.values())} pairs[/green] (0: {distribution[0]} · 1: {distribution[1]} · 2: {distribution[2]} · 3: {distribution[3]})")
+    if live:
+        console.print(f"[dim]{_money(graded.cost_usd)} charged at standalone prices over {graded.calls} calls" + (f"; the cache avoided {_money(saved)}" if saved else "") + ".[/dim]")
+    for pair in graded.ungraded[:5]:
+        console.print(f"  [yellow]•[/yellow] {pair[0]}/{pair[1]}: no valid grade; nothing is proposed for it", soft_wrap=True)
+    console.print(f"Wrote [bold]{files.proposed}[/bold] and [bold]{files.review}[/bold]" + (f" and [bold]{files.merged}[/bold]" if files.merged else ""))
+    if files.merged:
+        console.print(f"Use the merged labels: set `dataset.qrels_path: {files.merged}` in your config. Your own files were not touched.")
+    else:
+        console.print("[dim]Read the review, then add --apply to write a merged qrels file (your labels stay authoritative).[/dim]")
+    if graded.stopped_by_budget:
+        console.print(f"[red]Stopped at --max-cost {_money(max_cost or 0)}: some pairs were not graded.[/red]")
+        raise typer.Exit(1)
+
+
+@app.command()
+def auto(
+    docs: Path | None = typer.Option(None, "--docs", help="Your documents: a folder, or one file."),
+    questions: Path | None = typer.Option(None, "--questions", help="Your questions JSONL. Without it, questions are written from your documents (flagged needs_review)."),
+    qrels: Path | None = typer.Option(None, "--qrels", help="Optional qrels JSONL for --questions."),
+    preset: str = typer.Option("standard", "--preset", help=f"Which systems to compare: {', '.join(PRESET_NAMES)}."),
+    profile: str = typer.Option("balanced", "--profile", help="What the recommendation optimizes: balanced, max_quality, cheapest_acceptable or lowest_latency."),
+    n_questions: int = typer.Option(50, "--n-questions", min=1, help="How many questions to write when you have none."),
+    seed: int = typer.Option(0, "--seed", help="Seed for writing questions."),
+    max_cost: float | None = typer.Option(None, "--max-cost", min=0, help="Total dollars to spend (writing questions plus the run). The run stops once it is reached."),
+    model: str | None = typer.Option(None, "--model", help="Model ref that writes the questions (default: the default generator model)."),
+    config: Path | None = typer.Option(None, "--config", "-c", help="Take models, providers, pricing, evaluation and selection settings from this config (its systems and dataset are not used)."),
+    output_dir: Path = typer.Option(Path("results"), "--output-dir", help="Where the run directory is created."),
+    resume: Path | None = typer.Option(None, "--resume", help="Continue an earlier auto run in this directory: finished systems are kept, the rest are run."),
+    mock: bool = typer.Option(False, "--mock", help="Force local mock mode: nothing is paid for and the scores only validate the pipeline."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before spending more than evaluation.cost_confirm_threshold_usd."),
+    open_report: bool = typer.Option(False, "--open", help="Open report.html in your browser when done."),
+) -> None:
+    """From a folder of documents to a decision: profile them, write questions if you have none, run the preset, and recommend a system.
+
+    Writes everything to one run directory (questions, results, recommendation.md, winner.yaml, report.html). If it stops (budget, a crash, Ctrl-C),
+    `--resume RUN_DIR` continues without paying again for the systems that finished.
+    """
+    import webbrowser
+
+    from ragbench.datasets.profile import profile_dataset
+    from ragbench.datasets.synthesis import parse_mix
+    from ragbench.models.defaults import DEFAULT_GENERATOR_MODEL
+    from ragbench.utils.jsonl import write_jsonl
+    from ragbench.workflows import auto as workflow
+
+    load_project_env(resume or docs)
+    try:
+        if resume is not None:
+            given = [flag for flag, value in (("--docs", docs), ("--questions", questions), ("--qrels", qrels), ("--config", config)) if value is not None]
+            if given:
+                raise workflow.AutoError(f"{', '.join(given)} come from the run being resumed; drop them (only --max-cost, --mock, --yes, --no-cache and --open can change).")
+            settings, generation_cost = workflow.read_state(resume)
+            run_dir = resume
+            if max_cost is not None:
+                settings.max_cost = max_cost
+            settings.mock = settings.mock or mock
+        else:
+            if docs is None:
+                raise workflow.AutoError("Pass --docs (a folder of documents) to start, or --resume RUN_DIR to continue a run.")
+            workflow.check_choices(preset, profile)
+            settings = workflow.AutoSettings(
+                docs=str(docs.resolve()),
+                questions=str(questions.resolve()) if questions else None,
+                qrels=str(qrels.resolve()) if qrels else None,
+                preset=preset,
+                profile=profile,
+                n_questions=n_questions,
+                seed=seed,
+                max_cost=max_cost,
+                model=model,
+                config=str(config.resolve()) if config else None,
+                mock=mock,
+            )
+            generation_cost = 0.0
+            run_dir = None  # created below, once the inputs are known to be readable
+        documents = load_documents(Path(settings.docs))
+        loaded = _load_optional_config(Path(settings.config)) if settings.config else None
+        if settings.questions is not None and not Path(settings.questions).is_file():
+            raise workflow.AutoError(f"Questions file not found: {settings.questions}")
+        shares = parse_mix(None)
+    except (workflow.AutoError, ValueError, FileNotFoundError, DocumentLoadError, MissingExtraError) as exc:
+        raise _fail(str(exc)) from exc
+    if run_dir is None:
+        run_dir = workflow.new_run_dir(output_dir)
+    workflow.write_state(run_dir, settings, generation_cost)
+    console.print(f"Run directory: [bold]{run_dir}[/bold]" + ("  [dim](resuming)[/dim]" if resume else ""), soft_wrap=True)
+    total_tokens = sum(estimate_tokens(document.text) for document in documents)
+    console.print(f"{len(documents)} documents, ~{total_tokens:,} tokens")
+
+    # 1. Questions: yours, ones an earlier attempt already wrote, or new synthetic ones.
+    if settings.questions is not None:
+        questions_path = Path(settings.questions)
+    else:
+        questions_path = run_dir / workflow.QUESTIONS_NAME
+        if questions_path.exists():
+            console.print(f"[dim]Using the questions already written to {questions_path}.[/dim]")
+        else:
+            result, live, _ = _run_generation(
+                documents,
+                n=settings.n_questions,
+                shares=shares,
+                ref=settings.model or DEFAULT_GENERATOR_MODEL,
+                seed=settings.seed,
+                loaded=loaded,
+                mock=settings.mock,
+                max_cost=settings.max_cost,
+                no_cache=no_cache,
+                yes=yes,
+            )
+            if not result.rows:
+                raise _fail("No question could be written. " + " ".join(result.warnings))
+            write_jsonl(questions_path, result.rows)
+            generation_cost = result.cost_usd
+            workflow.write_state(run_dir, settings, generation_cost)
+            console.print(f"Wrote {len(result.rows)} questions to {questions_path} ({'live' if live else 'mock templates'}, {_money(result.cost_usd)}); read them: every one is flagged `needs_review`.")
+            for warning in result.warnings:
+                console.print(f"  [yellow]•[/yellow] {escape(warning)}", soft_wrap=True)
+            if result.stopped_by_budget:
+                raise _fail(f"Stopped at --max-cost while writing questions. Raise it and run `ragbench auto --resume {run_dir}`.", code=1)
+
+    # 2. What the data looks like, and what is likely to distort the comparison.
+    try:
+        dataset = load_dataset(questions_path, Path(settings.qrels) if settings.qrels else None)
+    except (FileNotFoundError, ValueError) as exc:
+        raise _fail(str(exc)) from exc
+    profile_result = profile_dataset(documents, dataset)
+    console.print(
+        f"{profile_result.questions.count} questions ({profile_result.questions.answerable} answerable) · {profile_result.qrels.labeled_questions} with relevance labels"
+        + (" · [yellow]label-free: retrieval metrics will be blank[/yellow]" if dataset.label_free else "")
+    )
+    for warning in [*validate_dataset(documents, dataset), *profile_result.warnings][:6]:
+        console.print(f"  [yellow]•[/yellow] {escape(warning)}", soft_wrap=True)
+
+    # 3. The run: estimate, confirm, run every system, recommend. Systems an earlier attempt finished are not run again.
+    try:
+        existing = run_dir / "config.yaml"
+        if resume is not None and existing.exists():
+            raw = yaml.safe_load(existing.read_text(encoding="utf-8")) or {}
+            if max_cost is not None:
+                raw["evaluation"] = {**(raw.get("evaluation") or {}), "max_cost_usd": workflow.remaining_budget(settings.max_cost, generation_cost)}
+        else:
+            raw = workflow.build_config(settings, run_dir, questions_path, max_cost_usd=workflow.remaining_budget(settings.max_cost, generation_cost))
+    except (workflow.AutoError, ValueError, FileNotFoundError) as exc:
+        raise _fail(str(exc)) from exc
+    try:
+        finished = _execute_benchmark(existing, settings.mock, None, "Auto run complete.", use_cache=not no_cache, raw_config=raw, yes=yes, run_dir=run_dir)
+    except typer.Exit as stopped:
+        console.print(f"[bold]Resume with:[/bold] ragbench auto --resume {run_dir}" + (" --max-cost <more>" if settings.max_cost else ""), soft_wrap=True)
+        raise stopped
+
+    # 4. The deliverables.
+    files = workflow.winner_files(finished)
+    recommendation_path = finished / "recommendation.json"
+    winner = json.loads(recommendation_path.read_text(encoding="utf-8")).get("winner") if recommendation_path.exists() else None
+    console.print(f"\n[bold]{'Deploy ' + escape(winner) if winner else 'No system meets your constraints'}[/bold]")
+    for label, key in (("Runnable config", "winner"), ("Report", "report"), ("Reasons", "recommendation")):
+        if key in files:
+            console.print(f"  {label}: {files[key]}", soft_wrap=True)
+    if open_report and "report" in files:
+        webbrowser.open(files["report"].resolve().as_uri())
+
+
+@app.command()
+def init(
+    directory: Path = typer.Argument(Path("."), help="Where to write ragbench.yaml (and questions.jsonl if you have none yet)."),
+    docs: Path = typer.Option(..., "--docs", help="Your documents: a folder, or one file."),
+    questions: Path | None = typer.Option(None, "--questions", help="Your questions JSONL. Without it a questions.jsonl template is created in DIRECTORY."),
+    preset: str = typer.Option("standard", "--preset", help=f"Which systems to compare: {', '.join(PRESET_NAMES)}."),
+    force: bool = typer.Option(False, "--force", help="Replace an existing ragbench.yaml (questions files are never replaced)."),
+) -> None:
+    """Start a benchmark of your own documents: write a ready-to-run config and a questions file to edit."""
+    from ragbench.datasets.scaffold import ScaffoldError, scaffold_project
+
+    try:
+        result = scaffold_project(directory, docs, questions, preset=preset, force=force)
+    except ScaffoldError as exc:
+        raise _fail(str(exc)) from exc
+    console.print(f"[green]Wrote {result.config_path}[/green] ({result.n_documents} documents, preset `{result.preset}`)")
+    if result.created_questions:
+        console.print(f"[green]Wrote {result.questions_path}[/green]: placeholder questions, so the project runs; replace them with real ones.")
+    console.print("\n[bold]Next steps[/bold]")
+    steps = []
+    if result.created_questions:
+        steps.append(f"Put your real questions in {result.questions_path} (docs/dataset-format.md), or bring existing ones with `ragbench import`.")
+    steps += [
+        f"ragbench inspect-dataset --docs {docs} --questions {result.questions_path}   # check the data and see the projected cost",
+        f"ragbench run --config {result.config_path} --mock   # a free pipeline check",
+        f"ragbench run --config {result.config_path}   # the real run (asks before spending more than the confirmation threshold)",
+    ]
+    for number, step in enumerate(steps, start=1):
+        console.print(f"  {number}. {escape(step)}", soft_wrap=True)
+    console.print("[dim]Paths in the config are relative to the directory you run ragbench from.[/dim]")
+
+
+@app.command("import")
+def import_command(
+    fmt: str = typer.Option(..., "--format", help="csv (question,answer,doc_ids), beir (corpus.jsonl + queries.jsonl + qrels/), or qa-md (Markdown `Q:` / `A:` pairs)."),
+    source: Path = typer.Option(..., "--input", help="The file (csv, qa-md) or folder (beir, qa-md) to import."),
+    output: Path = typer.Option(..., "--output", help="Directory to write questions.jsonl (and qrels.jsonl, docs/ for beir) into."),
+    docs: Path | None = typer.Option(None, "--docs", help="Your documents folder, to check the imported doc ids against (csv, qa-md)."),
+    split: str = typer.Option("test", "--split", help="beir: which qrels/<split>.tsv to use."),
+    force: bool = typer.Option(False, "--force", help="Replace the files of an earlier import into --output (for beir, its docs/ folder too)."),
+) -> None:
+    """Convert a CSV, BEIR dataset or Markdown Q/A file into RAGBench's questions (and qrels, documents)."""
+    from ragbench.datasets.importers import ImportDatasetError, import_dataset
+
+    try:
+        result = import_dataset(fmt, source, output, docs=docs, split=split, force=force)
+    except (ImportDatasetError, DocumentLoadError, MissingExtraError, FileNotFoundError, ValueError) as exc:
+        raise _fail(str(exc)) from exc
+    console.print(f"[green]Imported {result.n_questions} questions[/green] to {result.questions_path}")
+    if result.docs_dir is not None:
+        console.print(f"Documents: {result.n_documents} in {result.docs_dir}" + (f" · qrels: {result.n_qrels} rows in {result.qrels_path}" if result.qrels_path else ""))
+    for warning in result.warnings[:10]:
+        console.print(f"  [yellow]•[/yellow] {escape(warning)}", soft_wrap=True)
+    if len(result.warnings) > 10:
+        console.print(f"  [yellow]… and {len(result.warnings) - 10} more.[/yellow]")
+    documents = result.docs_dir or docs or Path("YOUR_DOCS")
+    console.print(f"\nNext: [bold]ragbench init {output} --docs {documents} --questions {result.questions_path}[/bold]", soft_wrap=True)
 
 
 def parse_chunker_spec(text: str) -> dict[str, Any]:

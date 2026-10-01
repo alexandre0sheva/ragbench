@@ -7,7 +7,7 @@ decides how the work is spread over threads and keeps results in deterministic (
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Protocol
@@ -59,6 +59,7 @@ class SystemOutcome:
     ingestion_row: dict[str, Any] | None
     results: list[dict[str, Any]]  # per question; `{"skipped": True}` for a question the budget stopped before it started
     runtime_row: dict[str, Any]
+    restored: bool = False  # loaded from a checkpoint of an earlier attempt of this run instead of being run now
 
     @property
     def answered(self) -> int:
@@ -67,7 +68,7 @@ class SystemOutcome:
     @property
     def complete(self) -> bool:
         """Every question was either answered or failed on its own: the system's results are comparable with the others'."""
-        return self.system is not None and self.answered == len(self.results)
+        return (self.restored or self.system is not None) and self.answered == len(self.results)
 
 
 @dataclass
@@ -84,17 +85,31 @@ def _error_info(exc: BaseException) -> dict[str, str]:
 class SystemRunner:
     """Runs systems (ingest once, then all questions) and the latency probe."""
 
-    def __init__(self, evaluator: QuestionEvaluator, settings: ExecutionSettings, progress: ProgressListener):
+    def __init__(
+        self,
+        evaluator: QuestionEvaluator,
+        settings: ExecutionSettings,
+        progress: ProgressListener,
+        on_system_done: Callable[[SystemOutcome], None] | None = None,
+    ):
         self.evaluator = evaluator
         self.settings = settings
         self.progress = progress
+        self.on_system_done = on_system_done  # called from the system's worker thread the moment it finishes (checkpointing)
 
     # -- main pass ------------------------------------------------------------------------------
 
     def run_all(self, system_configs: Sequence[SystemConfig], documents: list[Any], questions: list[Any]) -> list[SystemOutcome]:
         total = len(system_configs)
+
+        def run_one(pair: tuple[int, SystemConfig]) -> SystemOutcome:
+            outcome = self.run_system(pair[0], total, pair[1], documents, questions)
+            if self.on_system_done is not None:
+                self.on_system_done(outcome)
+            return outcome
+
         return ordered_parallel_map(
-            lambda pair: self.run_system(pair[0], total, pair[1], documents, questions),
+            run_one,
             list(enumerate(system_configs, start=1)),
             workers=self.settings.system_workers,
             thread_name_prefix="ragbench-system",

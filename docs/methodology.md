@@ -2,7 +2,7 @@
 
 How RAGBench measures a RAG system, what each number means, and where it can mislead you. This page is the single owner of metric definitions, judge design, cost accounting, fairness rules and limitations; other docs link here instead of restating them.
 
-Contents: [What a run measures](#what-a-run-measures) · [Retrieval metrics](#retrieval-metrics) · [Context metrics](#context-metrics) · [Answer metrics](#answer-metrics) · [The LLM judge](#the-llm-judge) · [Failure types](#failure-types) · [Agent, tool and routing metrics](#agent-tool-and-routing-metrics) · [Cost accounting](#cost-accounting) · [Latency measurement](#latency-measurement) · [Statistics](#statistics) · [Selection](#selection) · [Limitations](#limitations)
+Contents: [What a run measures](#what-a-run-measures) · [Retrieval metrics](#retrieval-metrics) · [Context metrics](#context-metrics) · [Answer metrics](#answer-metrics) · [The LLM judge](#the-llm-judge) · [Failure types](#failure-types) · [Agent, tool and routing metrics](#agent-tool-and-routing-metrics) · [Cost accounting](#cost-accounting) · [Latency measurement](#latency-measurement) · [Statistics](#statistics) · [Selection](#selection) · [Reading the report](#reading-the-report) · [Synthetic questions and pooled labels](#synthetic-questions-and-pooled-labels) · [Limitations](#limitations)
 
 ## What a run measures
 
@@ -31,7 +31,7 @@ Retrieval is scored at the **document** level, because every system chunks the c
 
 **What `@k` means.** Retrieval metrics are computed on a ranking of `evaluation.retrieval_depth` chunks (default `max(k_values)`), independent of how many chunks the generator reads. The headline columns are recall at `primary_k` (default 5) and MRR / nDCG at the deepest `k`. The generator is given only the first `context_k` chunks of that ranking (a system's own `top_k` / `final_top_k` wins), so a system can rank the evidence 7th, score well at `@10`, and still never show it to its LLM. [Context metrics](#context-metrics) measure that gap. The keys are described in [configuration.md](configuration.md#retrieval-depth-context-size-and-failures).
 
-Systems that retrieve nothing (`no_retrieval`) have no retrieval metrics at all: their cells are blank, they are never classified as a retrieval miss, and they stay out of the qrels audit. Agentic systems are scored on the passages their tool calls returned (one ranking per call, merged with Reciprocal Rank Fusion).
+Systems that retrieve nothing (`no_retrieval`) have no retrieval metrics at all: their cells are blank, they are never classified as a retrieval miss, and they stay out of the qrels audit. The same holds for an answerable question with no relevance labels (no `relevant_doc_ids`, no positive qrels; see [label-free mode](dataset-format.md#label-free-mode)): its retrieval and context metrics are blank, and if no question is labeled the retrieval columns are blank for every system. Agentic systems are scored on the passages their tool calls returned (one ranking per call, merged with Reciprocal Rank Fusion).
 
 ## Context metrics
 
@@ -60,7 +60,7 @@ Normalization lowercases, removes `[doc_id]` citations, punctuation (decimal poi
 
 ### Abstention metrics
 
-Whether a system says "I could not find the answer" when it should, and only then. A question is *answerable* when it has relevant documents; an answer is a *refusal* when it declines to answer (the sentence the prompts ask for, or a close paraphrase such as "the documents do not contain…"; an answer that merely contains "not available", as in "the plan is not available in Europe", is not a refusal).
+Whether a system says "I could not find the answer" when it should, and only then. A question is *answerable* when it has relevant documents, or when it says `answerable: true` ([dataset-format.md](dataset-format.md#questions)); an answer is a *refusal* when it declines to answer (the sentence the prompts ask for, or a close paraphrase such as "the documents do not contain…"; an answer that merely contains "not available", as in "the plan is not available in Europe", is not a refusal).
 
 | Metric | Definition | Higher is |
 | --- | --- | --- |
@@ -84,9 +84,9 @@ The judge scores five axes from 0 to 5 per question; `answer_score` is their unw
 
 The judge also sets `is_supported_by_context` and `is_hallucinated`, which feed [failure classification](#failure-types). It sees the question, the reference answer, the answer, and **only the chunks that were given to the generator** (not the deeper ranking).
 
-### Prompt (version `v2`)
+### Prompt (version `v3`)
 
-Each axis has written anchors for 0, 3 and 5, the judge is told to ground every verdict only in the reference and the supplied context (never its own knowledge), and it must reply with one JSON object. The prompt version is stored with every judgment (`prompt_version` in `answer_judge.metadata` of `per_question_results.jsonl`); do not compare scores across versions.
+Each axis has written anchors for 0, 3 and 5, the judge is told to ground every verdict only in the reference and the supplied context (never its own knowledge) and is told whether the question is answerable (with no reference it grades against the context alone), and it must reply with one JSON object. The prompt version is stored with every judgment (`prompt_version` in `answer_judge.metadata` of `per_question_results.jsonl`); do not compare scores across versions.
 
 ### Configuration
 
@@ -106,7 +106,7 @@ With `samples > 1` the five axes are averaged, a flag is set when most samples s
 
 - **Self-preference.** An LLM judge tends to rate answers from its own model family higher. When the judge model is also the generator of a system (same provider and model), the leaderboard and `report.html` carry a "Self-preference risk" warning naming those systems. Pick a judge from another family under `evaluation.judge.model`, or set `independent: false` to accept the risk. The warning is only raised when an LLM judge scored the run.
 - **Noise.** A judge is not deterministic across models, prompts or sampling. With a few dozen questions a difference of a few tenths of a point is usually noise; see [Statistics](#statistics).
-- **Reference dependence.** Correctness is judged against `reference_answer`; a wrong or incomplete reference misleads the judge.
+- **Reference dependence.** Correctness is judged against `reference_answer`; a wrong or incomplete reference misleads the judge. An answerable question with no reference (label-free datasets often have none) is judged against the retrieved context alone: correctness and completeness then say how well the answer uses what the context offers, so they track faithfulness and cannot catch an answer that is faithful to the wrong passages. Add reference answers when you can.
 
 ### Failure handling and the heuristic judge
 
@@ -215,6 +215,28 @@ evaluation:
 Profiles bundle weights with this policy: `balanced` (quality 0.6, cost 0.2, latency 0.2), `cheapest_acceptable` (cost decides among the tied), `lowest_latency` (speed decides among the tied) and `max_quality` (ties are *not* merged: the highest mean wins whatever it costs). `selection.weights` overrides a profile's weights. The ranking lists the winner, then the tied systems best-first, then the rest by weighted score (min-max normalized across the feasible systems). `by_category` names the best system per question category and is descriptive only: categories are small.
 
 `require_local_models` accepts a `local:` embedder or an `openai_compatible:` endpoint on localhost for every model a system calls; `require_no_network` additionally rejects any tool with network side effects. The rationale is generated from the data (differences with their intervals, cost ratios, which systems tie and why), mock runs and runs with under 30 questions carry a caveat, and `winner.yaml` is the winner's system block plus the providers, tools and limits it needs; its `dataset:` is the benchmark's, to be replaced with your production documents.
+
+## Reading the report
+
+`report.html` is a decision document, top to bottom. It is built only from the files in the run directory (`report_data.json` next to it holds the same numbers), makes no network request, and every chart has a "Table view" with the same values.
+
+1. **Banner**: mock or live, the dataset (questions, categories, how many have labels), spend (charged at standalone prices, and what caches avoided), and every run-level warning: mock scores, unpriced models, self-preference, judge fallbacks, concurrent latency and unreviewed synthetic questions.
+2. **Recommendation**: the system to deploy under the profile and constraints, the systems statistically tied with it ([Selection](#selection)), the reasons, and its `winner.yaml` with a copy button.
+3. **Quality against cost** (or latency, when every cost is $0): one mark per system, bubble area = latency. Color marks the recommended system, its ties and the Pareto-optimal systems; the rest are gray, and only the first few are labeled (hover or focus a mark for any). The line is the cost-quality frontier.
+4. **Leaderboard**: whiskers are the 95% intervals of [Statistics](#statistics); ▲ / ▼ / ≈ mark a system as better, worse or not clearly different from the baseline on that metric (Holm-adjusted). Shading is the best value in a column, and is left off a column where every system is equal. "Columns" adds more metrics; "—" is a missing value, never 0.
+5. **Categories**: mean answer score (or recall) by question category, darker = higher on a scale that spans the values shown, so read it within one chart. A category with few questions is noisy: the question count is in the column header.
+6. **Cost and latency**: cost by stage (answering only, no judge) and p50 / p95 latency. **Agents and tools** appears only when a system has steps or tools. **Failures** counts questions by failure type ([Failure types](#failure-types)). **Label audit** counts answers judged well supported although retrieval missed labeled documents.
+7. **Reproducibility**: versions, config and dataset hashes, models, the price table's date and the configuration that ran.
+
+## Synthetic questions and pooled labels
+
+`ragbench generate-questions` and `ragbench label` ([dataset-format.md](dataset-format.md#generating-questions)) produce evaluation data with a model, so what they produce inherits that model's habits.
+
+### Pooling bias
+
+Pooled labels judge only the documents some benchmarked system retrieved in its top k. A relevant document that no system found is never judged and so never proposed, which flatters the systems that were pooled and understates recall for any system that would have found it. Adding a different kind of system to the run (lexical next to dense, say) widens the pool. A deeper `--top-k` helps at a cost that grows with it. The LLM grader's grades are a first draft to review, not ground truth.
+
+Synthetic questions are shaped by the generator: they tend to be answerable from one passage, worded like the document unless paraphrased, and easier than real traffic. Scores on questions still flagged `metadata.needs_review` measure that taste as much as the systems; read the questions and clear the flag before relying on the numbers.
 
 ## Limitations
 

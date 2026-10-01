@@ -20,7 +20,12 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 **Commands**:
 
 * `demo`: Create or verify the bundled demo dataset.
-* `inspect-dataset`: Show dataset counts, categories,...
+* `inspect-dataset`: Profile a dataset: sizes and balance,...
+* `generate-questions`: Write questions for documents that have...
+* `label`: Propose relevance labels for a run by...
+* `auto`: From a folder of documents to a decision:...
+* `init`: Start a benchmark of your own documents:...
+* `import`: Convert a CSV, BEIR dataset or Markdown...
 * `chunk-preview`: Show how a chunker cuts your documents:...
 * `list-systems`: Print available RAG systems with their...
 * `run`: Run a single config.
@@ -48,7 +53,7 @@ $ ragbench demo [OPTIONS]
 
 ## `ragbench inspect-dataset`
 
-Show dataset counts, categories, answerability, and qrels coverage.
+Profile a dataset: sizes and balance, label coverage, suggested chunk sizes, projected cost and likely problems.
 
 **Usage**:
 
@@ -64,6 +69,133 @@ $ ragbench inspect-dataset [OPTIONS]
 * `--include <str>`: Only load files matching this glob (repeatable).
 * `--exclude <str>`: Skip files matching this glob (repeatable).
 * `--on-error <str>`: `raise` (fail on a file that cannot be loaded) or `skip` (warn and go on).  [default: raise]
+* `--estimate / --no-estimate`: Also project the cost of the `standard` preset (runs each system once on the mock models; a few seconds).  [default: estimate]
+* `--help`: Show this message and exit.
+
+## `ragbench generate-questions`
+
+Write questions for documents that have none: single-hop, multi-hop, paraphrased, numeric and unanswerable, each flagged `needs_review`.
+
+**Usage**:
+
+```console
+$ ragbench generate-questions [OPTIONS]
+```
+
+**Options**:
+
+* `--docs <path>`: Your documents: a folder, or one file.  [required]
+* `--out <path>`: Questions JSONL to write, e.g. questions.jsonl.  [required]
+* `--n <int range>`: How many questions to write.  [default: 100; x>=1]
+* `--mix <str>`: Category shares, e.g. single_hop=0.4,multi_hop=0.2,paraphrase=0.15,numeric=0.1,unanswerable=0.15 (the default).
+* `--model <str>`: Model ref that writes the questions (default: the default generator model).
+* `--seed <int>`: Same seed, same documents sampled, same questions.  [default: 0]
+* `-c, --config <path>`: Read `providers:`, `pricing:` and `cache:` from this config (needed for openai_compatible: models).
+* `--mock`: Write template questions with no model (pipeline validation only). Also used when the model's API key is missing.
+* `--max-cost <float range>`: Stop writing once this many dollars were charged (partial results are kept).  [x>=0]
+* `--no-cache`: Do not read or write the persistent disk cache.
+* `-y, --yes`: Do not ask before a live run whose estimated cost is above the confirmation threshold.
+* `--force`: Replace --out if it exists (it may hold questions you reviewed).
+* `--help`: Show this message and exit.
+
+## `ragbench label`
+
+Propose relevance labels for a run by pooling: every system's top documents, graded 0-3 by an LLM. Never changes your qrels.
+
+**Usage**:
+
+```console
+$ ragbench label [OPTIONS]
+```
+
+**Options**:
+
+* `--run <path>`: A finished run directory, e.g. results/<run>.  [required]
+* `--top-k <int range>`: Pool the first K distinct documents each system retrieved, per question.  [default: 10; x>=1]
+* `--judge-model <str>`: Model ref that grades relevance (default: the run's judge model).
+* `--out <path>`: Directory for the outputs (default: the run directory).
+* `--apply`: Also write qrels.merged.jsonl: your labels plus the proposed grades for documents they do not mention.
+* `--mock`: Grade with a word-overlap stand-in, no model (pipeline validation only). Also used when the model's API key is missing.
+* `--max-cost <float range>`: Stop grading once this many dollars were charged (partial proposals are written).  [x>=0]
+* `--max-workers <int range>`: Documents graded at the same time.  [default: 4; x>=1]
+* `--no-cache`: Do not read or write the persistent disk cache.
+* `-y, --yes`: Do not ask before a live run whose estimated cost is above the confirmation threshold.
+* `--force`: With --apply: replace an existing qrels.merged.jsonl.
+* `--help`: Show this message and exit.
+
+## `ragbench auto`
+
+From a folder of documents to a decision: profile them, write questions if you have none, run the preset, and recommend a system.
+
+Writes everything to one run directory (questions, results, recommendation.md, winner.yaml, report.html). If it stops (budget, a crash, Ctrl-C),
+`--resume RUN_DIR` continues without paying again for the systems that finished.
+
+**Usage**:
+
+```console
+$ ragbench auto [OPTIONS]
+```
+
+**Options**:
+
+* `--docs <path>`: Your documents: a folder, or one file.
+* `--questions <path>`: Your questions JSONL. Without it, questions are written from your documents (flagged needs_review).
+* `--qrels <path>`: Optional qrels JSONL for --questions.
+* `--preset <str>`: Which systems to compare: quick, standard, thorough, agentic.  [default: standard]
+* `--profile <str>`: What the recommendation optimizes: balanced, max_quality, cheapest_acceptable or lowest_latency.  [default: balanced]
+* `--n-questions <int range>`: How many questions to write when you have none.  [default: 50; x>=1]
+* `--seed <int>`: Seed for writing questions.  [default: 0]
+* `--max-cost <float range>`: Total dollars to spend (writing questions plus the run). The run stops once it is reached.  [x>=0]
+* `--model <str>`: Model ref that writes the questions (default: the default generator model).
+* `-c, --config <path>`: Take models, providers, pricing, evaluation and selection settings from this config (its systems and dataset are not used).
+* `--output-dir <path>`: Where the run directory is created.  [default: results]
+* `--resume <path>`: Continue an earlier auto run in this directory: finished systems are kept, the rest are run.
+* `--mock`: Force local mock mode: nothing is paid for and the scores only validate the pipeline.
+* `--no-cache`: Do not read or write the persistent disk cache.
+* `-y, --yes`: Do not ask before spending more than evaluation.cost_confirm_threshold_usd.
+* `--open`: Open report.html in your browser when done.
+* `--help`: Show this message and exit.
+
+## `ragbench init`
+
+Start a benchmark of your own documents: write a ready-to-run config and a questions file to edit.
+
+**Usage**:
+
+```console
+$ ragbench init [OPTIONS] [directory]
+```
+
+**Arguments**:
+
+* `directory`: Where to write ragbench.yaml (and questions.jsonl if you have none yet).  [default: .]
+
+**Options**:
+
+* `--docs <path>`: Your documents: a folder, or one file.  [required]
+* `--questions <path>`: Your questions JSONL. Without it a questions.jsonl template is created in DIRECTORY.
+* `--preset <str>`: Which systems to compare: quick, standard, thorough, agentic.  [default: standard]
+* `--force`: Replace an existing ragbench.yaml (questions files are never replaced).
+* `--help`: Show this message and exit.
+
+## `ragbench import`
+
+Convert a CSV, BEIR dataset or Markdown Q/A file into RAGBench's questions (and qrels, documents).
+
+**Usage**:
+
+```console
+$ ragbench import [OPTIONS]
+```
+
+**Options**:
+
+* `--format <str>`: csv (question,answer,doc_ids), beir (corpus.jsonl + queries.jsonl + qrels/), or qa-md (Markdown `Q:` / `A:` pairs).  [required]
+* `--input <path>`: The file (csv, qa-md) or folder (beir, qa-md) to import.  [required]
+* `--output <path>`: Directory to write questions.jsonl (and qrels.jsonl, docs/ for beir) into.  [required]
+* `--docs <path>`: Your documents folder, to check the imported doc ids against (csv, qa-md).
+* `--split <str>`: beir: which qrels/<split>.tsv to use.  [default: test]
+* `--force`: Replace the files of an earlier import into --output (for beir, its docs/ folder too).
 * `--help`: Show this message and exit.
 
 ## `ragbench chunk-preview`

@@ -9,7 +9,7 @@ from ragbench.evaluation.evaluator import run_benchmark
 from ragbench.models import embeddings, llms
 from ragbench.models.errors import ModelInitError
 from ragbench.models.providers import openai as openai_provider
-from ragbench.reporting.html_report import write_html_report
+from ragbench.reporting.html_report import write_report
 from ragbench.reporting.markdown_report import write_leaderboard
 
 
@@ -63,16 +63,12 @@ def test_reports_warn_about_unknown_priced_models(tmp_path):
     notices = ["Cost under-reported: no price registered for model-x"]
 
     write_leaderboard(tmp_path / "leaderboard.md", rows, notices=notices)
-    write_html_report(
-        tmp_path / "report.html",
-        run_id="r",
-        summary_rows=rows,
-        category_rows=[],
-        cost_rows=[],
-        failure_rows=[],
-        config_text="",
-        run_meta={"num_systems": 1, "num_questions": 1, "run_wall_time_ms": 1.0, "mode": "live", "unknown_priced_models": ["model-x"]},
+    # A finished run directory in miniature: the report is built from the files a run writes.
+    (tmp_path / "metrics_summary.csv").write_text("system,system_type,answer_score\na,bm25,4.0\n", encoding="utf-8")
+    (tmp_path / "run_summary.json").write_text(
+        json.dumps({"run_id": "r", "mode": "live", "unknown_priced_models": ["model-x"], "run_wall_time_ms": 1.0, "num_systems": 1}), encoding="utf-8"
     )
+    write_report(tmp_path)
 
     assert "model-x" in (tmp_path / "leaderboard.md").read_text(encoding="utf-8")
     html = (tmp_path / "report.html").read_text(encoding="utf-8")

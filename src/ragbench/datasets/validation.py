@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from ragbench.datasets.schema import Dataset
+from ragbench.datasets.schema import Dataset, has_relevance_labels
 from ragbench.documents.schema import Document
 
 
@@ -41,6 +41,17 @@ def validate_dataset(documents: list[Document], dataset: Dataset) -> list[str]:
         if qrel_docs and labeled - qrel_docs:
             missing = ", ".join(sorted(labeled - qrel_docs))
             warnings.append(f"Question {question.id}: relevant_doc_ids not present in qrels: {missing}")
+
+    if dataset.label_free and dataset.questions:
+        warnings.append(
+            "No question has relevant_doc_ids or qrels (label-free mode): retrieval metrics (recall, MRR, nDCG) are skipped and answers are judged "
+            "against the reference answer, or against the retrieved context when there is none. Add labels to compare retrieval quality."
+        )
+    else:
+        unlabeled = [q.id for q in dataset.questions if q.is_answerable and not has_relevance_labels(q, dataset.qrels.get(q.id, {}))]
+        if unlabeled:
+            shown = ", ".join(unlabeled[:5]) + (f" and {len(unlabeled) - 5} more" if len(unlabeled) > 5 else "")
+            warnings.append(f"Answerable questions with no relevant_doc_ids or qrels get no retrieval metrics: {shown}")
 
     empty_docs = sorted(document.doc_id for document in documents if not document.text.strip())
     if empty_docs:
