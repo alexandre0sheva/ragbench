@@ -153,7 +153,7 @@ def confirm_spend(total_usd: float, what: str, yes: bool, threshold: float) -> N
     if decision == "refuse":
         raise fail(
             f"The estimated cost {money(total_usd)} is above the {money(threshold)} confirmation threshold and there is no one to ask. "
-            "Re-run with --yes to go ahead, or pass --max-cost to cap the spending."
+            "Re-run with --yes to go ahead, or cap the spending first (`evaluation.max_cost_usd` in the config, or `--max-cost` on commands that have it)."
         )
     if not typer.confirm(f"Go ahead for about {money(total_usd)}?", default=False):
         raise fail("Cancelled. Nothing was spent.", code=1)

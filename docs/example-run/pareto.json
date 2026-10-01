@@ -1,0 +1,205 @@
+{
+  "maximize": [
+    "answer_score"
+  ],
+  "minimize": [
+    "avg_cost_per_question",
+    "avg_latency_ms"
+  ],
+  "front": [
+    "bm25_default",
+    "vector_default",
+    "rerank_default",
+    "hybrid_rerank_default",
+    "parent_doc_default",
+    "no_retrieval_floor",
+    "full_context_ceiling",
+    "sentence_window_default",
+    "vector_mmr",
+    "contextual_default",
+    "hierarchical_default",
+    "rag_fusion_default",
+    "decompose_default",
+    "iterative_default",
+    "adaptive_default"
+  ],
+  "dominated_by": {
+    "hybrid_default": [
+      "vector_default",
+      "contextual_default"
+    ],
+    "hyde_default": [
+      "contextual_default",
+      "decompose_default",
+      "adaptive_default"
+    ],
+    "llm_heavy_default": [
+      "rerank_default",
+      "hybrid_rerank_default",
+      "full_context_ceiling",
+      "rag_fusion_default",
+      "decompose_default",
+      "corrective_default",
+      "iterative_default",
+      "agent_search_tools"
+    ],
+    "corrective_default": [
+      "iterative_default"
+    ],
+    "agent_search_plain": [
+      "bm25_default",
+      "vector_default",
+      "hybrid_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "hyde_default",
+      "parent_doc_default",
+      "contextual_default",
+      "rag_fusion_default",
+      "decompose_default",
+      "iterative_default",
+      "adaptive_default"
+    ],
+    "agent_search_tools": [
+      "rag_fusion_default",
+      "iterative_default"
+    ],
+    "grep_agent_default": [
+      "iterative_default"
+    ]
+  },
+  "points": [
+    {
+      "system": "bm25_default",
+      "answer_score": 4.6871165644171775,
+      "avg_cost_per_question": 0.00048776257668711655,
+      "avg_latency_ms": 1080.6227167951874
+    },
+    {
+      "system": "vector_default",
+      "answer_score": 4.673619631901841,
+      "avg_cost_per_question": 0.0004353624539877301,
+      "avg_latency_ms": 1187.6550998014864
+    },
+    {
+      "system": "hybrid_default",
+      "answer_score": 4.606134969325153,
+      "avg_cost_per_question": 0.00047576073619631906,
+      "avg_latency_ms": 1231.7220836004708
+    },
+    {
+      "system": "rerank_default",
+      "answer_score": 4.742331288343558,
+      "avg_cost_per_question": 0.0005157165644171779,
+      "avg_latency_ms": 1675.3588000079617
+    },
+    {
+      "system": "hybrid_rerank_default",
+      "answer_score": 4.723926380368098,
+      "avg_cost_per_question": 0.0005338159509202454,
+      "avg_latency_ms": 1432.0047751942184
+    },
+    {
+      "system": "hyde_default",
+      "answer_score": 4.679754601226994,
+      "avg_cost_per_question": 0.00046211570552147233,
+      "avg_latency_ms": 2797.8962001914624
+    },
+    {
+      "system": "parent_doc_default",
+      "answer_score": 4.712883435582822,
+      "avg_cost_per_question": 0.000487079018404908,
+      "avg_latency_ms": 1206.7800916091073
+    },
+    {
+      "system": "llm_heavy_default",
+      "answer_score": 4.7165644171779135,
+      "avg_cost_per_question": 0.005120857668711657,
+      "avg_latency_ms": 5974.877183203353
+    },
+    {
+      "system": "no_retrieval_floor",
+      "answer_score": 1.536196319018405,
+      "avg_cost_per_question": 0.00012451349693251532,
+      "avg_latency_ms": 943.0766665900592
+    },
+    {
+      "system": "full_context_ceiling",
+      "answer_score": 4.775460122699387,
+      "avg_cost_per_question": 0.002802893865030675,
+      "avg_latency_ms": 1337.3145331977867
+    },
+    {
+      "system": "sentence_window_default",
+      "answer_score": 4.415950920245399,
+      "avg_cost_per_question": 0.0002451673619631902,
+      "avg_latency_ms": 1195.195466594305
+    },
+    {
+      "system": "vector_mmr",
+      "answer_score": 4.543558282208589,
+      "avg_cost_per_question": 0.0003957618404907975,
+      "avg_latency_ms": 1085.4298417980317
+    },
+    {
+      "system": "contextual_default",
+      "answer_score": 4.694478527607362,
+      "avg_cost_per_question": 0.00045740601226993864,
+      "avg_latency_ms": 1163.6912918067537
+    },
+    {
+      "system": "hierarchical_default",
+      "answer_score": 4.558282208588957,
+      "avg_cost_per_question": 0.000330239754601227,
+      "avg_latency_ms": 1091.0726667905692
+    },
+    {
+      "system": "rag_fusion_default",
+      "answer_score": 4.753086419753086,
+      "avg_cost_per_question": 0.0004226645679012345,
+      "avg_latency_ms": 3106.8173997977283
+    },
+    {
+      "system": "decompose_default",
+      "answer_score": 4.721472392638038,
+      "avg_cost_per_question": 0.0004089328834355829,
+      "avg_latency_ms": 2444.39741660608
+    },
+    {
+      "system": "corrective_default",
+      "answer_score": 4.7680981595092025,
+      "avg_cost_per_question": 0.0006035272392638037,
+      "avg_latency_ms": 5258.051841391716
+    },
+    {
+      "system": "iterative_default",
+      "answer_score": 4.811042944785276,
+      "avg_cost_per_question": 0.0005671379141104296,
+      "avg_latency_ms": 3254.4534998072777
+    },
+    {
+      "system": "agent_search_plain",
+      "answer_score": 4.580368098159509,
+      "avg_cost_per_question": 0.000718476073619632,
+      "avg_latency_ms": 3561.794141406426
+    },
+    {
+      "system": "agent_search_tools",
+      "answer_score": 4.752147239263804,
+      "avg_cost_per_question": 0.0008224256441717792,
+      "avg_latency_ms": 3315.753324807156
+    },
+    {
+      "system": "grep_agent_default",
+      "answer_score": 4.78282208588957,
+      "avg_cost_per_question": 0.0010916490797546012,
+      "avg_latency_ms": 6557.362808397738
+    },
+    {
+      "system": "adaptive_default",
+      "answer_score": 4.704294478527607,
+      "avg_cost_per_question": 0.00044077055214723933,
+      "avg_latency_ms": 1853.2885247957893
+    }
+  ]
+}

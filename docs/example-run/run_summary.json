@@ -1,0 +1,117 @@
+{
+  "run_id": "all_systems_demo_20261001_221453",
+  "mode": "live",
+  "models_used": [
+    "gpt-6-luna",
+    "gpt-6.1-sol",
+    "text-embedding-3-small"
+  ],
+  "unknown_priced_models": [],
+  "pricing_as_of": "2026-10-01",
+  "run_wall_time_ms": 4106449.8700409895,
+  "max_workers": 4,
+  "execution": {
+    "max_workers": 4,
+    "system_workers": 1,
+    "ingest_workers": 4,
+    "latency_probe_questions": 5,
+    "latency_source": "probe",
+    "probe_calls": 110,
+    "probe_cost_usd": 0.05519744
+  },
+  "num_systems": 22,
+  "budget": {
+    "max_cost_usd": 6.0,
+    "spent_usd": 2.9543306000000022,
+    "stopped": false,
+    "completed_systems": [
+      "bm25_default",
+      "vector_default",
+      "hybrid_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "hyde_default",
+      "parent_doc_default",
+      "llm_heavy_default",
+      "no_retrieval_floor",
+      "full_context_ceiling",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "rag_fusion_default",
+      "decompose_default",
+      "corrective_default",
+      "iterative_default",
+      "agent_search_plain",
+      "agent_search_tools",
+      "grep_agent_default",
+      "adaptive_default"
+    ],
+    "incomplete_systems": {}
+  },
+  "num_question_rows": 3586,
+  "num_errors": 1,
+  "errors_by_system": {
+    "rag_fusion_default": 1
+  },
+  "k_values": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "retrieval_depth": 10,
+  "context_k": 5,
+  "primary_k": 5,
+  "embedding_cache": {
+    "hits": 1644,
+    "misses": 1745,
+    "saved_cost_usd": 0.008315359999999983
+  },
+  "cache": {
+    "enabled": true,
+    "path": ".ragbench_cache/cache.sqlite3",
+    "hits": 416,
+    "misses": 11040,
+    "hit_rate": 0.036312849162011177,
+    "saved_cost_usd": 0.08840789999999998,
+    "by_namespace": {
+      "embeddings": {
+        "hits": 0,
+        "misses": 1632,
+        "saved_cost_usd": 0.0
+      },
+      "llm": {
+        "hits": 416,
+        "misses": 9408,
+        "saved_cost_usd": 0.08840789999999998
+      }
+    },
+    "size_bytes": 31909648,
+    "charged_cost_usd": 2.9543306,
+    "real_spend_usd": 2.91280478
+  },
+  "dataset": {
+    "questions": 163,
+    "labeled_questions": 138,
+    "label_free": false,
+    "synthetic_questions": 0,
+    "needs_review_questions": 0,
+    "mock_questions": 0
+  },
+  "notices": [
+    "Self-preference risk: the judge (gpt-6-luna) is also the generator of bm25_default, vector_default, hybrid_default, rerank_default, hybrid_rerank_default, hyde_default, parent_doc_default, no_retrieval_floor, full_context_ceiling, sentence_window_default, vector_mmr, contextual_default, hierarchical_default, rag_fusion_default, decompose_default, corrective_default, iterative_default, agent_search_plain, agent_search_tools, grep_agent_default, adaptive_default. Judges tend to rate answers from their own model higher, so those scores may be inflated. Use a different model under `evaluation.judge.model`, or set `evaluation.judge.independent: false` to accept this."
+  ],
+  "dataset_warnings": [],
+  "document_warnings": [],
+  "outputs": {
+    "leaderboard": "leaderboard.md",
+    "report": "report.html",
+    "qrels_audit": "qrels_audit.md",
+    "stats": "stats.json",
+    "significance": "significance.csv",
+    "pareto": "pareto.json",
+    "recommendation": "recommendation.md"
+  }
+}

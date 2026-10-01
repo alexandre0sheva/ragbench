@@ -25,7 +25,7 @@ Use this before tagging a release. CI runs most of the automatic checks; the man
 ## Live run (maintainer, costs money)
 
 - [ ] `ragbench estimate --config configs/all.yaml` and read the projected cost; proceed only if you accept it.
-- [ ] `ragbench run --config configs/all.yaml --max-cost <your cap>` with a real key (in `.env` or your shell, never committed). Check the banner says LIVE, no model is reported as unpriced, no judge fallbacks are warned about, and the latency probe ran.
+- [ ] `ragbench run --config configs/all.yaml` with a real key (in `.env` or your shell, never committed) and your cap set as `evaluation.max_cost_usd` in a copy of the config (`run` has no `--max-cost` flag; the shipped config stays uncapped). Check the banner says LIVE, no model is reported as unpriced, no judge fallbacks are warned about, and the latency probe ran.
 - [ ] Open `report.html`, check the recommendation reads sensibly, and refresh the screenshots in `docs/assets/` if the report changed.
 
 ## Package

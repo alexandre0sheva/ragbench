@@ -1,0 +1,12 @@
+system,tool,calls,errors,error_rate,truncated,questions_using,avg_latency_ms,total_cost_usd
+agent_search_plain,search,335,0,0.0,0,163,155.48470249171925,8.22e-05
+agent_search_tools,search,266,0,0.0,13,163,145.77749028541078,5.9980000000000005e-05
+agent_search_tools,calculator,17,0,0.0,0,17,0.7680024684625951,0.0
+agent_search_tools,date_calc,9,0,0.0,0,9,0.645828559451426,0.0
+agent_search_tools,corpus_grep,39,0,0.0,2,35,1.50818266467048,0.0
+grep_agent_default,list_documents,180,0,0.0,0,158,0.47132550438012305,0.0
+grep_agent_default,corpus_grep,278,0,0.0,57,133,1.8184993917745598,0.0
+grep_agent_default,read_document,203,0,0.0,4,121,0.359529285838488,0.0
+adaptive_default,search,27,0,0.0,0,21,170.24569129743784,6.820000000000001e-06
+adaptive_default,calculator,8,0,0.0,0,8,1.8175208788306918,0.0
+adaptive_default,date_calc,9,0,0.0,0,9,0.27231922205020154,0.0

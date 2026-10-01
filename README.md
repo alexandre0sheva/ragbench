@@ -25,7 +25,34 @@ Not sure which architecture to try first, or what to look at in the report? Star
 
 Each run writes one directory: a **recommendation** (which system to deploy under your constraints, the systems statistically tied with it, a runnable `winner.yaml`), a self-contained **`report.html`** (leaderboard with confidence whiskers, quality-against-cost chart, category heatmap, cost and latency by stage, failure types, and a drill-down into every question with the retrieved passages and the agent's steps), `leaderboard.md`, and the CSV and JSONL files all of it is built from. `ragbench report RUN` rebuilds any report from those files, `ragbench runs` lists past runs and `ragbench compare-runs A B` flags regressions.
 
-<!-- Task 32: report screenshots go here (docs/assets/report-desktop-light.png, report-desktop-dark.png, report-mobile.png) -->
+<p>
+  <img src="docs/assets/report-desktop-light.png" alt="The top of report.html in the light theme: run header, recommendation and statistically tied systems" width="49%">
+  <img src="docs/assets/report-desktop-dark.png" alt="The same report in the dark theme" width="49%">
+</p>
+
+`report.html` follows the OS theme, has a light/dark toggle, and works on a phone-sized screen.
+
+### An example result
+
+A live run of [`configs/all.yaml`](configs/all.yaml) on the bundled demo dataset (60 documents, 163 questions, 22 systems; `gpt-6-luna` generates and judges, `gpt-6.1-sol` for `llm_heavy`, `text-embedding-3-small`), run 1 Oct 2026 with ragbench 0.3.0 for about $2.91 of real API spend. Brackets are 95% bootstrap confidence intervals over the questions; the metrics are defined in the [methodology](docs/methodology.md).
+
+| System | Recall@5 | Answer score | $ / question | p95 latency |
+| --- | --- | --- | --- | --- |
+| `no_retrieval_floor` | — | 1.54 [1.40, 1.68] | $0.00012 | 1093 ms |
+| **`bm25_default`** (recommended) | 0.745 [0.681, 0.808] | 4.69 [4.55, 4.81] | $0.00049 | 1378 ms |
+| `vector_default` | 0.790 [0.733, 0.847] | 4.67 [4.54, 4.79] | $0.00044 | 1637 ms |
+| `hybrid_rerank_default` | 0.774 [0.713, 0.832] | 4.72 [4.59, 4.84] | $0.00053 | 2140 ms |
+| `llm_heavy_default` | 0.790 [0.728, 0.848] | 4.72 [4.60, 4.82] | $0.00512 | 8055 ms |
+| `full_context_ceiling` | 0.741 [0.676, 0.804] | 4.78 [4.70, 4.84] | $0.00280 | 2257 ms |
+| `iterative_default` (agent) | 0.799 [0.742, 0.856] | 4.81 [4.71, 4.90] | $0.00057 | 3952 ms |
+| `agent_search_tools` (agent) | 0.821 [0.767, 0.876] | 4.75 [4.63, 4.85] | $0.00082 | 5783 ms |
+| `grep_agent_default` (agent) | 0.791 [0.736, 0.850] | 4.78 [4.69, 4.86] | $0.00109 | 9437 ms |
+
+Nine of the 22 systems are shown; [the full example run](docs/example-run.md) has all of them, the per-category winners and the saved result files.
+
+- **Retrieval is what matters most here.** Without it the model scores 1.54; `bm25_default` scores 3.15 points higher (95% CI +2.95 to +3.35) and wins on 159 of 163 questions.
+- **Past that, quality did not separate the systems.** `bm25_default` and 15 others are statistically tied with the best answer score (`iterative_default`, 4.81) under a paired bootstrap with Holm correction; `bm25_default` is 0.12 lower (CI −0.27 to +0.01). So the recommendation fell to cost and latency: `bm25_default` costs $0.00049 per question, against up to $0.00512 for the tied systems.
+- **How far to trust it.** This is a small, easy corpus (about 23k tokens) with a judge that is also the generator, so scores are probably inflated and the ranking may not carry over to yours (the report says so in its banner). OpenAI's content filter rejected one `rag_fusion_default` call; that question is excluded from its scores. Run it on your own documents with `ragbench auto`.
 
 ## Systems
 
@@ -64,6 +91,7 @@ Every system implements the same interface and runs on any dataset. Options and 
 - [Methodology](docs/methodology.md): metrics, the judge, statistics, cost accounting, how to read the report, limitations
 - [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*
 - [Extending RAGBench](docs/extending.md): new systems, tools, chunkers, rerankers, loaders, vector backends and model providers
+- [Example run](docs/example-run.md): the complete live run behind the numbers above, with its result files
 - [Changelog](CHANGELOG.md) and the [release checklist](docs/release-checklist.md)
 
 Live runs spend real money, and LLM-heavy and agentic systems spend the most; see [cost accounting](docs/methodology.md#cost-accounting) and how to cap spending in [configuration](docs/configuration.md#estimating-cost-and-capping-it).

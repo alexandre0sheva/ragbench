@@ -1,0 +1,352 @@
+run:
+  name: all_systems_demo
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: bm25
+    name: bm25_default
+    chunker:
+      type: word
+      chunk_size: 450
+      chunk_overlap: 70
+    retrieval:
+      top_k: 5
+    models:
+      generator: gpt-6-luna
+
+  - type: vector
+    name: vector_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: hybrid
+    name: hybrid_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      final_top_k: 5
+      rrf_k: 60
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: rerank
+    name: rerank_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      candidate_top_k: 30
+      final_top_k: 5
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: hybrid_rerank
+    name: hybrid_rerank_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: hyde
+    name: hyde_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+      probe_top_k: 10
+      fuse_with_question: true
+      rrf_k: 60
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: parent_doc
+    name: parent_doc_default
+    chunker:
+      child_chunk_size: 250
+      child_chunk_overlap: 50
+      parent_chunk_size: 1000
+      parent_chunk_overlap: 150
+    retrieval:
+      vector_store: numpy
+      top_k_children: 8
+      top_k_parents: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: llm_heavy
+    name: llm_heavy_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+      per_query_top_k: 10
+      reranker: local_relevance
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6.1-sol
+    llm_features:
+      enable_llm_ingestion: false
+      enable_query_rewrite: true
+      enable_llm_rerank: false
+
+  # Baselines: the floor shows what the model knows without documents; the ceiling reads the whole corpus (23k tokens here) on every question.
+  - type: no_retrieval
+    name: no_retrieval_floor
+    models:
+      generator: gpt-6-luna
+
+  - type: full_context
+    name: full_context_ceiling
+    retrieval:
+      context_token_budget: 100000
+    models:
+      generator: gpt-6-luna
+
+  - type: sentence_window
+    name: sentence_window_default
+    retrieval:
+      vector_store: numpy
+      window: 2
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # The `vector` system again with maximal marginal relevance on, to see whether diverse context beats the plain ranking.
+  - type: vector
+    name: vector_mmr
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+      diversity: mmr
+      mmr_lambda: 0.5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Ingestion-time LLM systems: one cheap call per chunk (contextual) or per document (hierarchical), cached on disk for re-runs.
+  - type: contextual
+    name: contextual_default
+    chunker:
+      type: word
+      chunk_size: 450
+      chunk_overlap: 70
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: hierarchical
+    name: hierarchical_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      docs_k: 5
+      chunks_per_doc: 2
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # LLM query planning: one short extra call per question that writes alternative queries (rag_fusion) or sub-questions (decompose).
+  - type: rag_fusion
+    name: rag_fusion_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      num_queries: 4
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: decompose
+    name: decompose_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_subquestions: 4
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Agentic systems: they loop (grade and retry, or search again for what is missing), so cost per question varies; the caps bound it.
+  - type: corrective
+    name: corrective_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_rounds: 2
+      expand_to: hybrid
+      max_cost_usd: 0.02
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: iterative
+    name: iterative_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_hops: 3
+      max_cost_usd: 0.02
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Tool-using agents. The two agent_search variants differ only in their tools, so the tool axis is benchmarked by default:
+  # `tools: []` still has `search`; the other adds a calculator, a date calculator and grep.
+  - type: agent_search
+    name: agent_search_plain
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_steps: 5
+      max_cost_usd: 0.05
+      top_k: 5
+    tools: []
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: agent_search
+    name: agent_search_tools
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_steps: 5
+      max_cost_usd: 0.05
+      top_k: 5
+    tools: [calculator, date_calc, corpus_grep]
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # No chunking, no embeddings, no index: the agent lists, greps and reads the raw documents.
+  - type: grep_agent
+    name: grep_agent_default
+    retrieval:
+      max_steps: 6
+      max_cost_usd: 0.05
+      top_k: 5
+    models:
+      generator: gpt-6-luna
+
+  # A per-question router over four pipelines. Compare it against its own routes to see whether routing pays: routes.csv shows, per route,
+  # how many questions it took and how they scored. Routes inherit `models` from here.
+  - type: adaptive
+    name: adaptive_default
+    retrieval:
+      router: heuristic
+      routes:
+        default:
+          type: hybrid_rerank
+          chunker: {type: word, chunk_size: 250, chunk_overlap: 40}
+          retrieval: {vector_store: numpy, final_top_k: 5}
+        lexical:
+          type: bm25
+          chunker: {type: word, chunk_size: 250, chunk_overlap: 40}
+          retrieval: {top_k: 5}
+        multi_hop:
+          type: decompose
+          chunker: {type: word, chunk_size: 250, chunk_overlap: 40}
+          retrieval: {retriever: hybrid, vector_store: numpy, top_k: 5}
+        computation:
+          type: agent_search
+          chunker: {type: word, chunk_size: 250, chunk_overlap: 40}
+          retrieval: {retriever: hybrid, vector_store: numpy, max_steps: 5, max_cost_usd: 0.05, top_k: 5}
+          tools: [calculator, date_calc]
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+evaluation:
+  max_cost_usd: 6
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: gpt-6-luna
+  max_questions: null
+  max_workers: 4

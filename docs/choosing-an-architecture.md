@@ -42,7 +42,7 @@ Then compare chunk sizes or chunkers with a [sweep](configuration.md#sweeps) rat
 
 ## 3. Match the effort to the stakes
 
-`ragbench estimate` projects the cost before you spend; `--max-cost` caps it. A reasonable path is the cheapest preset on a small sample of questions, then the candidates your situation pointed to on the full set. Agentic systems (loops, tools, routing) cost the most per question, so add them once the cheap systems have set a bar they must clear. If you have no questions yet, `ragbench auto` writes some, flagged `needs_review`; read them before trusting a result built on them.
+`ragbench estimate` projects the cost before you spend; `evaluation.max_cost_usd` in the config (or `--max-cost` on `ragbench auto`) caps it. A reasonable path is the cheapest preset on a small sample of questions, then the candidates your situation pointed to on the full set. Agentic systems (loops, tools, routing) cost the most per question, so add them once the cheap systems have set a bar they must clear. If you have no questions yet, `ragbench auto` writes some, flagged `needs_review`; read them before trusting a result built on them.
 
 ## 4. Read the report in this order
 
