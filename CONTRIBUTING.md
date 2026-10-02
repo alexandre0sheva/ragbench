@@ -51,6 +51,7 @@ Each piece of knowledge has one owner; everywhere else links to it. `scripts/aud
 | --- | --- |
 | Pitch, install, quickstart, links | `README.md` |
 | Systems, their options, cost and latency profile | `docs/systems.md` (generated) |
+| How each system, chunker, reranker and agent works (algorithms, diagrams) | `docs/system-wiki.md` |
 | Commands and options | `docs/cli.md` (generated) |
 | Config sections, presets, sweeps, budgets, caching, providers | `docs/configuration.md` |
 | Dataset formats and onboarding | `docs/dataset-format.md` |

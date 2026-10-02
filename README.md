@@ -89,6 +89,7 @@ Every system implements the same interface and runs on any dataset. Options and 
 - [Configuration](docs/configuration.md): config sections, presets, sweeps, budgets, caching, concurrency, model providers
 - [Dataset format](docs/dataset-format.md): documents, questions, qrels, importers, generating questions and labels
 - [Methodology](docs/methodology.md): metrics, the judge, statistics, cost accounting, how to read the report, limitations
+- [System wiki](docs/system-wiki.md): how every system, chunker, reranker and agent works, with diagrams
 - [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*
 - [Extending RAGBench](docs/extending.md): new systems, tools, chunkers, rerankers, loaders, vector backends and model providers
 - [Example run](docs/example-run.md): the complete live run behind the numbers above, with its result files
