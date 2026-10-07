@@ -12,6 +12,8 @@
 | bm25_default | 145 | 18 |
 | contextual_default | 144 | 19 |
 | corrective_default | 148 | 15 |
+| decision_gate_default | 150 | 13 |
+| decision_gate_strict | 147 | 16 |
 | decompose_default | 147 | 16 |
 | full_context_ceiling | 149 | 14 |
 | grep_agent_default | 141 | 22 |
@@ -23,7 +25,7 @@
 | llm_heavy_default | 150 | 13 |
 | no_retrieval_floor | 25 | 138 |
 | parent_doc_default | 144 | 19 |
-| rag_fusion_default | 147 | 16 |
+| rag_fusion_default | 148 | 15 |
 | rerank_default | 148 | 15 |
 | sentence_window_default | 136 | 27 |
 | vector_default | 147 | 16 |
@@ -88,6 +90,28 @@
 | over_refusal | 2 | What is the yearly limit for gifts and hospitality from one source? |
 | partial_answer | 2 | How many days passed between HarborShield AI's general availability and the Solstice 2.1 release? |
 | possible_qrels_gap | 2 | Which tool helps a claims handler judge how serious an incoming loss report is? |
+
+## decision_gate_default
+
+| Failure Type | Count | Example Question |
+| --- | --- | --- |
+| answer_hallucination | 3 | Compare ClaimPilot and HarborShield AI by primary workflow. |
+| insufficient_context | 5 | How many Severity 1 incidents did RAGBench Mutual record across the first three quarters of 2024? |
+| partial_answer | 1 | How many days passed between HarborShield AI's general availability and the Solstice 2.1 release? |
+| possible_qrels_gap | 1 | Which tool helps a claims handler judge how serious an incoming loss report is? |
+| retrieval_miss | 3 | How long does the company keep the original files that intermediaries send in? |
+
+## decision_gate_strict
+
+| Failure Type | Count | Example Question |
+| --- | --- | --- |
+| answer_hallucination | 1 | How many days separate the announcement of Maxine Thompson's award from the start of the Zurich pilot? |
+| bad_reranking | 3 | Compare ClaimPilot and HarborShield AI by primary workflow. |
+| insufficient_context | 4 | How many Severity 1 incidents did RAGBench Mutual record across the first three quarters of 2024? |
+| over_refusal | 2 | Was HarborShield Essentials the approved replacement for Aurora Lite? |
+| partial_answer | 1 | How many days passed between HarborShield AI's general availability and the Solstice 2.1 release? |
+| possible_qrels_gap | 2 | Which tool helps a claims handler judge how serious an incoming loss report is? |
+| retrieval_miss | 3 | How long does the company keep the original files that intermediaries send in? |
 
 ## decompose_default
 
@@ -197,7 +221,6 @@
 | bad_reranking | 3 | What is the largest packet the platform accepts today? |
 | insufficient_context | 6 | Which 2024 incidents lasted longer than an hour? |
 | possible_qrels_gap | 2 | Which tool helps a claims handler judge how serious an incoming loss report is? |
-| run_error | 1 | Does HarborShield AI's CSV export include the sanctions rationale in the latest release? |
 
 ## rerank_default
 

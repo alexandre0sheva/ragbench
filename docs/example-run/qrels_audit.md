@@ -202,3 +202,16 @@ This report lists cases where the answer judge rated an answer highly even thoug
 | adaptive_default | q_088 | medium | 0.50 | doc_036, doc_027 | doc_025, doc_049 |
 | adaptive_default | q_095 | medium | 0.50 | doc_055, doc_042 | doc_047, doc_028 |
 | adaptive_default | q_120 | medium | 0.50 | doc_006, doc_036 | doc_019, doc_049, doc_058 |
+| decision_gate_default | q_028 | medium | 0.50 | doc_009, doc_021 | doc_003, doc_049, doc_036 |
+| decision_gate_default | q_037 | medium | 0.50 | doc_010, doc_003 | doc_060, doc_001, doc_048 |
+| decision_gate_default | q_046 | high | 0.00 | doc_003, doc_021 | doc_049, doc_023 |
+| decision_gate_default | q_084 | medium | 0.50 | doc_037, doc_026 | doc_018 |
+| decision_gate_default | q_095 | medium | 0.50 | doc_055, doc_042 | doc_028, doc_012 |
+| decision_gate_default | q_105 | medium | 0.50 | doc_011, doc_009 | doc_030 |
+| decision_gate_default | q_120 | medium | 0.50 | doc_006, doc_036 | doc_019, doc_027 |
+| decision_gate_default | q_124 | medium | 0.50 | doc_014, doc_057 | doc_005 |
+| decision_gate_strict | q_028 | medium | 0.50 | doc_009, doc_021 | doc_003, doc_036, doc_049 |
+| decision_gate_strict | q_037 | medium | 0.50 | doc_010, doc_003 | doc_060 |
+| decision_gate_strict | q_046 | high | 0.00 | doc_003, doc_021 | doc_049 |
+| decision_gate_strict | q_095 | medium | 0.50 | doc_055, doc_042 | doc_028 |
+| decision_gate_strict | q_105 | medium | 0.50 | doc_011, doc_009 | doc_030 |

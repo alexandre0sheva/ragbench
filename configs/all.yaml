@@ -343,6 +343,63 @@ systems:
       embedding: text-embedding-3-small
       generator: gpt-6-luna
 
+  # Decision-gated RAG (see docs/decision-gate-evaluation.md): the same retrieval as hybrid_rerank_default, then a typed decision model gates the chunks.
+  - type: decision_gate
+    name: decision_gate_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+      decision_model:
+        provider: openai_decisions
+        model: gpt-6-luna
+      judge_mode: batched
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: decision_gate
+    name: decision_gate_strict
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+      decision_model:
+        provider: openai_decisions
+        model: gpt-6-luna
+      judge_mode: batched
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+      answerability_instructions: Does {passage} state a fact that answers the question, or a fact the answer depends on? Passages that are merely about the same domain, product line or industry, without such a fact, do not count.
+      sufficiency_instructions: 'Is the specific fact the question asks for stated in the evidence? Mentioning the same entity or topic is not enough: the evidence must give the actual answer to every part of the question.'
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
 evaluation:
   k_values: [1, 3, 5, 10]
   judge_enabled: true

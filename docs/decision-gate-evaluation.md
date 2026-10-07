@@ -1,6 +1,6 @@
 # Decision gate evaluation
 
-`decision_gate` retrieves like `hybrid_rerank`, then asks a typed decision model whether each chunk helps and whether what is left is enough, and refuses to generate when it is not ([how it works](system-wiki.md#decision_gate), [options](systems.md#decision_gate)). This page measures it: on the bundled demo dataset, with real API calls, against the systems it is meant to be compared with, and it says when the result is worth the extra requests. The metrics are defined in [methodology.md](methodology.md); the files behind every number are in [`docs/decision-gate-run/`](decision-gate-run/), and [`configs/decision_gate.yaml`](../configs/decision_gate.yaml) reruns it. The [leaderboard of every system](#the-leaderboard-of-every-system) with the gate in it is further down.
+`decision_gate` retrieves like `hybrid_rerank`, then asks a typed decision model whether each chunk helps and whether what is left is enough, and refuses to generate when it is not ([how it works](system-wiki.md#decision_gate), [options](systems.md#decision_gate)). This page measures it: on the bundled demo dataset, with real API calls, against the systems it is meant to be compared with, and it says when the result is worth the extra requests. The metrics are defined in [methodology.md](methodology.md); the files behind the variant comparison are in [`docs/decision-gate-run/`](decision-gate-run/), and [`configs/decision_gate.yaml`](../configs/decision_gate.yaml) reruns it. The [leaderboard of every system](#the-leaderboard-of-every-system) with the gate in it is further down.
 
 ## The run
 
@@ -54,7 +54,7 @@ $/Q includes the judge's call, as everywhere else in the reports; `decision_gate
 
 ## The leaderboard of every system
 
-One joint run of every system in [`configs/all.yaml`](../configs/all.yaml) plus the default and strict gate ([`configs/all_plus_decision_gate.yaml`](../configs/all_plus_decision_gate.yaml)), run id `all_systems_plus_decision_gate_20261007_184150`, same dataset, same models, no failed questions. The disk cache served every call, so the other systems' rows reproduce the [October 1 example run](example-run.md) exactly (the repeat cost $0.07); the full generated leaderboard and metrics are in [`docs/decision-gate-run/`](decision-gate-run/all-systems-leaderboard.md). Sorted by answer score; ✓ in the last column means no other system is at least as good on answer score, cost and latency and better on one of them. The latency probe asks five questions per system and is noisy: the default gate measured 1.9 s in the table above and 3.2 s here, `hybrid_rerank` between 1.6 s and 2.0 s, so compare latencies only when they differ by a factor.
+The full leaderboard of all systems, `decision_gate` included, is the [example run](example-run.md): one joint run of [`configs/all.yaml`](../configs/all.yaml), run id `all_systems_plus_decision_gate_20261007_184150`, same dataset and models, no failed questions, with the context-quality and refusal columns for every system in a second table. The cache served every call, so the original systems' rows reproduce the earlier 1 Oct run exactly (the rerun cost $0.07). Below is an excerpt of the closest neighbours, sorted by answer score; ✓ means no other system is at least as good on answer score, cost and latency and better on one of them. The latency probe asks five questions per system and is noisy: the default gate measured 1.9 s in the table above and 3.2 s here, `hybrid_rerank` between 1.6 s and 2.0 s, so compare latencies only when they differ by a factor.
 
 | # | System | Answer score | Recall@5 | Ctx precision | Abstain recall | False refusals | $/Q | Latency | Pareto |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -63,24 +63,10 @@ One joint run of every system in [`configs/all.yaml`](../configs/all.yaml) plus 
 | 3 | grep_agent_default | 4.78 [4.69, 4.86] | 0.791 | 0.68 | 0.68 | 0.000 | $0.00109 | 6.3 s |  |
 | 4 | full_context_ceiling | 4.78 [4.70, 4.84] | 0.741 | 0.02 | 0.96 | 0.000 | $0.00280 | 1.6 s | ✓ |
 | 5 | corrective_default | 4.77 [4.67, 4.86] | 0.793 | 0.34 | 0.80 | 0.029 | $0.00060 | 5.4 s |  |
-| 6 | rag_fusion_default | 4.75 [4.64, 4.86] | 0.808 | 0.36 | 0.84 | 0.043 | $0.00042 | 3.5 s | ✓ |
-| 7 | agent_search_tools | 4.75 [4.63, 4.85] | 0.821 | 0.38 | 0.84 | 0.014 | $0.00082 | 3.6 s |  |
-| 8 | rerank_default | 4.74 [4.63, 4.84] | 0.789 | 0.33 | 0.80 | 0.051 | $0.00052 | 1.7 s | ✓ |
 | 9 | hybrid_rerank_default | 4.72 [4.59, 4.84] | 0.774 | 0.32 | 0.80 | 0.058 | $0.00053 | 2.0 s |  |
-| 10 | decompose_default | 4.72 [4.60, 4.83] | 0.771 | 0.34 | 0.84 | 0.043 | $0.00041 | 2.5 s | ✓ |
 | 11 | llm_heavy_default | 4.72 [4.60, 4.82] | 0.790 | 0.34 | 1.00 | 0.058 | $0.00512 | 5.3 s |  |
-| 12 | parent_doc_default | 4.71 [4.60, 4.81] | 0.789 | 0.37 | 0.84 | 0.065 | $0.00049 | 2.7 s |  |
-| 13 | adaptive_default | 4.70 [4.57, 4.82] | 0.771 | 0.33 | 0.88 | 0.065 | $0.00044 | 2.6 s |  |
-| 14 | contextual_default | 4.69 [4.57, 4.81] | 0.784 | 0.33 | 0.84 | 0.065 | $0.00046 | 1.3 s | ✓ |
 | 15 | bm25_default | 4.69 [4.55, 4.81] | 0.745 | 0.31 | 0.88 | 0.072 | $0.00049 | 1.2 s | ✓ |
-| 16 | hyde_default | 4.68 [4.54, 4.80] | 0.787 | 0.33 | 0.88 | 0.058 | $0.00046 | 2.8 s |  |
-| 17 | vector_default | 4.67 [4.54, 4.79] | 0.790 | 0.33 | 0.88 | 0.051 | $0.00044 | 1.7 s | ✓ |
 | 18 | **decision_gate_strict** | 4.65 [4.49, 4.80] | 0.774 | 0.79 | 1.00 | 0.087 | $0.00091 | 1.7 s |  |
-| 19 | hybrid_default | 4.61 [4.46, 4.74] | 0.775 | 0.33 | 0.88 | 0.080 | $0.00048 | 1.7 s |  |
-| 20 | agent_search_plain | 4.58 [4.43, 4.72] | 0.814 | 0.37 | 0.84 | 0.058 | $0.00072 | 3.5 s |  |
-| 21 | hierarchical_default | 4.56 [4.40, 4.70] | 0.733 | 0.28 | 0.84 | 0.101 | $0.00033 | 1.3 s | ✓ |
-| 22 | vector_mmr | 4.54 [4.40, 4.68] | 0.697 | 0.24 | 0.88 | 0.101 | $0.00040 | 1.3 s |  |
-| 23 | sentence_window_default | 4.42 [4.23, 4.59] | 0.780 | 0.36 | 0.88 | 0.109 | $0.00025 | 1.3 s | ✓ |
 | 24 | no_retrieval_floor | 1.54 [1.40, 1.68] | — | — | 1.00 | 0.935 | $0.00012 | 1.1 s | ✓ |
 
 **How to read it.** The top of the table is a statistical tie: the run's own recommendation lists most of the table as tied with `iterative_default` on answer score, the default gate among them, and under the balanced profile it picks `bm25_default` as the cheapest and fastest of them. On quality alone the gate is not distinguishable from the best, and it does not beat the plain systems by more than the noise (its paired +0.08 over `hybrid_rerank` is discussed above). What no other system offers together is its mix of a clean context (0.69 precision; of the other systems only `grep_agent` at 0.68 comes close, and `full_context` sits at 0.02 by design) with explicit abstention. Among the systems that decline at least 0.92 of the unanswerable questions, the default gate is the cheapest by a wide margin ($0.00094, against $0.0028 for `full_context` and $0.0051 for `llm_heavy`). `iterative` and `agent_search` with tools answer as well, cost less than the gate and refuse only two answerable questions in 138, but decline fewer of the unanswerable ones (0.84); `grep_agent` and `full_context` refuse no answerable question at all, at higher cost. The gate costs more per question than every system except `grep_agent`, `full_context` and `llm_heavy`.
@@ -110,7 +96,7 @@ One joint run of every system in [`configs/all.yaml`](../configs/all.yaml) plus 
 ragbench estimate --config configs/decision_gate.yaml      # about $1.4 with a cold cache; nothing is spent
 ragbench run --config configs/decision_gate.yaml --mock    # offline: the mock decision model, same code paths
 ragbench run --config configs/decision_gate.yaml           # live: needs OPENAI_API_KEY; the disk cache makes a repeat nearly free
-ragbench run --config configs/all_plus_decision_gate.yaml  # the joint leaderboard of every system (about $3.5 with a cold cache)
+ragbench run --config configs/all.yaml                     # the leaderboard of every system, the gate included (about $3.5 with a cold cache)
 ```
 
 The probabilities of every judged chunk are saved per question, so thresholds and the sufficiency check can be studied afterwards from `per_question_results.jsonl` without calling the model again; changing the wording or the answerability threshold changes which chunks reach the generator, so those need a new run.

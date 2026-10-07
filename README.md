@@ -34,25 +34,26 @@ Each run writes one directory: a **recommendation** (which system to deploy unde
 
 ### An example result
 
-A live run of [`configs/all.yaml`](configs/all.yaml) on the bundled demo dataset (60 documents, 163 questions, 22 systems; `gpt-6-luna` generates and judges, `gpt-6.1-sol` for `llm_heavy`, `text-embedding-3-small`), run 1 Oct 2026 with ragbench 0.3.0 for about $2.91 of real API spend. Brackets are 95% bootstrap confidence intervals over the questions; the metrics are defined in the [methodology](docs/methodology.md).
+A live run of [`configs/all.yaml`](configs/all.yaml) on the bundled demo dataset (60 documents, 163 questions, 24 systems; `gpt-6-luna` generates and judges, `gpt-6.1-sol` for `llm_heavy`, `text-embedding-3-small`), run 7 Oct 2026 with ragbench 0.3.0 plus `decision_gate`; the systems had been run before with the same configuration (the original 22 on 1 Oct for $2.91 of real spend), so the cache served this run for $0.07. Brackets are 95% bootstrap confidence intervals over the questions; the metrics are defined in the [methodology](docs/methodology.md).
 
 | System | Recall@5 | Answer score | $ / question | p95 latency |
 | --- | --- | --- | --- | --- |
-| `no_retrieval_floor` | — | 1.54 [1.40, 1.68] | $0.00012 | 1093 ms |
-| **`bm25_default`** (recommended) | 0.745 [0.681, 0.808] | 4.69 [4.55, 4.81] | $0.00049 | 1378 ms |
-| `vector_default` | 0.790 [0.733, 0.847] | 4.67 [4.54, 4.79] | $0.00044 | 1637 ms |
-| `hybrid_rerank_default` | 0.774 [0.713, 0.832] | 4.72 [4.59, 4.84] | $0.00053 | 2140 ms |
-| `llm_heavy_default` | 0.790 [0.728, 0.848] | 4.72 [4.60, 4.82] | $0.00512 | 8055 ms |
-| `full_context_ceiling` | 0.741 [0.676, 0.804] | 4.78 [4.70, 4.84] | $0.00280 | 2257 ms |
-| `iterative_default` (agent) | 0.799 [0.742, 0.856] | 4.81 [4.71, 4.90] | $0.00057 | 3952 ms |
-| `agent_search_tools` (agent) | 0.821 [0.767, 0.876] | 4.75 [4.63, 4.85] | $0.00082 | 5783 ms |
-| `grep_agent_default` (agent) | 0.791 [0.736, 0.850] | 4.78 [4.69, 4.86] | $0.00109 | 9437 ms |
+| `no_retrieval_floor` | — | 1.54 [1.40, 1.68] | $0.00012 | 1430 ms |
+| **`bm25_default`** (recommended) | 0.745 [0.681, 0.808] | 4.69 [4.55, 4.81] | $0.00049 | 1371 ms |
+| `vector_default` | 0.790 [0.733, 0.847] | 4.67 [4.54, 4.79] | $0.00044 | 2374 ms |
+| `hybrid_rerank_default` | 0.774 [0.713, 0.832] | 4.72 [4.59, 4.84] | $0.00053 | 3463 ms |
+| `decision_gate_default` | 0.774 [0.713, 0.832] | 4.80 [4.70, 4.89] | $0.00094 | 4801 ms |
+| `llm_heavy_default` | 0.790 [0.728, 0.848] | 4.72 [4.60, 4.82] | $0.00512 | 7579 ms |
+| `full_context_ceiling` | 0.741 [0.676, 0.804] | 4.78 [4.70, 4.84] | $0.00280 | 2038 ms |
+| `iterative_default` (agent) | 0.799 [0.742, 0.856] | 4.81 [4.71, 4.90] | $0.00057 | 6423 ms |
+| `agent_search_tools` (agent) | 0.821 [0.767, 0.876] | 4.75 [4.63, 4.85] | $0.00082 | 5753 ms |
+| `grep_agent_default` (agent) | 0.791 [0.736, 0.850] | 4.78 [4.69, 4.86] | $0.00109 | 8197 ms |
 
-Nine of the 22 systems are shown; [the full example run](docs/example-run.md) has all of them, the per-category winners and the saved result files. `decision_gate`, added afterwards, is on [the same leaderboard in a joint run](docs/decision-gate-evaluation.md#the-leaderboard-of-every-system).
+Ten of the 24 systems are shown; [the full example run](docs/example-run.md) has all of them, the per-category winners and the saved result files, and [the decision gate evaluation](docs/decision-gate-evaluation.md) looks closer at `decision_gate`.
 
 - **Retrieval is what matters most here.** Without it the model scores 1.54; `bm25_default` scores 3.15 points higher (95% CI +2.95 to +3.35) and wins on 159 of 163 questions.
-- **Past that, quality did not separate the systems.** `bm25_default` and 15 others are statistically tied with the best answer score (`iterative_default`, 4.81) under a paired bootstrap with Holm correction; `bm25_default` is 0.12 lower (CI −0.27 to +0.01). So the recommendation fell to cost and latency: `bm25_default` costs $0.00049 per question, against up to $0.00512 for the tied systems.
-- **How far to trust it.** This is a small, easy corpus (about 23k tokens) with a judge that is also the generator, so scores are probably inflated and the ranking may not carry over to yours (the report says so in its banner). OpenAI's content filter rejected one `rag_fusion_default` call; that question is excluded from its scores. Run it on your own documents with `ragbench auto`.
+- **Past that, quality did not separate the systems.** `bm25_default` and 17 others are statistically tied with the best answer score (`iterative_default`, 4.81) under a paired bootstrap with Holm correction; `bm25_default` is 0.12 lower (CI −0.27 to +0.01). So the recommendation fell to cost and latency: `bm25_default` costs $0.00049 per question, against up to $0.00512 for the tied systems.
+- **How far to trust it.** This is a small, easy corpus (about 23k tokens) with a judge that is also the generator, so scores are probably inflated and the ranking may not carry over to yours (the report says so in its banner). The p95 latency is measured on a five-question probe and moves a lot between runs, so compare it only across large differences. Run it on your own documents with `ragbench auto`.
 
 ## Systems
 

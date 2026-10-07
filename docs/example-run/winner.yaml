@@ -1,7 +1,7 @@
-# The winner of all_systems_demo_20261001_221453: 'bm25_default'. Run it with `ragbench run --config <this file>`.
+# The winner of all_systems_plus_decision_gate_20261007_184150: 'bm25_default'. Run it with `ragbench run --config <this file>`.
 # `dataset:` is the benchmark's data; replace it with your production documents before deploying.
 run:
-  name: all_systems_demo_winner
+  name: all_systems_plus_decision_gate_winner
   output_dir: results
 dataset:
   documents_path: data/demo/docs
@@ -19,7 +19,6 @@ systems:
   models:
     generator: gpt-6-luna
 evaluation:
-  max_cost_usd: 6
   k_values:
   - 1
   - 3
@@ -29,3 +28,4 @@ evaluation:
   judge_model: gpt-6-luna
   max_questions: null
   max_workers: 4
+  max_cost_usd: 6.0
