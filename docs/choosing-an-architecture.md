@@ -24,7 +24,7 @@ Match your situation to the candidates it suggests, then add them to a config (o
 | **Tables and spreadsheets** | `agent_search` with `lookup_table`; the CSV and JSON loaders | A cell value is looked up, not searched for in prose. |
 | **Long documents with sections** | `parent_doc`, `sentence_window`, the `markdown` or `recursive` chunker | Precise matching with enough surrounding text to answer from, and cuts that follow the document's own structure. |
 | **A mixed workload** where the kinds above all occur | `adaptive` | Routes each question to the pipeline that suits it. Worth it only if the category view shows different winners per category (step 4). |
-| **Questions the documents cannot answer** | `corrective`, and `no_retrieval` as a floor | A system that grades its evidence can decline; the floor shows how often the bare model makes things up. |
+| **Questions the documents cannot answer** | `decision_gate`, `corrective`, and `no_retrieval` as a floor | A system that judges its evidence can decline. `decision_gate` declines by a rule on a probability, before it generates; `corrective` grades and retries but leaves declining to the generator; the floor shows how often the bare model makes things up. [When to try which](decision-gate-evaluation.md#when-to-try-it). |
 | **A hard latency or cost limit** | The low-cost, fast systems first; set `selection.constraints` | The recommendation excludes any system that breaks a constraint and says which one. |
 | **Data that must stay on your machine** | `local:` embeddings, an `openai_compatible:` endpoint on localhost; `recommend --local-models --no-network` | The decision can be restricted to systems whose every model and tool is local. |
 

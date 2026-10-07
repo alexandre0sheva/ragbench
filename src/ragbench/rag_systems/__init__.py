@@ -7,6 +7,7 @@ from ragbench.rag_systems.base import BaseRAGSystem
 from ragbench.rag_systems.bm25_rag import BM25RAG
 from ragbench.rag_systems.contextual_rag import ContextualRAG
 from ragbench.rag_systems.corrective_rag import CorrectiveRAG
+from ragbench.rag_systems.decision_gate_rag import DecisionGateRAG
 from ragbench.rag_systems.decompose_rag import DecomposeRAG
 from ragbench.rag_systems.full_context_rag import FullContextRAG
 from ragbench.rag_systems.grep_agent_rag import GrepAgentRAG
@@ -55,6 +56,7 @@ __all__ = [
     "BaseRAGSystem",
     "ContextualRAG",
     "CorrectiveRAG",
+    "DecisionGateRAG",
     "DecomposeRAG",
     "FullContextRAG",
     "GrepAgentRAG",

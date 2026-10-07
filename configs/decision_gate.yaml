@@ -1,0 +1,149 @@
+# Decision-gated RAG against the systems it is meant to be compared with.
+#
+# `decision_gate` retrieves exactly like `hybrid_rerank` (same chunker, same knobs), then asks a typed decision model two yes/no questions before
+# generating: does each chunk state a fact that answers the question, and is what is left enough to answer it? Below the thresholds it drops the
+# chunk or abstains. Each variant differs from the default in one way:
+#   decision_gate_default          OpenAI Decisions API, all candidates judged in one request (the cheap setting), plain wording ("does this help answer the query?")
+#   decision_gate_strict           the same with stricter wording that demands the answer itself (a different precision/recall point)
+#   decision_gate_per_chunk        one request per candidate instead of one for all (isolated judgments)
+#   decision_gate_llm_json         the same questions put to a chat model that writes JSON: the like-for-like control for the Decisions endpoint
+#   decision_gate_no_sufficiency   the sufficiency check off: only the chunk filter can abstain
+#   decision_gate_sufficiency_only the chunk filter off: the top chunks are kept and only the sufficiency check can abstain
+# `hybrid_rerank` (same ranking, no gate), `corrective` (LLM grades and retries, never abstains by rule) and `no_retrieval` (the floor: what the bare
+# model does with questions it cannot know) are the references.
+# Needs OPENAI_API_KEY for a live run; `ragbench run --mock` runs it offline with deterministic stand-in probabilities.
+
+run:
+  name: decision_gate_demo
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: hybrid_rerank
+    name: hybrid_rerank_default
+    chunker: &chunker
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval: &hybrid_rerank_retrieval
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+    models: &models
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: corrective
+    name: corrective_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_rounds: 2
+      expand_to: hybrid
+      max_cost_usd: 0.02
+      top_k: 5
+    models: *models
+
+  - type: no_retrieval
+    name: no_retrieval_floor
+    models:
+      generator: gpt-6-luna
+
+  - type: decision_gate
+    name: decision_gate_default
+    chunker: *chunker
+    retrieval:
+      <<: *hybrid_rerank_retrieval
+      decision_model: {provider: openai_decisions, model: gpt-6-luna}
+      judge_mode: batched
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+    models: *models
+
+  - type: decision_gate
+    name: decision_gate_strict
+    chunker: *chunker
+    retrieval:
+      <<: *hybrid_rerank_retrieval
+      decision_model: {provider: openai_decisions, model: gpt-6-luna}
+      judge_mode: batched
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+      answerability_instructions: >-
+        Does {passage} state a fact that answers the question, or a fact the answer depends on?
+        Passages that are merely about the same domain, product line or industry, without such a fact, do not count.
+      sufficiency_instructions: >-
+        Is the specific fact the question asks for stated in the evidence? Mentioning the same entity or topic is not enough:
+        the evidence must give the actual answer to every part of the question.
+    models: *models
+
+  - type: decision_gate
+    name: decision_gate_per_chunk
+    chunker: *chunker
+    retrieval:
+      <<: *hybrid_rerank_retrieval
+      decision_model: {provider: openai_decisions, model: gpt-6-luna}
+      judge_mode: per_chunk
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+    models: *models
+
+  - type: decision_gate
+    name: decision_gate_llm_json
+    chunker: *chunker
+    retrieval:
+      <<: *hybrid_rerank_retrieval
+      decision_model: {provider: llm_json, model: gpt-6-luna}
+      judge_mode: batched
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+    models: *models
+
+  - type: decision_gate
+    name: decision_gate_no_sufficiency
+    chunker: *chunker
+    retrieval:
+      <<: *hybrid_rerank_retrieval
+      decision_model: {provider: openai_decisions, model: gpt-6-luna}
+      judge_mode: batched
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0
+      max_candidates_to_judge: 10
+    models: *models
+
+  - type: decision_gate
+    name: decision_gate_sufficiency_only
+    chunker: *chunker
+    retrieval:
+      <<: *hybrid_rerank_retrieval
+      decision_model: {provider: openai_decisions, model: gpt-6-luna}
+      judge_mode: batched
+      answerability_threshold: 0
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+    models: *models
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: gpt-6-luna
+  max_questions: null
+  max_workers: 4

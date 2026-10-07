@@ -6,7 +6,7 @@
 [![Code style: ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Typed](https://img.shields.io/badge/typed-PEP%20561-informational.svg)](https://peps.python.org/pep-0561/)
 
-**RAGBench tells you which retrieval-augmented generation setup to deploy for *your* documents and *your* questions.** It runs many architectures (lexical, vector, hybrid, reranked, LLM-driven, tool-using agents and more) on the same data, scores retrieval, answers, cost and latency with confidence intervals, and ends with a recommendation and a runnable `winner.yaml`.
+**RAGBench tells you which retrieval-augmented generation setup to deploy for *your* documents and *your* questions.** It runs many architectures (lexical, vector, hybrid, reranked, LLM-driven, tool-using agents, decision-gated abstention and more) on the same data, scores retrieval, answers, cost and latency with confidence intervals, and ends with a recommendation and a runnable `winner.yaml`.
 
 It is not a demo chatbot, and it needs no API key to try: without one it runs on deterministic mock models so you can see the whole pipeline first.
 
@@ -48,7 +48,7 @@ A live run of [`configs/all.yaml`](configs/all.yaml) on the bundled demo dataset
 | `agent_search_tools` (agent) | 0.821 [0.767, 0.876] | 4.75 [4.63, 4.85] | $0.00082 | 5783 ms |
 | `grep_agent_default` (agent) | 0.791 [0.736, 0.850] | 4.78 [4.69, 4.86] | $0.00109 | 9437 ms |
 
-Nine of the 22 systems are shown; [the full example run](docs/example-run.md) has all of them, the per-category winners and the saved result files.
+Nine of the 22 systems are shown; [the full example run](docs/example-run.md) has all of them, the per-category winners and the saved result files. `decision_gate`, added afterwards, is on [the same leaderboard in a joint run](docs/decision-gate-evaluation.md#the-leaderboard-of-every-system).
 
 - **Retrieval is what matters most here.** Without it the model scores 1.54; `bm25_default` scores 3.15 points higher (95% CI +2.95 to +3.35) and wins on 159 of 163 questions.
 - **Past that, quality did not separate the systems.** `bm25_default` and 15 others are statistically tied with the best answer score (`iterative_default`, 4.81) under a paired bootstrap with Holm correction; `bm25_default` is 0.12 lower (CI −0.27 to +0.01). So the recommendation fell to cost and latency: `bm25_default` costs $0.00049 per question, against up to $0.00512 for the tied systems.
@@ -73,6 +73,7 @@ Nine of the 22 systems are shown; [the full example run](docs/example-run.md) ha
 | `contextual` | An LLM situates each chunk within its document at ingestion; the context is embedded and BM25-indexed with the chunk, then hybrid RRF retrieval | Corpora where chunks lose their meaning out of context (many similar documents, pronouns, section-relative facts) |
 | `hierarchical` | Choose documents first from LLM-written summaries and titles, then retrieve chunks only inside the chosen documents | "Which document?" questions and corpora too large to search chunk by chunk |
 | `adaptive` | Routes each question to the best of several configured pipelines (exact identifiers to BM25, comparisons to decomposition, calculations to a tool agent, the rest to the default) | Mixed workloads where no single architecture is best for every question |
+| `decision_gate` | Hybrid + rerank retrieval, then a typed decision model drops chunks that do not help answer the question and abstains when the rest is not enough | Corpora where many questions have no answer in the documents, and a confident wrong answer costs more than a refusal |
 | `full_context` | Puts whole documents (the whole corpus when it fits) in the prompt, most relevant first by BM25, up to a token budget (the ceiling baseline: do you need retrieval at all?) | Small corpora, and measuring how much a retrieval pipeline loses against reading everything |
 | `agent_search` | A function-calling agent that searches the corpus and calls its configured tools (calculator, date_calc, corpus_grep, ...), then writes the cited answer | Questions that need computation, exact lookups, or several searches |
 | `corrective` | Retrieve, grade each chunk with the LLM, and when too little is relevant rewrite the query and widen the search; optional answer self-check | Corpora where the first search often misses and a bad context should be noticed rather than answered from |
@@ -93,6 +94,7 @@ Every system implements the same interface and runs on any dataset. Options and 
 - [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*
 - [Extending RAGBench](docs/extending.md): new systems, tools, chunkers, rerankers, loaders, vector backends and model providers
 - [Example run](docs/example-run.md): the complete live run behind the numbers above, with its result files
+- [Decision gate evaluation](docs/decision-gate-evaluation.md): `decision_gate` (OpenAI Decisions API) measured against `hybrid_rerank`, `corrective` and a no-retrieval floor on the demo dataset, and when to try it
 - [Changelog](CHANGELOG.md) and the [release checklist](docs/release-checklist.md)
 
 Live runs spend real money, and LLM-heavy and agentic systems spend the most; see [cost accounting](docs/methodology.md#cost-accounting) and how to cap spending in [configuration](docs/configuration.md#estimating-cost-and-capping-it).

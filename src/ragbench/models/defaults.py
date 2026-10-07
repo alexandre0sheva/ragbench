@@ -6,3 +6,5 @@ from __future__ import annotations
 DEFAULT_GENERATOR_MODEL = "gpt-6-luna"
 DEFAULT_JUDGE_MODEL = DEFAULT_GENERATOR_MODEL
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+# The typed-decision model of `decision_gate` (`POST /v1/decisions`); gpt-6-luna is the only model that endpoint serves today.
+DEFAULT_DECISION_MODEL = "gpt-6-luna"

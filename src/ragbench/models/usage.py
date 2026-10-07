@@ -1,6 +1,6 @@
 """Measure what a run would send to paid models, using the offline mock models (`ragbench estimate`).
 
-The mock LLM and the hashing embedder report every call to the active recorder, if there is one: how many calls, and the prompt,
+The mock LLM, the mock decision model and the hashing embedder report every call to the active recorder, if there is one: how many calls, and the prompt,
 completion and embedding tokens. Prices are applied afterwards (see `evaluation/estimate.py`), so the same measurement can be
 priced with any model's rates. Like the cache and runtime contexts this is a plain module global rather than a ContextVar,
 because ingestion and question workers run on threads that would not inherit it.
@@ -24,6 +24,8 @@ class UsageRecorder:
     llm_completion_tokens: int = 0
     embed_calls: int = 0
     embed_tokens: int = 0
+    decision_calls: int = 0
+    decision_tokens: int = 0
 
 
 @contextmanager
@@ -46,6 +48,13 @@ def note_llm(prompt_tokens: int, completion_tokens: int) -> None:
             _active.llm_calls += 1
             _active.llm_prompt_tokens += prompt_tokens
             _active.llm_completion_tokens += completion_tokens
+
+
+def note_decision(tokens: int) -> None:
+    with _lock:
+        if _active is not None:
+            _active.decision_calls += 1
+            _active.decision_tokens += tokens
 
 
 def note_embedding(tokens: int) -> None:

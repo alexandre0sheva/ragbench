@@ -30,7 +30,7 @@ Three ideas run through everything below.
 
 **Everything is a step.** While a question runs, the system records `Step`s in a per-question `Tracer`: `retrieve`, `rerank`, `llm`, `tool`, `embed`, `route`, `grade`, `generate`. Each carries latency, tokens and cost, and the costs add up to the answer's cost (a visible `untracked` step appears if they do not). The "Trace" lines below name the steps each system writes, so you can read a row of `per_question_results.jsonl` and see what happened.
 
-**Cost is booked by purpose.** LLM spend inside retrieval is booked as `query_rewrite_cost`, reranker spend as `rerank_cost`, tool spend as `tool_cost`, and ingestion work (embeddings, LLM enrichment) is reported separately from per-question cost. [methodology.md](methodology.md#cost-accounting) explains why cache hits are still charged at standalone prices.
+**Cost is booked by purpose.** LLM spend inside retrieval is booked as `query_rewrite_cost`, reranker spend as `rerank_cost`, tool spend as `tool_cost`, typed decision requests as `decision_cost`, and ingestion work (embeddings, LLM enrichment) is reported separately from per-question cost. [methodology.md](methodology.md#cost-accounting) explains why cache hits are still charged at standalone prices.
 
 Three pieces of plumbing appear in many systems, so they are described once:
 
@@ -492,6 +492,47 @@ flowchart TD
 
 **Use it** as the "throw LLMs at everything" ceiling for your corpus; compare it to cheaper systems before adopting it. Options: [systems.md](systems.md#llm_heavy).
 
+### Deciding before generating
+
+#### `decision_gate`
+
+**Idea (decision-gated RAG).** Retrieval returns the *most similar* chunks, not chunks that *contain the answer*, and a generator handed weak context will often write something plausible anyway. So put a gate between retrieval and generation and ask a typed decision model two yes/no questions about the evidence: does each chunk help answer the question, and is what survives enough to answer it? Chunks below a probability threshold are dropped; if the rest is not enough, the system **abstains**: no generator call, just the usual "could not find" sentence. The pattern comes from decision-only models such as Jev (TypeSafe AI) and OpenAI's Decisions API (`POST /v1/decisions`), which return typed answers (a probability for a yes/no predicate) in one cheap request instead of generated text.
+
+```mermaid
+flowchart TD
+    Q["Question"] --> RET("bm25_search + vector_search + rerank<br/>exactly hybrid_rerank")
+    RET --> RANK["Ranking (scored for retrieval, unchanged)"]
+    RANK --> CAND["First max_candidates_to_judge chunks"]
+    CAND --> AN{{"decide_answerability: P(chunk helps answer)<br/>batched (one request) or per_chunk (one each)"}}
+    AN --> KEEP["Keep chunks with P >= answerability_threshold,<br/>in rank order, up to the context size"]
+    KEEP -->|"none left"| AB1["Abstain: no_relevant_chunks"]
+    KEEP --> SU{{"decide_sufficiency: P(the kept chunks are enough)"}}
+    SU -->|"P < sufficiency_threshold"| AB2["Abstain: insufficient_evidence"]
+    SU -->|"enough, or no answer from the model"| GEN{{"Generate from the kept chunks only"}}
+    AB1 --> OUT["Answer: I could not find the answer in the provided documents."]
+    AB2 --> OUT
+```
+
+**Details.**
+- **The ranking is `hybrid_rerank`'s own.** `decision_gate` extends it, so with the same chunker and options it retrieves the same chunks in the same order; Recall, MRR and nDCG are directly comparable and any difference in answers comes from the gate. What changes is what the generator is *given*: the survivors, which is also what the context metrics and the judge see (`context_chunk_ids`). Kept chunks are drawn from the first `max_candidates_to_judge` of the ranking, so a deeper chunk can take the place of a dropped one.
+- **Two ways to ask.** `batched` puts every candidate in one request, one predicate per passage ("Does passage [3] ..."). It is the cheap setting, and the model reads each passage next to the others. `per_chunk` sends one request per candidate, each seeing only its own passage (five at a time). Sufficiency is always a separate request, because it depends on which chunks survived (the Decisions API documentation says to send dependent decisions separately).
+- **Wording is part of the system.** A decision model answers the predicate it is asked, and the wording sets the operating point. The defaults are the plain questions ("Does this passage help answer the query?", "Is this evidence enough to answer the query from the documents alone?"). A stricter pair that demands the answer itself refused every unanswerable question on the demo dataset but also refused answerable multi-passage ones ([the evaluation](decision-gate-evaluation.md) has the numbers). Both questions are overridable (`answerability_instructions`, `sufficiency_instructions`); `configs/decision_gate.yaml` has the strict pair.
+- **Unknown is not no.** When the model refuses a question or the reply cannot be read, the probability is missing, not 0: the chunk is kept and a missing sufficiency answer cannot abstain. A broken decision backend therefore degrades to `hybrid_rerank`, it does not turn into silence. A request that fails outright (after retries) fails the question, like any other model call.
+- **Backends are pluggable** (`decision_model.provider`): `openai_decisions` (the Decisions API), `llm_json` (the same questions put to a chat model that answers with JSON: the like-for-like control, same model and prompt wording, different mechanism), `mock` (deterministic word-overlap probabilities, used for every `--mock` run) and `jev` (reserved; raises a clear error until a client exists). [extending.md](extending.md#decision-models) shows how to add one.
+- **Everything is recorded.** Each request is a `grade` step (`decide_answerability`, `decide_sufficiency`) booked as `decision_cost` (input tokens only for the Decisions API), and each question's `gate` block in `per_question_results.jsonl` keeps the probability of every judged chunk, the sufficiency probability, the kept chunks and the abstain reason, so a threshold can be studied afterwards without calling the model again. Summary columns: `gate_abstain_rate`, `avg_chunks_kept`, `avg_decision_calls`; correct and wrong refusals show up in the [abstention metrics](methodology.md#abstention-metrics).
+
+**Compared with its neighbours.**
+
+| | `hybrid_rerank` | `corrective` | `decision_gate` |
+| --- | --- | --- | --- |
+| What it asks | nothing: a score orders the chunks | the LLM grades each chunk relevant / ambiguous / irrelevant | a typed model gives P(chunk helps answer) and P(evidence is enough) |
+| What a weak context causes | the generator answers anyway | rewrite the query, widen the search, retry | drop the chunks, then abstain without generating |
+| Declining to answer | only if the generator chooses to | only if the generator chooses to | a rule on a probability threshold, before generation |
+| Extra requests per question | none | one grade per round, one rewrite per retry | one (batched) to ten (per chunk, at the default depth) answerability requests, plus one sufficiency |
+| Can it find what retrieval missed? | no | yes, that is its point | no: retrieval still sets the ceiling |
+
+**Strengths:** questions the documents cannot answer, and settings where a confident wrong answer costs more than a refusal; the decision is explicit, logged and tunable instead of buried in a prompt. **Watch out:** it can only remove or refuse, never recover a chunk retrieval missed (pair it with a stronger retriever, or see `corrective`); an over-strict threshold or predicate turns answerable questions into refusals (`false_refusal_rate`); the probabilities are not calibrated by anything but their wording, so choose thresholds on your own data; and it adds two sequential requests to every answer. Options: [systems.md](systems.md#decision_gate).
+
 ### Agentic systems that loop
 
 Both of these are `AgenticRAG` systems: they index like `hybrid`, and the control logic is an [`AgentLoop`](#the-agent-loop) policy. Each of their control calls (grade, rewrite, next-hop) is a traced JSON-mode LLM call booked as query-rewrite cost, and the retrieval cost reported for the question is everything the agent spent. The `agent` block in each answer's metadata reports `steps`, `hops`, `termination`, `budget_exhausted` and `llm_calls`.
@@ -650,6 +691,7 @@ A side-by-side view of what each system pays for and when. "Ingestion" calls hap
 | [llm_heavy](#llm_heavy) | one per chunk if enabled | one rewrite; one rerank if enabled | `query_rewrite`, `vector_search` per query, `rerank` |
 | [corrective](#corrective) | embeddings | one grade per round, one rewrite per retry, optional self-check | `round_search`, `grade_chunks`, `rewrite_query`, `groundedness` |
 | [iterative](#iterative) | embeddings | one `next_hop` per round | `hop_search`, `next_hop` per round |
+| [decision_gate](#decision_gate) | embeddings | one to ten decision requests (not generations) for answerability, one for sufficiency; no answer call when it abstains | search steps + `rerank`, then `decide_answerability`, `decide_sufficiency` |
 | [agent_search](#agent_search) | embeddings | one per agent turn | `agent_turn`, one `tool` step per call |
 | [grep_agent](#grep_agent) | none | one per agent turn | `agent_turn`, `tool` steps |
 | [adaptive](#adaptive) | the sum of its routes | one for the router if `llm` | `route_question` plus the chosen route's steps |

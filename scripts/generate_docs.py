@@ -53,12 +53,22 @@ def _default_label(field: Any) -> str:
     return f"`{default}`"
 
 
-def _options_table(model: type[BaseModel]) -> str:
-    rows = ["| Option | Type | Default | Description |", "| --- | --- | --- | --- |"]
+def _option_rows(model: type[BaseModel], prefix: str = "") -> list[str]:
+    """One table row per option; a nested option block (`decision_model:`) is expanded into dotted rows (`decision_model.provider`)."""
+    rows: list[str] = []
     for name, field in model.model_fields.items():
         description = (field.description or "").replace("|", "\\|").replace("\n", " ")
-        rows.append(f"| `{name}` | {_type_label(field.annotation)} | {_default_label(field)} | {description} |")
-    return "\n".join(rows)
+        nested = field.annotation
+        if isinstance(nested, type) and issubclass(nested, BaseModel):
+            rows.append(f"| `{prefix}{name}` | block | its fields below | {description} |")
+            rows += _option_rows(nested, f"{prefix}{name}.")
+            continue
+        rows.append(f"| `{prefix}{name}` | {_type_label(field.annotation)} | {_default_label(field)} | {description} |")
+    return rows
+
+
+def _options_table(model: type[BaseModel]) -> str:
+    return "\n".join(["| Option | Type | Default | Description |", "| --- | --- | --- | --- |", *_option_rows(model)])
 
 
 def _specs() -> list[Any]:

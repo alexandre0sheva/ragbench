@@ -11,6 +11,7 @@ from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document
 from ragbench.evaluation.evaluator import run_benchmark
 from ragbench.models.cost import CostBreakdown
+from ragbench.models.decisions import DecisionResult, MockDecisionModel
 from ragbench.models.embeddings import EmbeddingModel, EmbeddingResult, HashingEmbeddingModel
 from ragbench.models.llms import LLMResult, MockLLM
 from ragbench.rag_systems import SYSTEMS, create_rag_system
@@ -143,6 +144,15 @@ class PricedEmbedding(EmbeddingModel):
         return EmbeddingResult(result.vectors, self.model_name, tokens, CostBreakdown(embedding_input_tokens=tokens, embedding_cost=tokens * PRICE))
 
 
+class PricedDecisions(MockDecisionModel):
+    """The mock decision model at a price, so the cost the gate books can be checked against the steps."""
+
+    def decide(self, text, predicates) -> DecisionResult:
+        result = super().decide(text, predicates)
+        result.cost = CostBreakdown(decision_input_tokens=result.input_tokens, decision_cost=result.input_tokens * PRICE)
+        return result
+
+
 class PricedLLM(MockLLM):
     def generate(self, messages, **kwargs) -> LLMResult:
         result = super().generate(messages, **kwargs)
@@ -164,6 +174,8 @@ def _make_paid(system) -> None:
         system.embedding_model = embedder
     for routed in getattr(system, "systems", {}).values():  # the pipelines inside an `adaptive` system
         _make_paid(routed)
+    if hasattr(system, "decider"):
+        system.decider = PricedDecisions()
     reranker = getattr(system, "reranker", None)
     if reranker is not None and hasattr(reranker, "llm"):
         reranker.llm = system.llm
@@ -183,6 +195,7 @@ SYSTEM_CONFIGS = {
     "hybrid": {"retrieval": {"vector_store": "in_memory", "multi_query": True}},
     "hybrid_rerank": {"retrieval": {"vector_store": "in_memory"}},
     "rerank": {"retrieval": {"vector_store": "in_memory"}},
+    "decision_gate": {"retrieval": {"vector_store": "in_memory"}},
     "parent_doc": {"retrieval": {"vector_store": "in_memory"}},
     "hyde": {"retrieval": {"vector_store": "in_memory"}},
     "llm_heavy": {"retrieval": {"vector_store": "in_memory"}, "llm_features": {"enable_llm_rerank": True}},

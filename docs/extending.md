@@ -190,6 +190,7 @@ A separate package can contribute components without touching this repository by
 | `ragbench.vector_backends` | vector backends | a backend class |
 | `ragbench.llm_providers` | chat model providers | a factory `f(model, *, providers) -> LLM` |
 | `ragbench.embedders` | embedding providers | a factory returning an `EmbeddingModel` |
+| `ragbench.decision_models` | decision models for `decision_gate` | a factory `f(model) -> DecisionModel` |
 | `ragbench.tools` | agent tools | a tool class |
 
 ```toml
@@ -201,6 +202,34 @@ my_rag = "my_package.rag:MyRAGSystem"
 ```
 
 Plugins are loaded when the component's package is imported (`ragbench.rag_systems` for systems, chunkers and rerankers). A plugin that fails to import is skipped with a warning, and a name that is already taken is ignored. Give a plugin system a `spec` to get config validation and documentation; without one its `retrieval:` section is accepted as-is.
+
+## Decision models
+
+`decision_gate` asks a *decision model* typed yes/no questions and acts on the probabilities. A backend is a class with `decide(text, predicates) -> DecisionResult`, registered with `@DECISION_MODELS.register("name")` (or `DECISION_MODELS.add`), and then selectable as `retrieval.decision_model.provider`:
+
+```python
+from collections.abc import Sequence
+
+from ragbench.models.cost import CostBreakdown
+from ragbench.models.decisions import DecisionModel, DecisionResult, Predicate
+from ragbench.registry import DECISION_MODELS
+
+
+class MyDecisionModel(DecisionModel):
+    provider = "my_decisions"          # part of the cache key
+    model_name = "my-model-v1"
+
+    def decide(self, text: str, predicates: Sequence[Predicate]) -> DecisionResult:
+        probabilities = call_my_api(text, [(p.name, p.instructions) for p in predicates])  # name -> P(true), or None for "no answer"
+        tokens = ...  # input tokens you were billed for
+        cost = CostBreakdown(decision_input_tokens=tokens, decision_cost=tokens / 1_000_000 * MY_PRICE_PER_1M)
+        return DecisionResult(probabilities=probabilities, model=self.model_name, input_tokens=tokens, cost=cost)
+
+
+DECISION_MODELS.add("my_decisions", lambda model: MyDecisionModel())   # factory: model name from the config, or None
+```
+
+Return `None`, never `0`, for a question the model declined or you could not parse: the gate keeps a chunk it knows nothing about, and a made-up 0 would silently drop evidence. Book spend as `decision_cost` so it shows up in its own column and in the stage tables. Wrap the backend in `CachedDecisionModel` inside your factory to get the run's disk cache (same rules as the chat cache: hits are charged at the current price, the original latency is replayed, errors are never cached), call `limiter_for(...)` and `call_with_retry` as `models/decisions/openai_decisions.py` does if the API is rate-limited, and register an offline stand-in or rely on `--mock`, which always selects the `mock` backend. `models/decisions/jev.py` is the reserved slot for Jev: its primitives (yes/no probability, choice, score) map onto `Predicate` and `DecisionResult`, and it needs a client written against an API that is documented enough to code against. Package it as a plugin through the `ragbench.decision_models` entry-point group.
 
 ## How a run flows
 

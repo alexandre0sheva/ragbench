@@ -42,6 +42,7 @@ STALE_PRICES_AFTER_DAYS = 90
 LLM_CALL_BASE_S = 0.7
 LLM_TOKENS_PER_S = 70.0
 EMBED_CALL_S = 0.25
+DECISION_CALL_S = 1.5  # a typed-decision request: about 2 s measured against the Decisions API on 2026-10-07 for a short input
 
 
 @dataclass
@@ -93,8 +94,10 @@ def confirmation_decision(total_usd: float, threshold_usd: float, *, yes: bool, 
     return "ask" if interactive and not ci else "refuse"
 
 
-def _usd(usage: UsageRecorder, generator: str, embedding: str | None) -> float:
+def _usd(usage: UsageRecorder, generator: str, embedding: str | None, decision: str | None = None) -> float:
     total = 0.0
+    if usage.decision_tokens:  # typed decisions are billed on input tokens only, at the decision model's rate (not the generator's)
+        total += pricing.estimate_decision_cost(decision or generator, usage.decision_tokens)
     if usage.llm_prompt_tokens or usage.llm_completion_tokens:
         total += pricing.estimate_model_cost(generator, usage.llm_prompt_tokens, usage.llm_completion_tokens)
     if usage.embed_tokens and embedding is not None:
@@ -103,7 +106,7 @@ def _usd(usage: UsageRecorder, generator: str, embedding: str | None) -> float:
 
 
 def _seconds(usage: UsageRecorder) -> float:
-    return usage.llm_calls * LLM_CALL_BASE_S + usage.llm_completion_tokens / LLM_TOKENS_PER_S + usage.embed_calls * EMBED_CALL_S
+    return usage.llm_calls * LLM_CALL_BASE_S + usage.llm_completion_tokens / LLM_TOKENS_PER_S + usage.embed_calls * EMBED_CALL_S + usage.decision_calls * DECISION_CALL_S
 
 
 def _for_measuring(system_config: SystemConfig) -> SystemConfig:
@@ -125,6 +128,7 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
         generator = refs.llm[0]
         embedding = refs.embedding[0] if refs.embedding else None
         system = create_rag_system(_for_measuring(system_config), force_mock=True)
+        decision = getattr(system, "decision_model_ref", None)
         with record_usage() as ingestion:
             system.ingest(documents)
         answer_usd = judge_usd = answer_seconds = judge_seconds = 0.0
@@ -132,7 +136,7 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
             context_k = system.configured_context_k() or evaluation.context_k
             with record_usage() as usage:
                 answer = system.answer_question(question.question, top_k=max(evaluation.resolved_retrieval_depth, context_k), context_k=context_k)
-            answer_usd += _usd(usage, generator, embedding)
+            answer_usd += _usd(usage, generator, embedding, decision)
             answer_seconds += _seconds(usage)
             if evaluation.judge_enabled:
                 given = answer.metadata.get("context_chunk_ids")
@@ -147,7 +151,7 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
             name,
             system_config.type,
             agentic,
-            ingestion_usd=_usd(ingestion, generator, embedding),
+            ingestion_usd=_usd(ingestion, generator, embedding, decision),
             answer_usd_per_question=answer_usd / count,
             judge_usd_per_question=judge_usd / count,
             ingestion_seconds=_seconds(ingestion) / max(1, evaluation.ingest_workers),

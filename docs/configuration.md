@@ -328,6 +328,8 @@ pricing:
   gpt-6-luna: {input: 0.25, output: 1.50}   # overrides the built-in price
 ```
 
+A typed decision request (`decision_gate` with `openai_decisions`) is billed on **input tokens only**, at the `input` price of its model: that is how the Decisions API charges, so a `pricing:` override of a decision model's `input` rate changes the decision cost and its `output` rate does not matter. A `llm_json` decision backend is an ordinary chat model and pays both rates.
+
 A model with no registered price is billed at $0 — RAGBench logs a warning, lists the model under `unknown_priced_models` in `run_summary.json`, and shows a "cost under-reported" banner in the reports, so a zero is never silent.
 
 ## Retries and timeouts

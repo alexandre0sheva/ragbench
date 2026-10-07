@@ -24,6 +24,7 @@ Profiles are relative: **cost** `low` = one generation call plus embeddings, `me
 | [`contextual`](#contextual) | Contextual retrieval | high | fast | no | no | Corpora where chunks lose their meaning out of context (many similar documents, pronouns, section-relative facts) |
 | [`hierarchical`](#hierarchical) | Hierarchical (summary-routed) | high | fast | no | no | "Which document?" questions and corpora too large to search chunk by chunk |
 | [`adaptive`](#adaptive) | Adaptive router | high | medium | yes | no | Mixed workloads where no single architecture is best for every question |
+| [`decision_gate`](#decision_gate) | Decision-gated RAG | high | medium | yes | no | Corpora where many questions have no answer in the documents, and a confident wrong answer costs more than a refusal |
 | [`full_context`](#full_context) | Full context | high | medium | no | no | Small corpora, and measuring how much a retrieval pipeline loses against reading everything |
 | [`agent_search`](#agent_search) | Tool-using agent (search) | high | slow | yes | yes | Questions that need computation, exact lookups, or several searches |
 | [`corrective`](#corrective) | Corrective RAG | high | slow | yes | yes | Corpora where the first search often misses and a bad context should be noticed rather than answered from |
@@ -317,6 +318,40 @@ Best for: Mixed workloads where no single architecture is best for every questio
 | `route_descriptions` | `dict` | *required* | `router: llm` only: what each route is for, shown to the model. Known role names have a built-in description. |
 
 This system takes no `chunker:` section.
+
+## `decision_gate`
+
+**Decision-gated RAG.** Hybrid + rerank retrieval, then a typed decision model drops chunks that do not help answer the question and abstains when the rest is not enough.
+
+Best for: Corpora where many questions have no answer in the documents, and a confident wrong answer costs more than a refusal. Cost: high; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `multi_query` | `bool` | `false` | Retrieve with local (non-LLM) query variants to help multi-hop questions. |
+| `max_query_variants` | `int` | `4` | Maximum number of query variants when `multi_query` is on. |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `bm25_top_k` | `int` | `20` | BM25 candidates per query (raised to the retrieval depth if smaller). |
+| `vector_top_k` | `int` | `20` | Vector candidates per query (raised to the retrieval depth if smaller). |
+| `bm25_weight` | `float` | `1.0` | Weight of the BM25 ranking in weighted RRF; raise it to favor lexical evidence. |
+| `vector_weight` | `float` | `1.0` | Weight of the vector ranking in weighted RRF; raise it to favor semantic evidence. |
+| `reranker_model` | `str` | unset | Hugging Face model for `reranker: cross_encoder` (default `BAAI/bge-reranker-base`). Needs `pip install 'ragbench[rerank]'`. |
+| `candidate_top_k` | `int` | `30` | Fused candidates handed to the reranker (raised to the retrieval depth if smaller). |
+| `reranker` | `str` | `local_relevance` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`. |
+| `decision_model` | block | its fields below | The decision model backend; see its fields. |
+| `decision_model.provider` | `str` | `openai_decisions` | `openai_decisions` (OpenAI's Decisions API, `POST /v1/decisions`, needs `OPENAI_API_KEY`), `llm_json` (the same questions put to a chat model that replies with JSON; the like-for-like control for `openai_decisions`), `mock` (deterministic word-overlap probabilities, no key), or `jev` (reserved: raises a clear error until a client exists). Mock runs (`--mock`, or no key) always use `mock`. |
+| `decision_model.model` | `str` | unset | Model the backend calls: for `openai_decisions` a Decisions model (default `gpt-6-luna`, the only one served today), for `llm_json` a chat model ref (default `gpt-6-luna`). |
+| `answerability_threshold` | `float` | `0.5` | A retrieved chunk is kept only when its answerability probability is at least this. 0 keeps every chunk, so the gate only decides sufficiency. |
+| `sufficiency_threshold` | `float` | `0.5` | The kept chunks must be judged sufficient with at least this probability, or the system abstains: no generator call, the answer is "I could not find the answer in the provided documents." 0 turns the sufficiency check off (and saves its request), so the gate only filters chunks. |
+| `judge_mode` | `batched` \| `per_chunk` | `batched` | `batched` judges all candidates in one request (one predicate per passage, all passages in the input: cheapest and fastest, but a passage is read next to the others). `per_chunk` sends one request per candidate (isolated, five at a time, one request's cost each). |
+| `max_candidates_to_judge` | `int` | `10` | Top-ranked candidates the answerability question is asked about, drawn from the retrieval depth. Kept chunks are the ones above the threshold, in rank order, up to the generator's context size, so a deeper candidate can replace a dropped one. |
+| `answerability_instructions` | `str` | unset | Overrides the per-chunk predicate. `{passage}` stands for the passage under judgment and is required in `batched` mode. Default: "Does {passage} help answer the query?" The wording sets how many chunks survive: a stricter predicate (see `configs/decision_gate.yaml`) drops chunks that carry only part of an answer. |
+| `sufficiency_instructions` | `str` | unset | Overrides the set-level predicate. Default: "Is this evidence enough to answer the query from the documents alone?" A stricter wording abstains more often, on answerable questions too. |
 
 ## `full_context`
 

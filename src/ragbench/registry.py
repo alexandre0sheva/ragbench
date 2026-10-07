@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from ragbench.documents.chunkers import BaseChunker
     from ragbench.documents.loaders.registry import LoadContext
     from ragbench.documents.schema import Document
+    from ragbench.models.decisions.base import DecisionModel
     from ragbench.models.embeddings import EmbeddingModel
     from ragbench.models.llms import LLM
     from ragbench.models.rerankers import Reranker
@@ -116,6 +117,9 @@ RERANKERS: Registry[type[Reranker]] = Registry("reranker")
 # and `providers` maps endpoint names to their `providers:` config. Registered by `ragbench.models.providers`.
 LLM_PROVIDERS: Registry[Callable[..., LLM]] = Registry("chat model provider")
 EMBEDDERS: Registry[Callable[..., EmbeddingModel]] = Registry("embedding provider")
+# Typed decision backends (`decision_model.provider:`): `factory(model) -> DecisionModel`, where `model` is the configured model name or None
+# for the backend's default. Registered by `ragbench.models.decisions`.
+DECISION_MODELS: Registry[Callable[..., DecisionModel]] = Registry("decision model")
 # Document loaders, keyed by file extension (`.pdf`): `loader(path, context) -> list[Document]`. Registered by `ragbench.documents.loaders`.
 LOADERS: Registry[Callable[[Path, LoadContext], list[Document]]] = Registry("document loader")
 # Vector index backends (`vector_store:`); classes taking `(collection_name=, persist_directory=)`. Registered by `ragbench.stores.index`.

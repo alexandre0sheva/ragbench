@@ -182,6 +182,91 @@ class HybridRerankOptions(RerankerModelOptions, HybridCoreOptions):
     reranker: RerankerName = Field(default="local_relevance", description=_RERANKER_NAMES)
 
 
+def _known_decision_provider(name: str) -> str:
+    import ragbench.models.decisions  # noqa: F401  (registers the built-in decision backends)
+    from ragbench.registry import DECISION_MODELS
+
+    DECISION_MODELS.get(name)  # raises UnknownComponentError (a ValueError) with a did-you-mean hint
+    return name
+
+
+DecisionProvider = Annotated[str, AfterValidator(_known_decision_provider)]
+
+
+class DecisionModelOptions(BaseModel):
+    """`retrieval.decision_model:` of `decision_gate`: which backend answers the typed yes/no questions."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: DecisionProvider = Field(
+        default="openai_decisions",
+        description=(
+            "`openai_decisions` (OpenAI's Decisions API, `POST /v1/decisions`, needs `OPENAI_API_KEY`), `llm_json` (the same questions put to a chat model "
+            "that replies with JSON; the like-for-like control for `openai_decisions`), `mock` (deterministic word-overlap probabilities, no key), or `jev` "
+            "(reserved: raises a clear error until a client exists). Mock runs (`--mock`, or no key) always use `mock`."
+        ),
+    )
+    model: str | None = Field(
+        default=None,
+        description="Model the backend calls: for `openai_decisions` a Decisions model (default `gpt-6-luna`, the only one served today), for `llm_json` a chat model ref (default `gpt-6-luna`).",
+    )
+
+
+class DecisionGateOptions(HybridRerankOptions):
+    decision_model: DecisionModelOptions = Field(default_factory=DecisionModelOptions, description="The decision model backend; see its fields.")
+    answerability_threshold: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        description="A retrieved chunk is kept only when its answerability probability is at least this. 0 keeps every chunk, so the gate only decides sufficiency.",
+    )
+    sufficiency_threshold: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        description=(
+            "The kept chunks must be judged sufficient with at least this probability, or the system abstains: no generator call, the answer is "
+            "\"I could not find the answer in the provided documents.\" 0 turns the sufficiency check off (and saves its request), so the gate only filters chunks."
+        ),
+    )
+    judge_mode: Literal["batched", "per_chunk"] = Field(
+        default="batched",
+        description=(
+            "`batched` judges all candidates in one request (one predicate per passage, all passages in the input: cheapest and fastest, but a passage is "
+            "read next to the others). `per_chunk` sends one request per candidate (isolated, five at a time, one request's cost each)."
+        ),
+    )
+    max_candidates_to_judge: int = Field(
+        default=10,
+        ge=1,
+        description=(
+            "Top-ranked candidates the answerability question is asked about, drawn from the retrieval depth. Kept chunks are the ones above the threshold, "
+            "in rank order, up to the generator's context size, so a deeper candidate can replace a dropped one."
+        ),
+    )
+    answerability_instructions: str | None = Field(
+        default=None,
+        description=(
+            "Overrides the per-chunk predicate. `{passage}` stands for the passage under judgment and is required in `batched` mode. Default: "
+            "\"Does {passage} help answer the query?\" The wording sets how many chunks survive: a stricter predicate (see `configs/decision_gate.yaml`) drops "
+            "chunks that carry only part of an answer."
+        ),
+    )
+    sufficiency_instructions: str | None = Field(
+        default=None,
+        description=(
+            "Overrides the set-level predicate. Default: \"Is this evidence enough to answer the query from the documents alone?\" A stricter wording abstains "
+            "more often, on answerable questions too."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _batched_instructions_name_their_passage(self) -> DecisionGateOptions:
+        if self.judge_mode == "batched" and self.answerability_instructions is not None and "{passage}" not in self.answerability_instructions:
+            raise ValueError("answerability_instructions must contain {passage} in `batched` mode, so each question says which passage it is about")
+        return self
+
+
 class RerankOptions(RerankerModelOptions, VectorOptions, FinalTopKOptions, MultiQueryOptions):
     candidate_top_k: int = Field(default=30, ge=1, description="Vector candidates handed to the reranker (raised to the retrieval depth if smaller).")
     reranker: RerankerName = Field(default="simple_keyword_overlap", description=_RERANKER_NAMES)

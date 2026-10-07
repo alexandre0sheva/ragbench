@@ -59,10 +59,15 @@ class CostBreakdown(BaseModel):
     rerank_cost: float = 0.0
     query_rewrite_cost: float = 0.0
     tool_cost: float = 0.0
+    # Typed decision calls (`decision_gate`): input tokens sent to the decision model and what they cost.
+    decision_input_tokens: int = 0
+    decision_cost: float = 0.0
 
     @property
     def total_cost(self) -> float:
-        return self.embedding_cost + self.llm_cost + self.judge_cost + self.rerank_cost + self.query_rewrite_cost + self.tool_cost
+        return (
+            self.embedding_cost + self.llm_cost + self.judge_cost + self.rerank_cost + self.query_rewrite_cost + self.tool_cost + self.decision_cost
+        )
 
     def plus(self, other: CostBreakdown) -> CostBreakdown:
         return CostBreakdown(
@@ -77,6 +82,8 @@ class CostBreakdown(BaseModel):
             rerank_cost=self.rerank_cost + other.rerank_cost,
             query_rewrite_cost=self.query_rewrite_cost + other.query_rewrite_cost,
             tool_cost=self.tool_cost + other.tool_cost,
+            decision_input_tokens=self.decision_input_tokens + other.decision_input_tokens,
+            decision_cost=self.decision_cost + other.decision_cost,
         )
 
     def minus(self, other: CostBreakdown) -> CostBreakdown:
@@ -173,3 +180,10 @@ def estimate_model_cost(model: str, input_tokens: int = 0, output_tokens: int = 
             )
         return 0.0
     return (input_tokens / 1_000_000) * pricing["input"] + (output_tokens / 1_000_000) * pricing["output"]
+
+
+def estimate_decision_cost(model: str, input_tokens: int) -> float:
+    """Cost of one typed-decision request: input tokens only. The Decisions API bills no output, cache or reasoning tokens
+    (https://developers.openai.com/api/docs/guides/decisions, 2026-10-07: $0.10 per 1M input tokens for `gpt-6-luna`), so the
+    model's price row is used for its `input` rate and its `output` rate is ignored."""
+    return estimate_model_cost(model, input_tokens, 0)

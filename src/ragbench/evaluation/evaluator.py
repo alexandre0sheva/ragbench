@@ -632,6 +632,7 @@ class BenchmarkEvaluator:
             "route": answer.metadata.get("route"),  # the pipeline an `adaptive` system chose; None for every other system
             "routing_hint": question.routing_hint,
             "agent": answer.metadata.get("agent"),  # steps / hops / termination / budget_exhausted / llm_calls; None unless the system is agentic
+            "gate": answer.metadata.get("gate"),  # what a `decision_gate` decided (per-chunk probabilities, sufficiency, abstain reason); None for every other system
         }
         return {
             "per_question": per_question,
@@ -906,6 +907,17 @@ class BenchmarkEvaluator:
         }
 
     @staticmethod
+    def _gate_fields(gates: list[dict[str, Any]]) -> dict[str, float]:
+        """Share of questions the gate abstained on, mean decision requests and mean chunks kept; empty for a system without a gate."""
+        if not gates:
+            return {}
+        return {
+            "gate_abstain_rate": sum(1 for g in gates if g["abstained"]) / len(gates),
+            "avg_decision_calls": sum(g["decision_calls"] for g in gates) / len(gates),
+            "avg_chunks_kept": sum(g["kept"] for g in gates) / len(gates),
+        }
+
+    @staticmethod
     def _latency_fields(concurrent_ms: list[float], probe: ProbeResult | None) -> dict[str, Any]:
         """Latency columns of one system.
 
@@ -963,6 +975,7 @@ class BenchmarkEvaluator:
             if (accuracy := route_accuracy(ok_system_rows)) is not None:
                 row["route_accuracy"] = accuracy
             row.update(self._agent_fields([r["agent"] for r in ok_rows if r["system"] == system_name and r.get("agent")]))
+            row.update(self._gate_fields([r["gate"] for r in ok_system_rows if r.get("gate")]))
             row.update(self._latency_fields(latency_rows["latency_ms"].tolist(), self.probe_results.get(system_name)))
             if runtime_df is not None and not runtime_df.empty:
                 runtime = runtime_df[runtime_df["system"] == system_name]

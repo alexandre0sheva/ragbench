@@ -10,7 +10,8 @@ from typing import Any
 
 from fake_openai_server import JUDGE_REPLY
 
-from ragbench.models.cost import CostBreakdown, estimate_model_cost
+from ragbench.models.cost import CostBreakdown, estimate_decision_cost, estimate_model_cost
+from ragbench.models.decisions import DecisionResult, MockDecisionModel
 from ragbench.models.embeddings import EmbeddingResult, HashingEmbeddingModel
 from ragbench.models.llms import LLMResult, MockLLM
 from ragbench.utils.text import estimate_tokens
@@ -50,6 +51,20 @@ class PaidMockLLM(MockLLM):
         return result
 
 
+class PaidMockDecisionModel(MockDecisionModel):
+    """The mock's probabilities, billed like the Decisions API: input tokens only, at the model's price."""
+
+    provider = "openai_decisions"
+
+    def __init__(self, model_name: str) -> None:
+        super().__init__(model_name)
+
+    def decide(self, text: str, predicates: Any) -> DecisionResult:
+        result = super().decide(text, predicates)
+        result.cost = CostBreakdown(decision_input_tokens=result.input_tokens, decision_cost=estimate_decision_cost(self.model_name, result.input_tokens))
+        return result
+
+
 class PaidHashingEmbedding(HashingEmbeddingModel):
     cacheable = True
 
@@ -66,8 +81,10 @@ class PaidHashingEmbedding(HashingEmbeddingModel):
 
 def install(monkeypatch: Any) -> None:
     """Make every OpenAI client in the process one of the paid fakes, and give the process a (fake) key so runs are live."""
+    import ragbench.models.decisions.openai_decisions as decisions_provider
     import ragbench.models.providers.openai as openai_provider
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
     monkeypatch.setattr(openai_provider, "OpenAILLM", lambda model_name: PaidMockLLM(model_name))
     monkeypatch.setattr(openai_provider, "OpenAIEmbeddingModel", PaidHashingEmbedding)
+    monkeypatch.setattr(decisions_provider, "OpenAIDecisionModel", lambda model_name: PaidMockDecisionModel(model_name))
