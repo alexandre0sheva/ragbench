@@ -89,6 +89,7 @@ Every system implements the same interface and runs on any dataset. Options and 
 
 - [Choosing an architecture](docs/choosing-an-architecture.md): which systems to try for your corpus, questions, budget and privacy needs, and how to read the result
 - [Configuration](docs/configuration.md): config sections, presets, sweeps, budgets, caching, concurrency, model providers
+- [Models and providers](docs/models.md): which generator, judge and embedding to use, prices, OpenRouter and open-weight models
 - [Dataset format](docs/dataset-format.md): documents, questions, qrels, importers, generating questions and labels
 - [Methodology](docs/methodology.md): metrics, the judge, statistics, cost accounting, how to read the report, limitations
 - [System wiki](docs/system-wiki.md): how every system, chunker, reranker and agent works, with diagrams

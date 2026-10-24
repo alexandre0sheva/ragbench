@@ -56,6 +56,7 @@ Each piece of knowledge has one owner; everywhere else links to it. `scripts/aud
 | How each system, chunker, reranker and agent works (algorithms, diagrams) | `docs/system-wiki.md` |
 | Commands and options | `docs/cli.md` (generated) |
 | Config sections, presets, sweeps, budgets, caching, providers | `docs/configuration.md` |
+| Which models to use, model shortlists and prices, OpenRouter | `docs/models.md` |
 | Dataset formats and onboarding | `docs/dataset-format.md` |
 | Metrics, the judge, statistics, cost accounting, limitations | `docs/methodology.md` |
 | Tools and agents | `docs/tools.md` (tool table generated) |

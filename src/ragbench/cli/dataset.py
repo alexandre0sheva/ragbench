@@ -161,7 +161,7 @@ def run_generation(
     Returns the `SynthesisResult`, whether it ran live, and what the cache avoided. Shared by `generate-questions` and `auto`.
     """
     from ragbench.cache import activate_cache, open_cache_runtime
-    from ragbench.config.schema import CacheConfig, EvaluationConfig
+    from ragbench.config.schema import CacheConfig, EvaluationConfig, OpenRouterConfig
     from ragbench.datasets.synthesis import allocate, estimate_generation_cost, generate_questions
     from ragbench.models import cost as pricing
     from ragbench.models.llms import create_llm
@@ -187,7 +187,7 @@ def run_generation(
             confirm_spend(estimate, f"writing {n} questions ({', '.join(f'{count} {name}' for name, count in allocate(n, shares).items())})", yes, (loaded.evaluation if loaded else EvaluationConfig()).cost_confirm_threshold_usd)
             cache_config = loaded.cache if loaded else CacheConfig()
             cache_runtime = open_cache_runtime(cache_config) if cache_config.enabled and not no_cache else None
-            with activate_cache(cache_runtime), activate_runtime(RuntimeContext(providers=providers)):
+            with activate_cache(cache_runtime), activate_runtime(RuntimeContext(providers=providers, openrouter=loaded.openrouter if loaded else OpenRouterConfig())):
                 try:
                     llm = create_llm(ref, providers=providers)
                     with console.status(f"Writing {n} questions with {ref}…"):
@@ -323,7 +323,7 @@ def label_command(
         else:
             console.print("[yellow]Mock grader: word overlap, no model called. The proposals only validate the pipeline; do not use them as labels.[/yellow]")
         progress = Progress(SpinnerColumn(), TextColumn("Grading"), BarColumn(), MofNCompleteColumn(), TimeElapsedColumn(), console=console, transient=True)
-        with activate_cache(cache_runtime), activate_runtime(RuntimeContext(providers=data.config.providers)), progress:
+        with activate_cache(cache_runtime), activate_runtime(RuntimeContext(providers=data.config.providers, openrouter=data.config.openrouter)), progress:
             task = progress.add_task("grade", total=plan.pairs)
             try:
                 llm = create_llm(ref, force_mock=not live, providers=data.config.providers)

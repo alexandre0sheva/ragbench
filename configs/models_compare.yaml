@@ -1,0 +1,57 @@
+# Which generator model works best for *your* RAG pipelines? Every system below is swept over the open-weight shortlist of
+# docs/models.md (through OpenRouter), and an independent judge from another model family scores them all.
+#
+#   ragbench estimate --config configs/models_compare.yaml      # what it would cost
+#   ragbench run --config configs/models_compare.yaml --mock     # the pipeline, offline
+#
+# Live runs need OPENROUTER_API_KEY (generators), ANTHROPIC_API_KEY + `pip install 'ragbench[anthropic]'` (judge) and
+# OPENAI_API_KEY (embeddings). Refresh prices first with `ragbench models sync`. 3 systems x 6 models = 18 systems.
+run:
+  name: models_compare
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: hybrid_rerank
+    name: hybrid_rerank
+    chunker: {type: word, chunk_size: 500, chunk_overlap: 80}
+    retrieval: {reranker: local_relevance, final_top_k: 5}
+    models:
+      embedding: text-embedding-3-small
+    sweep:
+      models.generator: &generators
+        - openrouter:deepseek/deepseek-v4.1-flash
+        - openrouter:z-ai/glm-5.3
+        - openrouter:moonshotai/kimi-k3
+        - openrouter:xiaomi/mimo-v2.6-pro
+        - openrouter:qwen/qwen3.8-flash
+        - openrouter:minimax/minimax-m3
+  - type: corrective
+    name: corrective
+    models:
+      embedding: text-embedding-3-small
+    sweep:
+      models.generator: *generators
+  - type: agent_search
+    name: agent_search
+    models:
+      embedding: text-embedding-3-small
+    sweep:
+      models.generator: *generators
+
+# Every OpenRouter request goes out with reasoning switched off (or at the lowest effort a model that must reason accepts) and
+# these routing rules; see docs/models.md#openrouter. Pin `provider.order` per model for a reproducible published run.
+openrouter:
+  provider:
+    data_collection: deny
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: anthropic:claude-haiku-5-5   # not the family of any generator above
+  max_questions: null
+  max_workers: 4

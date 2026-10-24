@@ -98,11 +98,13 @@ def estimate_generation_cost(documents: Sequence[Document], n: int, mix: dict[st
     # (calls per question, document tokens per call)
     shape = {"single_hop": (1, typical), "numeric": (1, typical), "multi_hop": (1, 2 * typical), "paraphrase": (2, typical), "unanswerable": (1, digest)}
     prompt_tokens = completion_tokens = 0.0
+    total_calls = 0
     for category, count in counts.items():
         calls, size = shape[category]
+        total_calls += count * calls
         prompt_tokens += count * calls * (PROMPT_OVERHEAD_TOKENS + size) * RETRY_SLACK
         completion_tokens += count * calls * REPLY_TOKENS * RETRY_SLACK
-    return pricing.estimate_model_cost(model, int(prompt_tokens), int(completion_tokens))
+    return pricing.estimate_model_cost(model, int(prompt_tokens), int(completion_tokens), calls=max(1, total_calls))
 
 
 # -- writers ---------------------------------------------------------------------------------------

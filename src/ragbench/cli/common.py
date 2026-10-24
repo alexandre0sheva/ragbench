@@ -57,7 +57,7 @@ def mock_warning(config: ExperimentConfig, force_mock: bool = False) -> None:
         return
     if resolve_run_mode(config, force_mock=False) == "mock":
         console.print(
-            "[yellow]No API key found for the configured models (OPENAI_API_KEY / ANTHROPIC_API_KEY). Running in mock mode. "
+            "[yellow]No API key found for the configured models (OPENAI_API_KEY / ANTHROPIC_API_KEY / OPENROUTER_API_KEY). Running in mock mode. "
             "Scores are for pipeline validation only.[/yellow]"
         )
 

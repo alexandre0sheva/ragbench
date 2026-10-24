@@ -99,7 +99,8 @@ def _usd(usage: UsageRecorder, generator: str, embedding: str | None, decision: 
     if usage.decision_tokens:  # typed decisions are billed on input tokens only, at the decision model's rate (not the generator's)
         total += pricing.estimate_decision_cost(decision or generator, usage.decision_tokens)
     if usage.llm_prompt_tokens or usage.llm_completion_tokens:
-        total += pricing.estimate_model_cost(generator, usage.llm_prompt_tokens, usage.llm_completion_tokens)
+        # Summed over the question's calls: a tiered price is chosen by the mean prompt of one call.
+        total += pricing.estimate_model_cost(generator, usage.llm_prompt_tokens, usage.llm_completion_tokens, calls=usage.llm_calls)
     if usage.embed_tokens and embedding is not None:
         total += pricing.estimate_model_cost(embedding, usage.embed_tokens, 0)
     return total
@@ -186,7 +187,11 @@ def estimate_run(
         questions = dataset.questions[:limit] if limit else dataset.questions
         sample = evenly_sample(questions, sample_questions)
         runtime = RuntimeContext(
-            ingest_workers=config.evaluation.ingest_workers, providers=config.providers, tools=config.tools, tools_now=config.evaluation.resolved_tools_now
+            ingest_workers=config.evaluation.ingest_workers,
+            providers=config.providers,
+            openrouter=config.openrouter,
+            tools=config.tools,
+            tools_now=config.evaluation.resolved_tools_now,
         )
         systems: list[SystemEstimate] = []
         with activate_cache(None), activate_runtime(runtime):

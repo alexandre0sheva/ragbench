@@ -250,7 +250,7 @@ class EvaluationConfig(BaseModel):
     # A system whose share of failed questions exceeds this fails the run (results are still written).
     max_error_rate: float = Field(default=0.2, ge=0.0, le=1.0)
     judge_enabled: bool = True
-    # Model ref (see docs/configuration.md#providers--model-refs): `gpt-6-luna`, `anthropic:claude-haiku-4-5`, ...
+    # Model ref (see docs/configuration.md#providers--model-refs): `gpt-6-luna`, `anthropic:claude-haiku-5-5`, ...
     judge_model: str = DEFAULT_JUDGE_MODEL
     # Judge details. `judge.model`, when set, wins over `judge_model` (setting both to different models is an error); afterwards both agree.
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
@@ -369,11 +369,76 @@ class ProviderConfig(BaseModel):
     limits: LimitsConfig = Field(default_factory=LimitsConfig, description="Throttles for this endpoint only.")
 
 
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+
+
+class OpenRouterReasoning(BaseModel):
+    """OpenRouter's `reasoning` request parameter. Thinking tokens bill as output, so RAG calls keep it as low as possible."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    effort: ReasoningEffort | None = Field(default=None, description="Reasoning effort. Default: `none`, or the lowest effort a model that must reason accepts.")
+    max_tokens: int | None = Field(default=None, ge=1, description="A thinking-token budget instead of an effort (models that take one).")
+    exclude: bool = Field(default=True, description="Leave the reasoning text out of the response (it is billed either way).")
+
+
+class OpenRouterRouting(BaseModel):
+    """OpenRouter's `provider` request parameter: which upstream providers may serve a request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    order: list[str] | None = Field(default=None, description="Upstream providers to try, in order (OpenRouter provider slugs).")
+    allow_fallbacks: bool | None = Field(default=None, description="Try other providers when those in `order` fail. Default: false when `order` is set (pinned).")
+    data_collection: Literal["allow", "deny"] | None = Field(default=None, description="`deny` excludes providers that may store or train on prompts.")
+
+
+class OpenRouterModelSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reasoning: OpenRouterReasoning | None = Field(default=None, description="Reasoning control; see `OpenRouterReasoning`.")
+    provider: OpenRouterRouting | None = Field(default=None, description="Provider routing and pinning; see `OpenRouterRouting`.")
+
+
+class OpenRouterConfig(OpenRouterModelSettings):
+    """`openrouter:` section: request settings of `openrouter:<model>` refs. Per-model entries replace the section-wide ones."""
+
+    models: dict[str, OpenRouterModelSettings] = Field(default_factory=dict, description="Settings for one model id (`vendor/model`), replacing the defaults above.")
+
+    def for_model(self, model: str) -> OpenRouterModelSettings:
+        own = self.models.get(model) or OpenRouterModelSettings()
+        return OpenRouterModelSettings(reasoning=own.reasoning or self.reasoning, provider=own.provider or self.provider)
+
+
+class PriceTier(BaseModel):
+    """The price of a request whose prompt has at most `max_prompt_tokens` input tokens (no limit on the last tier)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_prompt_tokens: int | None = Field(default=None, ge=1)
+    input: float = 0.0
+    output: float = 0.0
+
+
 class ModelPrice(BaseModel):
-    """USD per 1M tokens; `output` stays 0 for embedding models."""
+    """USD per 1M tokens; `output` stays 0 for embedding models. `tiers` prices a request by its prompt length (see models/cost.py)."""
 
     input: float = 0.0
     output: float = 0.0
+    tiers: list[PriceTier] | None = None
+
+    @model_validator(mode="after")
+    def _check_tiers(self) -> ModelPrice:
+        if not self.tiers:
+            return self
+        limits = [tier.max_prompt_tokens for tier in self.tiers]
+        if any(limit is None for limit in limits[:-1]):
+            raise ValueError("pricing tiers: only the last tier may leave out max_prompt_tokens")
+        bounded = [limit for limit in limits if limit is not None]
+        if bounded != sorted(set(bounded)):
+            raise ValueError(f"pricing tiers: max_prompt_tokens must be increasing, got {bounded}")
+        if not {"input", "output"} & self.model_fields_set:
+            self.input, self.output = self.tiers[0].input, self.tiers[0].output
+        return self
 
 
 def _route_configs(system: SystemConfig) -> list[tuple[str, SystemConfig]]:
@@ -436,6 +501,8 @@ class ExperimentConfig(BaseModel):
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
     # Named OpenAI-compatible endpoints, referenced as `openai_compatible:<name>/<model>`.
     providers: dict[str, ProviderConfig] = Field(default_factory=dict)
+    # Reasoning and provider pinning of `openrouter:<model>` refs (see docs/models.md).
+    openrouter: OpenRouterConfig = Field(default_factory=OpenRouterConfig)
     # Rules for tool calls (permissions, timeout, output cap); each system lists the tools it may use in its own `tools:`.
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     # Which system the run recommends deploying, and under what constraints and priorities.

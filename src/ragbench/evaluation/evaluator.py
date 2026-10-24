@@ -38,6 +38,7 @@ from ragbench.models import cost as pricing
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.errors import ModelInitError
+from ragbench.models.providers.openrouter import manifest_settings
 from ragbench.models.refs import missing_credentials, resolve_run_mode, warm_up_modules
 from ragbench.rag_systems import create_rag_system
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
@@ -174,6 +175,7 @@ class BenchmarkEvaluator:
             ingest_workers=self.config.evaluation.ingest_workers,
             limiters=build_limiters(self.config.limits, self.config.providers),
             providers=self.config.providers,
+            openrouter=self.config.openrouter,
             tools=self.config.tools,
             tools_now=self.config.evaluation.resolved_tools_now,
         )
@@ -787,6 +789,7 @@ class BenchmarkEvaluator:
             models_used=sorted(self.models_used),
             started_utc=self.started_utc,
             finished_utc=utc_now_iso(),
+            model_settings=manifest_settings(sorted(self.models_used), self.config.openrouter),
         )
         (self.output_dir / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
         self._write_recommendation()

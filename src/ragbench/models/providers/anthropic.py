@@ -50,6 +50,7 @@ ANTHROPIC_CAPABILITIES: dict[str, AnthropicCapabilities] = {
     "claude-opus-4-7": AnthropicCapabilities(effort=True),
     "claude-opus-4-8": AnthropicCapabilities(effort=True),
     "claude-sonnet-4-6": AnthropicCapabilities(effort=True),
+    "claude-haiku-5": AnthropicCapabilities(effort=True),
     "claude-haiku-4-5": AnthropicCapabilities(sampling=True),
 }
 

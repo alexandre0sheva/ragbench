@@ -53,7 +53,9 @@ class ToolAgentRAG(BaseRAGSystem):
         opts = self.options
         budget = AgentBudget(max_steps=opts.max_steps, max_cost_usd=opts.max_cost_usd, max_tokens=opts.max_tokens, max_tool_calls=opts.max_tool_calls)
         ctx = ToolContext.for_question(self.corpus, self._retrievers())  # a fresh context per question: concurrent questions share nothing
-        return ToolAgent(self.llm, self.box, budget, mode=opts.agent_mode, instructions=self._instructions()).run(question, ctx, tracer)
+        # A model without native function calling (per the provider's catalog) gets the tools described in the prompt instead.
+        mode = "react_json" if opts.agent_mode == "native" and not self.llm.supports_tools else opts.agent_mode
+        return ToolAgent(self.llm, self.box, budget, mode=mode, instructions=self._instructions()).run(question, ctx, tracer)
 
     def _retrieval(self, question: str, run: ToolAgentRun, tracer: Tracer, first_step: int, depth: int) -> RetrievalResult:
         chunks: list[RetrievedChunk] = reciprocal_rank_fusion(run.rankings, top_k=depth, rrf_k=60) if run.rankings else []

@@ -25,7 +25,7 @@ OPTION_OWNERS = {"docs/configuration.md", "docs/systems.md", "docs/tools.md", "d
 SYSTEM_OWNERS = {"docs/systems.md"}
 METRIC_OWNER = "docs/methodology.md"
 GENERATED_README = re.compile(r"<!-- systems:start -->.*?<!-- systems:end -->", re.S)
-REMOVED_MODELS = re.compile(r"\b(gpt-5\.4[\w.-]*|gpt-4o[\w.-]*|gpt-4\.1[\w.-]*|gpt-3\.5[\w.-]*)\b")
+REMOVED_MODELS = re.compile(r"\b(gpt-5\.4[\w.-]*|gpt-4o[\w.-]*|gpt-4\.1[\w.-]*|gpt-3\.5[\w.-]*|claude-haiku-4[\w.-]*)\b")
 COUNTS = re.compile(r"\b(?:all |the )?(?:six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty) (?:RAG |built-in |registered |bundled |original )?(?:systems|chunkers|tools|rerankers)\b", re.I)
 METRICS = (
     r"Recall(?:@\w+)?", r"Precision(?:@\w+)?", r"MRR(?:@\w+)?", r"nDCG(?:@\w+)?", r"Hit(?:@\w+| rate)", r"faithfulness", r"correctness", r"completeness", r"citation quality",

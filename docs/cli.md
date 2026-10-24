@@ -39,6 +39,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `compare-runs`: How a later run moved against an earlier...
 * `doctor`: Check Python, packages, optional extras,...
 * `runs`: List, inspect, remove and index the runs...
+* `models`: List the models RAGBench has prices for,...
 
 ## `ragbench run`
 
@@ -599,4 +600,57 @@ $ ragbench runs index [OPTIONS]
 
 * `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
 * `--open`: Open the page in your browser.
+* `--help`: Show this message and exit.
+
+## `ragbench models`
+
+List the models RAGBench has prices for, and sync OpenRouter's catalog (prices, tools, reasoning).
+
+**Usage**:
+
+```console
+$ ragbench models [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `list`: Models with a price, USD per 1M tokens:...
+* `sync`: Download OpenRouter's model list (public,...
+
+### `ragbench models list`
+
+Models with a price, USD per 1M tokens: the built-in table (OpenAI, Anthropic) and the OpenRouter catalog. Offline.
+
+**Usage**:
+
+```console
+$ ragbench models list [OPTIONS]
+```
+
+**Options**:
+
+* `-p, --provider <str>`: Only one provider: all, openai, anthropic, openrouter.  [default: all]
+* `-s, --search <str>`: Only refs containing this text (case-insensitive).
+* `--open-weights`: Only OpenRouter models with published weights (a Hugging Face id).
+* `--json`: Print JSON on stdout instead of a table.
+* `--help`: Show this message and exit.
+
+### `ragbench models sync`
+
+Download OpenRouter's model list (public, no key, free) and save prices, tool / JSON support and reasoning switches as a dated file.
+
+**Usage**:
+
+```console
+$ ragbench models sync [OPTIONS]
+```
+
+**Options**:
+
+* `--from-file <path>`: Read a saved `GET /api/v1/models` response instead of downloading it.
+* `-o, --output <path>`: Where to write the catalog. Default: $RAGBENCH_OPENROUTER_CATALOG, else ~/.cache/ragbench/.
 * `--help`: Show this message and exit.

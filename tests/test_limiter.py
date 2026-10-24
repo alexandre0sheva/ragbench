@@ -117,7 +117,7 @@ def test_limiter_without_limits_never_waits_and_reports_what_it_needs():
 def test_build_limiters_from_config_and_runtime_context():
     assert build_limiters(LimitsConfig()) == {}
     limiters = build_limiters(LimitsConfig(max_concurrent_requests=2, requests_per_minute=60))
-    assert set(limiters) == {"openai", "anthropic"}, "hosted APIs have independent rate limits, so each gets its own limiter"
+    assert set(limiters) == {"openai", "anthropic", "openrouter"}, "hosted APIs have independent rate limits, so each gets its own limiter"
     assert limiters["openai"] is not limiters["anthropic"]
     assert current_runtime().ingest_workers == 1 and limiter_for("openai") is None
     with activate_runtime(RuntimeContext(ingest_workers=6, limiters=limiters)):
@@ -258,6 +258,6 @@ def test_endpoints_get_their_own_limiters_and_the_flat_limits_do_not_apply_to_th
 
     limiters = build_limiters(LimitsConfig(requests_per_minute=60), providers)
 
-    assert set(limiters) == {"openai", "anthropic", "openai_compatible:ollama"}
+    assert set(limiters) == {"openai", "anthropic", "openrouter", "openai_compatible:ollama"}
     assert limiters["openai_compatible:ollama"].requests_per_minute is None and limiters["openai"].requests_per_minute == 60
     assert set(build_limiters(LimitsConfig(), providers)) == {"openai_compatible:ollama"}

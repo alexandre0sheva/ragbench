@@ -73,6 +73,10 @@ class LLM(ABC):
     model_name: str
     # Identifies the backing service in persistent cache keys (two providers may serve the same model name).
     provider: str = "openai"
+    # Whether the model takes native function calling (`tools=`). Tool-using agents switch to `react_json` when it does not.
+    supports_tools: bool = True
+    # Whether `LLMResult.cost` is what the provider billed (read from its response) rather than a price-table estimate.
+    bills_from_response: bool = False
 
     @abstractmethod
     def generate(
@@ -343,7 +347,7 @@ mock_synthesis.register(MockLLM)
 def create_llm(
     model_name: str | None = None, force_mock: bool = False, strict: bool = True, providers: dict[str, Any] | None = None
 ) -> LLM:
-    """Build the (cache-wrapped) chat model for a model ref such as `gpt-6-luna` or `anthropic:claude-haiku-4-5`.
+    """Build the (cache-wrapped) chat model for a model ref such as `gpt-6-luna` or `anthropic:claude-haiku-5-5`.
 
     `force_mock`, or a hosted provider (OpenAI, Anthropic) whose API key is not set, selects the mock. With credentials
     present a failing client constructor raises `ModelInitError` (`strict=True`, default) instead of silently producing

@@ -55,7 +55,7 @@ def test_pricing_overrides_do_not_leak_between_runs(tmp_path, monkeypatch):
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     run_benchmark(_config(tmp_path, {"pricing": {"gpt-6-luna": {"input": 99.0, "output": 0.0}}}), force_mock=True)
 
-    assert cost.estimate_model_cost("gpt-6-luna", 1_000_000, 0) == 0.10
+    assert cost.estimate_model_cost("gpt-6-luna", 100_000, 0) == pytest.approx(0.01)
 
 
 def test_reports_warn_about_unknown_priced_models(tmp_path):

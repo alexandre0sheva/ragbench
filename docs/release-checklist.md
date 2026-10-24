@@ -7,7 +7,8 @@ Use this before tagging a release. CI runs most of the automatic checks; the man
 - [ ] Rename `## [Unreleased]` in `CHANGELOG.md` to the version and date, and start a new empty `## [Unreleased]`.
 - [ ] Set the version in `pyproject.toml` and `CITATION.cff` (and the date in the latter).
 - [ ] **Refresh model names and prices.** Providers retire and add models every few months, and a stale price table makes every cost number wrong.
-  - Re-read the **official** model and pricing pages of OpenAI and Anthropic (fetch them on the day; never work from memory), plus the pages of any other provider with a price row.
+  - Re-read the **official** model and pricing pages of OpenAI and Anthropic (fetch them on the day; never work from memory), plus the pages of any other provider with a price row. Note every prompt-length tier (`tiers` in the table).
+  - Run `ragbench models sync` and re-check the OpenRouter shortlist in `docs/models.md` against it (`ragbench models list --provider openrouter`): prices, open weights, tools, and the lowest reasoning effort. Regenerate the bundled snapshot `src/ragbench/models/data/openrouter_models.json` from the synced file for the shortlisted ids.
   - Update `MODEL_PRICING_USD_PER_1M` in `src/ragbench/models/cost.py` and put the source URLs in the comment above it. Keep only models that are currently served: the newest generation in each tier, and at most the previous one while it is still the cheaper option people pick. Dated snapshots are covered by prefix matching, so no rows for them. Mark any entry you could not confirm `# UNVERIFIED` instead of guessing, and do not delete a model you could not confirm is superseded.
   - Set `PRICING_AS_OF` to today's date. `ragbench doctor` and `ragbench estimate` warn when the table is more than 90 days old.
   - Re-check the defaults in `src/ragbench/models/defaults.py`, the `configs/*.yaml` files, the presets and every model named in the docs: each must point at the newest generation in its tier and have a price. `tests/test_cost_tracker.py` fails if one has no price.
@@ -23,6 +24,8 @@ Use this before tagging a release. CI runs most of the automatic checks; the man
 - [ ] `ragbench compare --config configs/all.yaml --mock --max-workers 4` completes; inspect `leaderboard.md`, `failures.md` and `qrels_audit.md`.
 
 ## Live run (maintainer, costs money)
+
+- [ ] Before **every** paid run, not only releases: repeat the model-and-price audit above, so the estimate and the cap are computed from today's prices.
 
 - [ ] `ragbench estimate --config configs/all.yaml` and read the projected cost; proceed only if you accept it.
 - [ ] `ragbench run --config configs/all.yaml` with a real key (in `.env` or your shell, never committed) and your cap set as `evaluation.max_cost_usd` in a copy of the config (`run` has no `--max-cost` flag; the shipped config stays uncapped). Check the banner says LIVE, no model is reported as unpriced, no judge fallbacks are warned about, and the latency probe ran.

@@ -170,6 +170,14 @@ class OpenAILLM(LLM):
                 self._unsupported.add(rejected)
                 logger.info("Model %s rejected `%s`; omitting it from now on.", self.api_model, rejected)
 
+    def _adapt_params(self, params: dict[str, Any]) -> dict[str, Any]:
+        """Last change to a Chat Completions request before it is sent (subclasses add provider-specific parameters)."""
+        return params
+
+    def _call_cost(self, response: Any, prompt_tokens: int, completion_tokens: int) -> float:
+        """What one Chat Completions call cost: the price table's estimate (a provider that reports the billed cost overrides this)."""
+        return estimate_model_cost(self.model_name, prompt_tokens, completion_tokens)
+
     def _generate_chat_completions(self, messages: list[dict[str, Any]], temperature: float, max_tokens: int | None, json_mode: bool, tools: list[dict[str, Any]] | None) -> LLMResult:
         params: dict[str, Any] = {"model": self.api_model, "messages": messages, "temperature": temperature}
         if self._reasoning_effort:
@@ -180,7 +188,7 @@ class OpenAILLM(LLM):
             params[self.max_tokens_param] = max_tokens
         if tools:
             params["tools"] = tools
-        response = self._create_chat(params)
+        response = self._create_chat(self._adapt_params(params))
         choice = response.choices[0]
         text = choice.message.content or ""
         tool_calls = [
@@ -197,7 +205,7 @@ class OpenAILLM(LLM):
             cost=CostBreakdown(
                 llm_prompt_tokens=prompt_tokens,
                 llm_completion_tokens=completion_tokens,
-                llm_cost=estimate_model_cost(self.model_name, prompt_tokens, completion_tokens),
+                llm_cost=self._call_cost(response, prompt_tokens, completion_tokens),
             ),
             tool_calls=tool_calls,
             finish_reason=getattr(choice, "finish_reason", None),

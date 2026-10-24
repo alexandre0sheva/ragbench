@@ -30,8 +30,10 @@ JUDGE_REPLY = json.dumps(
 
 
 class FakeOpenAIServer:
-    def __init__(self, inject_429_every: int = 11, latency_s: float = 0.003) -> None:
+    def __init__(self, inject_429_every: int = 11, latency_s: float = 0.003, usage_cost: float | None = None, record_bodies: bool = False) -> None:
+        """`usage_cost` adds OpenRouter's billed `usage.cost` to every chat reply; `record_bodies` keeps each request body in `bodies`."""
         self.stats: Counter[str] = Counter()
+        self.bodies: list[dict] = []
         self._lock = threading.Lock()
         self._llm = MockLLM()
         self._embedder = HashingEmbeddingModel()
@@ -44,6 +46,8 @@ class FakeOpenAIServer:
             def do_POST(self) -> None:
                 body = json.loads(self.rfile.read(int(self.headers["content-length"])))
                 with outer._lock:
+                    if record_bodies:
+                        outer.bodies.append({"path": self.path, **body})
                     outer.stats[self.path] += 1
                     outer.stats["total"] += 1
                     number = outer.stats["total"]
@@ -80,7 +84,12 @@ class FakeOpenAIServer:
                             "created": 0,
                             "model": body["model"],
                             "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": "stop"}],
-                            "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens, "total_tokens": prompt_tokens + completion_tokens},
+                            "usage": {
+                                "prompt_tokens": prompt_tokens,
+                                "completion_tokens": completion_tokens,
+                                "total_tokens": prompt_tokens + completion_tokens,
+                                **({"cost": usage_cost} if usage_cost is not None else {}),
+                            },
                         },
                     )
                 if self.path.endswith("/embeddings"):

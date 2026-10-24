@@ -137,7 +137,7 @@ def grading_prompt(run: RunData, question: Question, doc_id: str) -> str:
 def estimate_grading_cost(run: RunData, plan: PoolPlan, model: str) -> float:
     """Dollars the grading calls are expected to cost at `model`'s price: the real prompts, a short reply each."""
     prompt_tokens = sum(estimate_tokens(grading_prompt(run, question, doc_id)) for question in plan.questions for doc_id in plan.pool[question.id])
-    return pricing.estimate_model_cost(model, prompt_tokens, plan.pairs * GRADE_REPLY_TOKENS)
+    return pricing.estimate_model_cost(model, prompt_tokens, plan.pairs * GRADE_REPLY_TOKENS, calls=plan.pairs)
 
 
 def parse_grade(text: str) -> Judgment | None:

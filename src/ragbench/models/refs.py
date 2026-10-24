@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 ModelKind = Literal["llm", "embedding"]
 
 # Hosted APIs are live only when their key is set; endpoints and local models need none.
-HOSTED_KEY_ENV = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY"}
+HOSTED_KEY_ENV = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
 # Optional SDKs a provider imports lazily; warmed up on the main thread before workers start (see `warm_up_imports`).
 PROVIDER_MODULES = {"anthropic": ["anthropic"], "local": ["sentence_transformers"]}
 
@@ -67,6 +67,8 @@ def validate_model_ref(ref: str, kind: ModelKind, providers: dict[str, ProviderC
     label = "chat" if kind == "llm" else "embedding"
     if provider not in registry:
         raise ValueError(f"`{provider}:` provides {other} models only; it cannot be used for {label} models (got {ref!r})")
+    if provider == "openrouter" and "/" not in model:
+        raise ValueError(f"{ref!r} must look like openrouter:<vendor>/<model>, e.g. openrouter:deepseek/deepseek-v4.1-flash")
     if provider == "openai_compatible":
         endpoint, name = split_endpoint(model)
         if not endpoint or not name:

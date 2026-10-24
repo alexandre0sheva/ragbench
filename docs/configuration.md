@@ -115,7 +115,7 @@ Every run also writes `run_manifest.json`: RAGBench and dependency versions, Pyt
 evaluation:
   judge_enabled: true
   judge:
-    model: anthropic:claude-haiku-4-5   # a model ref; default: evaluation.judge_model
+    model: anthropic:claude-haiku-5-5   # a model ref; default: evaluation.judge_model
     samples: 3                          # independent judgments per question, averaged (default 1)
     temperature: 0.5                    # judge sampling temperature (default 0); must be above 0 when samples > 1
     independent: true                   # warn in the reports when the judge model is also a generator (default true)
@@ -283,50 +283,81 @@ Every model setting (`models.generator`, `models.embedding`, `evaluation.judge_m
 | Ref | Serves | Needs |
 | --- | --- | --- |
 | `gpt-6-luna`, `openai:gpt-6.1-sol`, `openai:text-embedding-3-small` | chat, embeddings | `OPENAI_API_KEY` |
-| `anthropic:claude-haiku-4-5`, `anthropic:claude-sonnet-5-5` | chat | `ANTHROPIC_API_KEY` and `pip install 'ragbench[anthropic]'` |
+| `anthropic:claude-haiku-5-5`, `anthropic:claude-sonnet-5-5` | chat | `ANTHROPIC_API_KEY` and `pip install 'ragbench[anthropic]'` |
+| `openrouter:<vendor>/<model>`, e.g. `openrouter:deepseek/deepseek-v4.1-flash` | chat | `OPENROUTER_API_KEY`; settings under `openrouter:` (below) |
 | `openai_compatible:<endpoint>/<model>` | chat, embeddings | an entry under `providers:` (below) |
 | `local:BAAI/bge-small-en-v1.5` | embeddings | `pip install 'ragbench[local]'`; downloads the Hugging Face model on first use |
 
 ```yaml
-providers:                        # named OpenAI-compatible endpoints: Ollama, vLLM, LM Studio, OpenRouter, Together, ...
+providers:                        # named OpenAI-compatible endpoints: Ollama, vLLM, LM Studio, Together, ...
   ollama:
     base_url: http://localhost:11434/v1
-  openrouter:
-    base_url: https://openrouter.ai/api/v1
-    api_key_env: OPENROUTER_API_KEY     # omit for servers that need no key
+  gpu_box:
+    base_url: http://gpu-box.internal:8000/v1   # a vLLM server
+    api_key_env: GPU_BOX_API_KEY        # omit for servers that need no key
     limits: {max_concurrent_requests: 4, requests_per_minute: 120}   # this endpoint only
 
 systems:
   - type: vector
     models:
-      generator: anthropic:claude-haiku-4-5
+      generator: anthropic:claude-haiku-5-5
       embedding: local:BAAI/bge-small-en-v1.5
   - type: hybrid
     models:
       generator: openai_compatible:ollama/llama3.1:8b          # the model name may contain `/` and `:`
       embedding: openai_compatible:ollama/nomic-embed-text
+  - type: bm25
+    models:
+      generator: openrouter:z-ai/glm-5.3                       # any OpenRouter model id, open-weight or not
 evaluation:
-  judge_model: openai_compatible:openrouter/anthropic/claude-sonnet-5-5
+  judge_model: anthropic:claude-haiku-5-5   # another model family than every generator above
 ```
 
 - Refs are checked when the config loads: an unknown endpoint, a chat model used as an embedder (or the reverse), or a mistyped provider (`anthropics:`) fails with the list of valid choices.
 - **Endpoints use `max_tokens`**, the parameter nearly every OpenAI-compatible server understands; OpenAI itself gets `max_completion_tokens`.
-- **Claude models** are called through the native Messages API. They take no sampling parameters, so `temperature` is not sent (older models that still honour it, such as Haiku 4.5, get it); Claude has no JSON mode, so judge calls ask for JSON in the system prompt and RAGBench strips any code fence from the reply. Models that think by default are called at low effort with extra `max_tokens` headroom, because thinking tokens count toward the limit.
+- **Claude models** are called through the native Messages API. Current models take no sampling parameters, so `temperature` is not sent (older models that still honour it get it); Claude has no JSON mode, so judge calls ask for JSON in the system prompt and RAGBench strips any code fence from the reply. Models that think by default are called at low effort with extra `max_tokens` headroom, because thinking tokens count toward the limit.
 - **GPT-6 models** are sent `reasoning_effort: none` (their default is to reason, which would spend short calls' token budgets on hidden thinking and disables function calling on Chat Completions); an endpoint that rejects the parameter is detected and it is left out.
 - **Local embeddings** use [sentence-transformers](https://www.sbert.net) (chosen over fastembed because it runs any Hugging Face embedding model and ships wheels for Python 3.11–3.14 on macOS and Linux). Vectors are normalized and cost $0; results are cached on disk like any other embedding.
-- **Cost:** OpenAI and Claude prices come from the built-in table. `local:` and `openai_compatible:` models cost **$0 unless you add a price** under `pricing:`, keyed by the full ref, `<endpoint>/<model>`, or the bare model name — without one, a paid proxy such as OpenRouter is reported as free.
+- **OpenRouter models** (`openrouter:`) are charged what OpenRouter billed (`usage.cost` in each response), are sent reasoning off (or the lowest effort the model accepts) and the `openrouter:` routing rules, and run the tool agents in `react_json` mode when the model has no function calling. Which model to pick, and how pinning and the catalog work: [models.md](models.md#openrouter).
+- **Cost:** OpenAI and Claude prices come from the built-in table, OpenRouter prices from its catalog (`ragbench models sync`). `local:` and `openai_compatible:` models cost **$0 unless you add a price** under `pricing:`, keyed by the full ref, `<endpoint>/<model>`, or the bare model name — without one, a paid proxy behind a generic endpoint is reported as free.
 - **Tool calling** (used by the agentic systems) is part of the common interface: `LLM.generate(messages, tools=[...])` takes OpenAI function schemas and returns `LLMResult.tool_calls`, and each provider translates to its own format.
 - Keys are read from the environment or the project's `.env`; see `.env.example`.
 
+### `openrouter:`
+
+Request settings for every `openrouter:` ref. Each key may also be set for one model under `models:`, where it replaces (does not merge with) the section-wide value.
+
+```yaml
+openrouter:
+  reasoning:
+    effort: none                  # none | minimal | low | medium | high | xhigh | max; default: none, or the lowest the model accepts
+    max_tokens: null              # a thinking-token budget instead of an effort
+    exclude: true                 # leave the reasoning text out of responses (it is billed either way)
+  provider:                       # OpenRouter's provider routing
+    order: [deepinfra, together]  # upstreams to try, in order; setting it pins (allow_fallbacks defaults to false)
+    allow_fallbacks: null
+    data_collection: deny         # allow | deny
+  models:
+    z-ai/glm-5.3: {reasoning: {effort: low}}
+```
+
+The top-level `limits:` apply to OpenRouter as to the other hosted APIs (its own limiter). The settings each model ran with are recorded in `run_manifest.json` under `model_settings`.
+
 ## Pricing
 
-Costs come from the price table in `src/ragbench/models/cost.py` (USD per 1M tokens, reviewed as of `PRICING_AS_OF`, with the source pages listed above the table). Dated snapshots such as `claude-haiku-4-5-20251001` use the price of their base model; `local:` and `openai_compatible:` models are $0 unless priced here (see [Providers & model refs](#providers--model-refs)). Override or extend the table per experiment:
+Costs come from the price table in `src/ragbench/models/cost.py` (USD per 1M tokens, reviewed as of `PRICING_AS_OF`, with the source pages listed above the table) and, for `openrouter:` refs, from the OpenRouter catalog. Dated snapshots such as `gpt-6-luna-2026-05-18` use the price of their base model (OpenRouter ids match exactly); `local:` and `openai_compatible:` models are $0 unless priced here (see [Providers & model refs](#providers--model-refs)). `ragbench models list` prints every price in force. Override or extend the table per experiment:
 
 ```yaml
 pricing:
   my-finetuned-model: {input: 0.30, output: 1.20}
   gpt-6-luna: {input: 0.25, output: 1.50}   # overrides the built-in price
+  my-long-context-model:                     # priced by prompt length: each request at the first tier its prompt fits
+    tiers:
+      - {max_prompt_tokens: 100000, input: 0.10, output: 0.50}
+      - {input: 0.50, output: 2.50}          # the last tier has no limit
 ```
+
+`max_prompt_tokens` must increase from tier to tier and only the last tier may leave it out; the flat `input`/`output` default to the first tier's.
 
 A typed decision request (`decision_gate` with `openai_decisions`) is billed on **input tokens only**, at the `input` price of its model: that is how the Decisions API charges, so a `pricing:` override of a decision model's `input` rate changes the decision cost and its `output` rate does not matter. A `llm_json` decision backend is an ordinary chat model and pays both rates.
 

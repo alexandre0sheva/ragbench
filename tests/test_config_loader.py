@@ -108,8 +108,8 @@ def test_judge_section_defaults_keep_the_legacy_judge_model_keys_working(tmp_pat
 
 
 def test_judge_section_sets_the_model_and_keeps_judge_model_in_sync(tmp_path):
-    evaluation = load_config(_judge_config(tmp_path, "  judge:\n    model: anthropic:claude-haiku-4-5\n    samples: 3\n    temperature: 0.7\n    independent: false")).evaluation
-    assert evaluation.judge_model == "anthropic:claude-haiku-4-5" == evaluation.judge.model
+    evaluation = load_config(_judge_config(tmp_path, "  judge:\n    model: anthropic:claude-haiku-5-5\n    samples: 3\n    temperature: 0.7\n    independent: false")).evaluation
+    assert evaluation.judge_model == "anthropic:claude-haiku-5-5" == evaluation.judge.model
     assert (evaluation.judge.samples, evaluation.judge.temperature, evaluation.judge.independent) == (3, 0.7, False)
 
 
@@ -121,4 +121,4 @@ def test_judge_section_is_checked_when_the_config_loads(tmp_path):
     with pytest.raises(ValueError, match="sampels"):
         load_config(_judge_config(tmp_path, "  judge:\n    sampels: 3"))
     with pytest.raises(ValueError, match="evaluation.judge.model"):
-        load_config(_judge_config(tmp_path, "  judge:\n    model: anthropics:claude-haiku-4-5"))
+        load_config(_judge_config(tmp_path, "  judge:\n    model: anthropics:claude-haiku-5-5"))

@@ -104,10 +104,10 @@ def test_config_validation_reports_bad_model_refs_with_their_location(tmp_path):
     with pytest.raises(ValueError, match=r"systems\[0\].*generator.*unknown endpoint 'nowhere'"):
         _config(tmp_path, [system])
     with pytest.raises(ValueError, match=r"judge_model.*anthropics"):
-        _config(tmp_path, [{"type": "bm25"}], judge="anthropics:claude-haiku-4-5")
+        _config(tmp_path, [{"type": "bm25"}], judge="anthropics:claude-haiku-5-5")
     cfg = _config(
         tmp_path,
-        [{"type": "vector", "models": {"generator": "anthropic:claude-haiku-4-5", "embedding": "local:BAAI/bge-small-en-v1.5"}}],
+        [{"type": "vector", "models": {"generator": "anthropic:claude-haiku-5-5", "embedding": "local:BAAI/bge-small-en-v1.5"}}],
         judge="openai_compatible:ollama/llama3.1",
         providers={"ollama": {"base_url": "http://localhost:11434/v1"}},
     )
@@ -135,10 +135,10 @@ def test_provider_endpoint_names_cannot_break_the_ref_syntax():
 
 def test_hosted_provider_without_a_key_keeps_the_mock_fallback(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    assert isinstance(create_llm("anthropic:claude-haiku-4-5"), MockLLM)
+    assert isinstance(create_llm("anthropic:claude-haiku-5-5"), MockLLM)
     assert isinstance(create_llm("gpt-6-luna"), MockLLM)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
-    assert isinstance(create_llm("anthropic:claude-haiku-4-5", force_mock=True), MockLLM)
+    assert isinstance(create_llm("anthropic:claude-haiku-5-5", force_mock=True), MockLLM)
 
 
 def test_create_llm_selects_the_provider_and_keeps_wrapping_clients_for_the_cache(monkeypatch):
@@ -248,6 +248,9 @@ def test_anthropic_sets_effort_and_thinking_headroom_only_where_supported_and_te
     reply = json.loads((FIXTURES / "text_response.json").read_text())
     new, old = FakeAnthropic(reply), FakeAnthropic(reply)
     AnthropicLLM("claude-sonnet-5-5", client=new).generate([{"role": "user", "content": "hi"}], max_tokens=200)
+    haiku = FakeAnthropic(reply)
+    AnthropicLLM("claude-haiku-5-5", client=haiku).generate([{"role": "user", "content": "hi"}], max_tokens=200)
+    assert haiku.calls[0]["output_config"] == {"effort": "low"} and "extra_body" not in haiku.calls[0]
     AnthropicLLM("claude-haiku-4-5-20251001", client=old).generate([{"role": "user", "content": "hi"}], max_tokens=200)
 
     assert new.calls[0]["output_config"] == {"effort": "low"} and new.calls[0]["max_tokens"] == 200 + THINKING_HEADROOM
@@ -259,7 +262,7 @@ def test_anthropic_json_mode_adds_an_instruction_and_unwraps_code_fences():
     from ragbench.models.providers.anthropic import AnthropicLLM
 
     client = FakeAnthropic(json.loads((FIXTURES / "text_response.json").read_text()))
-    result = AnthropicLLM("claude-haiku-4-5", client=client).generate(
+    result = AnthropicLLM("claude-haiku-5-5", client=client).generate(
         [{"role": "system", "content": "judge"}, {"role": "user", "content": "go"}], json_mode=True
     )
 
@@ -290,7 +293,7 @@ def test_anthropic_transient_errors_are_retried_with_the_shared_retry_wrapper(mo
     ok = json.loads((FIXTURES / "text_response.json").read_text())
     client = FakeAnthropic(RateLimitError("slow down"), TransientModelError("overloaded"), ok)
 
-    result = AnthropicLLM("claude-haiku-4-5", client=client).generate([{"role": "user", "content": "hi"}])
+    result = AnthropicLLM("claude-haiku-5-5", client=client).generate([{"role": "user", "content": "hi"}])
 
     assert len(client.calls) == 3 and result.finish_reason == "stop"
 
@@ -345,7 +348,7 @@ def test_missing_optional_extras_raise_an_actionable_import_error(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
 
     with pytest.raises(ImportError, match=r"ragbench\[anthropic\]"):
-        create_llm("anthropic:claude-haiku-4-5")
+        create_llm("anthropic:claude-haiku-5-5")
     from ragbench.models.embeddings import create_embedding_model
 
     with pytest.raises(ImportError, match=r"ragbench\[local\]"):
@@ -365,7 +368,7 @@ def test_cli_shows_the_missing_extra_hint_intact_and_exits_2(tmp_path, monkeypat
             {
                 "run": {"name": "x", "output_dir": str(tmp_path / "out")},
                 "dataset": {"documents_path": str(root / "docs"), "questions_path": str(root / "questions.jsonl"), "qrels_path": str(root / "qrels.jsonl")},
-                "systems": [{"type": "bm25", "models": {"generator": "anthropic:claude-haiku-4-5"}}],
+                "systems": [{"type": "bm25", "models": {"generator": "anthropic:claude-haiku-5-5"}}],
                 "evaluation": {"max_questions": 1, "judge_enabled": False},
             }
         )
@@ -505,9 +508,9 @@ def test_endpoint_prices_can_be_set_by_ref_endpoint_model_or_model_but_never_inh
 
 
 def test_provider_prefixed_names_resolve_to_the_bare_model_price():
-    assert cost.estimate_model_cost("anthropic:claude-haiku-4-5", 1_000_000, 0) == cost.estimate_model_cost("claude-haiku-4-5", 1_000_000, 0) == 1.0
-    assert cost.estimate_model_cost("claude-haiku-4-5-20251001", 1_000_000, 0) == 1.0  # dated snapshot of a priced alias
-    assert cost.estimate_model_cost("openai:gpt-6-luna", 1_000_000, 0) == 0.10
+    assert cost.estimate_model_cost("anthropic:claude-sonnet-5-5", 1_000_000, 0) == cost.estimate_model_cost("claude-sonnet-5-5", 1_000_000, 0) == 2.0
+    assert cost.estimate_model_cost("claude-sonnet-5-5-20260928", 1_000_000, 0) == 2.0  # dated snapshot of a priced alias
+    assert cost.estimate_model_cost("openai:gpt-6-luna", 100_000, 0) == pytest.approx(0.01)
 
 
 # --- run mode, credentials, warm-up -------------------------------------------------------------
@@ -515,7 +518,7 @@ def test_provider_prefixed_names_resolve_to_the_bare_model_price():
 
 def test_run_mode_is_live_when_any_used_model_can_actually_be_reached(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
-    claude = _config(tmp_path, [{"type": "bm25", "models": {"generator": "anthropic:claude-haiku-4-5"}}], judge_enabled=False)
+    claude = _config(tmp_path, [{"type": "bm25", "models": {"generator": "anthropic:claude-haiku-5-5"}}], judge_enabled=False)
     local_only = _config(
         tmp_path,
         [{"type": "vector", "models": {"generator": "openai_compatible:ollama/m", "embedding": "local:BAAI/bge-small-en-v1.5"}}],
@@ -533,7 +536,7 @@ def test_run_mode_is_live_when_any_used_model_can_actually_be_reached(tmp_path, 
 def test_a_live_run_refuses_to_silently_mix_real_and_mock_models(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
     monkeypatch.setenv("OPENAI_API_KEY", "")
-    cfg = _config(tmp_path, [{"type": "bm25", "models": {"generator": "anthropic:claude-haiku-4-5"}}], judge="gpt-6-luna")
+    cfg = _config(tmp_path, [{"type": "bm25", "models": {"generator": "anthropic:claude-haiku-5-5"}}], judge="gpt-6-luna")
 
     assert resolve_run_mode(cfg, force_mock=False) == "live"
     (problem,) = missing_credentials(cfg)
@@ -543,10 +546,10 @@ def test_a_live_run_refuses_to_silently_mix_real_and_mock_models(tmp_path, monke
 def test_unused_embedding_defaults_and_a_disabled_judge_do_not_demand_credentials(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-not-real")
     monkeypatch.setenv("OPENAI_API_KEY", "")
-    cfg = _config(tmp_path, [{"type": "bm25", "models": {"generator": "anthropic:claude-haiku-4-5"}}], judge_enabled=False)
+    cfg = _config(tmp_path, [{"type": "bm25", "models": {"generator": "anthropic:claude-haiku-5-5"}}], judge_enabled=False)
 
     refs = collect_model_refs(cfg)
-    assert refs.llm == ["anthropic:claude-haiku-4-5"] and refs.embedding == []
+    assert refs.llm == ["anthropic:claude-haiku-5-5"] and refs.embedding == []
     assert missing_credentials(cfg) == []
 
 
@@ -554,7 +557,7 @@ def test_only_providers_that_are_referenced_get_their_sdk_warmed_up(tmp_path):
     openai_only = _config(tmp_path, [{"type": "bm25"}])
     mixed = _config(
         tmp_path,
-        [{"type": "vector", "models": {"generator": "anthropic:claude-haiku-4-5", "embedding": "local:BAAI/bge-small-en-v1.5"}}],
+        [{"type": "vector", "models": {"generator": "anthropic:claude-haiku-5-5", "embedding": "local:BAAI/bge-small-en-v1.5"}}],
     )
     assert "anthropic" not in warm_up_modules(openai_only) and "sentence_transformers" not in warm_up_modules(openai_only)
     assert {"anthropic", "sentence_transformers"} <= set(warm_up_modules(mixed))

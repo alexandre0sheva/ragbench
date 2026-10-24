@@ -29,6 +29,14 @@ class CachedLLM(LLM):
     def provider(self) -> str:  # type: ignore[override]
         return self.inner.provider
 
+    @property
+    def supports_tools(self) -> bool:  # type: ignore[override]
+        return self.inner.supports_tools
+
+    @property
+    def bills_from_response(self) -> bool:  # type: ignore[override]
+        return self.inner.bills_from_response
+
     def generate(
         self,
         messages: list[dict[str, Any]],
@@ -56,13 +64,16 @@ class CachedLLM(LLM):
                 text, latency_ms = str(payload["text"]), float(payload["latency_ms"])
                 tool_calls = [ToolCall(str(c["id"]), str(c["name"]), dict(c["arguments"])) for c in payload.get("tool_calls", [])]
                 finish_reason = payload.get("finish_reason")
+                billed = payload.get("billed_cost_usd")
+                billed_cost = None if billed is None else float(billed)
             except (ValueError, KeyError, TypeError) as exc:
                 logger.warning("Ignoring unreadable LLM cache entry: %s", exc)
             else:
                 cost = CostBreakdown(
                     llm_prompt_tokens=prompt_tokens,
                     llm_completion_tokens=completion_tokens,
-                    llm_cost=estimate_model_cost(self.model_name, prompt_tokens, completion_tokens),
+                    # A provider that bills from its response (OpenRouter) is replayed at what the original call was billed.
+                    llm_cost=billed_cost if billed_cost is not None else estimate_model_cost(self.model_name, prompt_tokens, completion_tokens),
                 )
                 runtime.disk.record_saved("llm", cost.total_cost)
                 return LLMResult(
@@ -80,5 +91,7 @@ class CachedLLM(LLM):
             "tool_calls": [{"id": c.id, "name": c.name, "arguments": c.arguments} for c in result.tool_calls],
             "finish_reason": result.finish_reason,
         }
+        if self.inner.bills_from_response:
+            payload["billed_cost_usd"] = result.cost.llm_cost
         runtime.disk.put("llm", key, json.dumps(payload).encode("utf-8"), meta={"model": self.model_name})
         return result

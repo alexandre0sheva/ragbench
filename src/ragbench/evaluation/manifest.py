@@ -72,7 +72,9 @@ def build_manifest(
     models_used: list[str],
     started_utc: str,
     finished_utc: str,
+    model_settings: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    """`model_settings` holds request settings that change a model's answers (OpenRouter reasoning and provider pinning), per ref."""
     return {
         "ragbench_version": __version__,
         "python": platform.python_version(),
@@ -83,6 +85,7 @@ def build_manifest(
         "dataset_hash": dataset_digest,
         "mode": mode,
         "models_used": models_used,
+        **({"model_settings": model_settings} if model_settings else {}),
         "seed": None,  # Placeholder: no component is randomized yet; Task 22 (bootstrap) is the first seeded step.
         "started_utc": started_utc,
         "finished_utc": finished_utc,

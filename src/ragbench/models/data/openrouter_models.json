@@ -1,0 +1,448 @@
+{
+ "source": "https://openrouter.ai/api/v1/models",
+ "fetched_at": "2026-10-24",
+ "models": {
+  "anthropic/claude-haiku-5.5": {
+   "name": "Anthropic: Claude Haiku 5.5",
+   "hugging_face_id": null,
+   "context_length": 1000000,
+   "price": {
+    "input": 0.1,
+    "output": 0.5,
+    "tiers": [
+     {
+      "input": 0.1,
+      "output": 0.5,
+      "max_prompt_tokens": 100000
+     },
+     {
+      "input": 0.5,
+      "output": 2.5
+     }
+    ]
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low",
+     "none"
+    ]
+   }
+  },
+  "deepseek/deepseek-v4-pro-0813": {
+   "name": "DeepSeek: DeepSeek V4 Pro 0813",
+   "hugging_face_id": "deepseek-ai/DeepSeek-V4-Pro-0813",
+   "context_length": 1048576,
+   "price": {
+    "input": 0.66,
+    "output": 1.98
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "high",
+     "low",
+     "none"
+    ]
+   }
+  },
+  "deepseek/deepseek-v4.1-flash": {
+   "name": "DeepSeek: DeepSeek V4.1 Flash",
+   "hugging_face_id": "deepseek-ai/DeepSeek-V4.1-Flash",
+   "context_length": 1048576,
+   "price": {
+    "input": 0.02,
+    "output": 1.0
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "high",
+     "low",
+     "none"
+    ]
+   }
+  },
+  "google/gemini-3.8-flash": {
+   "name": "Google: Gemini 3.8 Flash",
+   "hugging_face_id": null,
+   "context_length": 1048576,
+   "price": {
+    "input": 0.825,
+    "output": 4.125
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": true,
+    "supported_efforts": [
+     "high",
+     "medium",
+     "low"
+    ]
+   }
+  },
+  "minimax/minimax-m3": {
+   "name": "MiniMax: MiniMax M3",
+   "hugging_face_id": "MiniMaxAI/Minimax-M3",
+   "context_length": 1048576,
+   "price": {
+    "input": 0.3,
+    "output": 1.2
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": []
+   }
+  },
+  "minimax/minimax-m3.1-flash": {
+   "name": "MiniMax: MiniMax M3.1 Flash",
+   "hugging_face_id": "MiniMaxAI/MiniMax-M3.1-Flash",
+   "context_length": 1048576,
+   "price": {
+    "input": 0.15,
+    "output": 0.6
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": true,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low"
+    ]
+   }
+  },
+  "mistralai/mistral-small-2603": {
+   "name": "Mistral: Mistral Small 4",
+   "hugging_face_id": "mistralai/Mistral-Small-4-119B-2603",
+   "context_length": 262144,
+   "price": {
+    "input": 0.15,
+    "output": 0.6
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": [
+     "high",
+     "none"
+    ]
+   }
+  },
+  "moonshotai/kimi-k3": {
+   "name": "MoonshotAI: Kimi K3",
+   "hugging_face_id": "moonshotai/Kimi-K3",
+   "context_length": 1048576,
+   "price": {
+    "input": 0.239,
+    "output": 10.8
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "high",
+     "low",
+     "none"
+    ]
+   }
+  },
+  "openai/gpt-6-luna": {
+   "name": "OpenAI: GPT-6 Luna",
+   "hugging_face_id": null,
+   "context_length": 1050000,
+   "price": {
+    "input": 0.1,
+    "output": 0.5,
+    "tiers": [
+     {
+      "input": 0.1,
+      "output": 0.5,
+      "max_prompt_tokens": 272000
+     },
+     {
+      "input": 0.2,
+      "output": 0.75
+     }
+    ]
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": [
+     "max",
+     "xhigh",
+     "high",
+     "medium",
+     "low",
+     "none"
+    ]
+   }
+  },
+  "qwen/qwen3.8-2.4t-a95b": {
+   "name": "Qwen: Qwen3.8 2.4T A95B",
+   "hugging_face_id": "Qwen/Qwen3.8-2.4T-A95B",
+   "context_length": 1048576,
+   "price": {
+    "input": 2.0,
+    "output": 6.0
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": true,
+    "supported_efforts": [
+     "xhigh",
+     "medium",
+     "low"
+    ]
+   }
+  },
+  "qwen/qwen3.8-flash": {
+   "name": "Qwen: Qwen3.8 Flash",
+   "hugging_face_id": "Qwen/Qwen3.8-Flash-Next",
+   "context_length": 1000000,
+   "price": {
+    "input": 0.15,
+    "output": 0.47
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": []
+   }
+  },
+  "x-ai/grok-4.7": {
+   "name": "SpaceXAI: Grok 4.7",
+   "hugging_face_id": null,
+   "context_length": 500000,
+   "price": {
+    "input": 2.0,
+    "output": 6.0,
+    "tiers": [
+     {
+      "input": 2.0,
+      "output": 6.0,
+      "max_prompt_tokens": 200000
+     },
+     {
+      "input": 4.0,
+      "output": 12.0
+     }
+    ]
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": true,
+    "supported_efforts": [
+     "xhigh",
+     "high",
+     "medium",
+     "low"
+    ]
+   }
+  },
+  "xiaomi/mimo-v2.6-flash": {
+   "name": "Xiaomi: MiMo-V2.6-Flash",
+   "hugging_face_id": "XiaomiMiMo/MiMo-V2.6-Flash-RL",
+   "context_length": 1050000,
+   "price": {
+    "input": 0.14,
+    "output": 0.28
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": []
+   }
+  },
+  "xiaomi/mimo-v2.6-pro": {
+   "name": "Xiaomi: MiMo-V2.6-Pro",
+   "hugging_face_id": "XiaomiMiMo/MiMo-V2.6-Pro-RL",
+   "context_length": 1050000,
+   "price": {
+    "input": 0.435,
+    "output": 0.87
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": false,
+    "supported_efforts": []
+   }
+  },
+  "z-ai/glm-5.3": {
+   "name": "Z.ai: GLM 5.3",
+   "hugging_face_id": "zai-org/GLM-5.3",
+   "context_length": 1048576,
+   "price": {
+    "input": 0.079,
+    "output": 1.4
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": true,
+    "supported_efforts": [
+     "max",
+     "high",
+     "low"
+    ]
+   }
+  },
+  "z-ai/glm-5.3-flash": {
+   "name": "Z.ai: GLM 5.3 Flash",
+   "hugging_face_id": "zai-org/GLM-5.3-Flash",
+   "context_length": 1048576,
+   "price": {
+    "input": 0.15,
+    "output": 0.5
+   },
+   "supported_parameters": [
+    "max_tokens",
+    "reasoning",
+    "response_format",
+    "structured_outputs",
+    "temperature",
+    "tool_choice",
+    "tools"
+   ],
+   "reasoning": {
+    "mandatory": true,
+    "supported_efforts": [
+     "max",
+     "high",
+     "low"
+    ]
+   }
+  }
+ }
+}
