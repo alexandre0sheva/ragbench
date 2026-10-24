@@ -377,7 +377,8 @@ def build_report(run_dir: Path, max_embedded_mb: float = DEFAULT_MAX_EMBEDDED_MB
     agents = _agents(summary, order, tools, routes)
     audit_rows = _read_csv(run_dir / "qrels_audit.csv")
     audit = _qrels_audit(audit_rows, order)
-    questions = build_questions(rows_all, order, audit_rows, int(max_embedded_mb * 1024 * 1024)) if rows_all else None
+    first_trial = [row for row in rows_all if not row.get("trial")]  # with repeated trials the explorer shows each question's first answer
+    questions = build_questions(first_trial, order, audit_rows, int(max_embedded_mb * 1024 * 1024)) if first_trial else None
 
     cost_rows = _read_csv(run_dir / "cost_breakdown.csv")
     documents = max((int(r["num_documents"]) for r in cost_rows if r.get("stage") == "ingestion" and r.get("num_documents") is not None), default=None)

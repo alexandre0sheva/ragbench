@@ -18,7 +18,7 @@ from ragbench.datasets.schema import Question
 class EvaluationPlan:
     systems: list[SystemConfig]  # in config order, which is the order of every output row
     questions: list[Question]  # in dataset order
-    trials: int = 1  # times each system answers each question; the runner supports one trial so far
+    trials: int = 1  # times each system answers each question (`evaluation.trials`)
 
     def __post_init__(self) -> None:
         if self.trials < 1:
@@ -26,13 +26,19 @@ class EvaluationPlan:
 
     @classmethod
     def from_config(cls, config: ExperimentConfig, questions: list[Question]) -> EvaluationPlan:
-        """Every configured system on the dataset's questions, the first `evaluation.max_questions` of them when that is set (0 = all)."""
+        """Every configured system on the dataset's questions (the first `evaluation.max_questions` of them when that is set, 0 = all),
+        `evaluation.trials` times each."""
         limit = config.evaluation.max_questions
-        return cls(systems=list(config.systems), questions=questions[:limit] if limit else list(questions))
+        return cls(systems=list(config.systems), questions=questions[:limit] if limit else list(questions), trials=config.evaluation.trials)
 
     @property
     def num_questions(self) -> int:
         return len(self.questions)
+
+    @property
+    def num_answers(self) -> int:
+        """Answers each system gives: one per question and trial."""
+        return len(self.questions) * self.trials
 
     def without_systems(self, names: Collection[str]) -> EvaluationPlan:
         """This plan minus the named systems (e.g. the ones an earlier attempt of the run already finished)."""

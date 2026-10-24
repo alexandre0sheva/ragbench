@@ -10,23 +10,35 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
+
+import numpy as np
 
 from ragbench.cache import activate_cache
 from ragbench.config.schema import SystemConfig
 from ragbench.evaluation.plan import EvaluationPlan
+from ragbench.evaluation.stats import QUANTILE_MIN_N, quantile_ci
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
 from ragbench.runtime.parallel import evenly_sample, ordered_parallel_map
 from ragbench.runtime.progress import ProgressListener
 
 logger = logging.getLogger(__name__)
 
+# `latency_probe_questions: auto`: start with the fewest probe calls whose p95 has an upper bound at all, add more in steps until the
+# p95's exact 95% interval lies within +-AUTO_PROBE_TOLERANCE of it, and stop at AUTO_PROBE_MAX calls (questions are re-asked when a
+# system has fewer).
+AUTO_PROBE_START = QUANTILE_MIN_N
+AUTO_PROBE_STEP = 24
+AUTO_PROBE_MAX = 120
+AUTO_PROBE_TOLERANCE = 0.15
+
+
 @dataclass(frozen=True)
 class ExecutionSettings:
     max_workers: int = 4
     system_workers: int = 1
     ingest_workers: int = 4
-    latency_probe_questions: int = 5
+    latency_probe_questions: int | Literal["auto"] = 5
 
 
 class QuestionEvaluator(Protocol):
@@ -34,9 +46,9 @@ class QuestionEvaluator(Protocol):
 
     def create_system(self, system_config: SystemConfig) -> BaseRAGSystem: ...
 
-    def evaluate_single_question(self, system: BaseRAGSystem, system_config: SystemConfig, question: Any) -> dict[str, Any]: ...
+    def evaluate_single_question(self, system: BaseRAGSystem, system_config: SystemConfig, question: Any, trial: int) -> dict[str, Any]: ...
 
-    def error_result(self, system: BaseRAGSystem, system_config: SystemConfig, question: Any, error: dict[str, str]) -> dict[str, Any]: ...
+    def error_result(self, system: BaseRAGSystem, system_config: SystemConfig, question: Any, error: dict[str, str], trial: int) -> dict[str, Any]: ...
 
     def answer_for_probe(self, system: BaseRAGSystem, question: Any) -> AnswerResult: ...
 
@@ -58,7 +70,7 @@ class SystemOutcome:
     system_type: str
     system: BaseRAGSystem | None  # None when the system was never started (the budget ran out first)
     ingestion_row: dict[str, Any] | None
-    results: list[dict[str, Any]]  # per question; `{"skipped": True}` for a question the budget stopped before it started
+    results: list[dict[str, Any]]  # per question and trial (question-major); `{"skipped": True}` for one the budget stopped before it started
     runtime_row: dict[str, Any]
     restored: bool = False  # loaded from a checkpoint of an earlier attempt of this run instead of being run now
 
@@ -101,13 +113,11 @@ class SystemRunner:
     # -- main pass ------------------------------------------------------------------------------
 
     def run_all(self, plan: EvaluationPlan, documents: list[Any]) -> list[SystemOutcome]:
-        """Every system of `plan` on every question of `plan`, as outcomes in the plan's system order."""
-        if plan.trials != 1:
-            raise ValueError(f"The runner supports one trial per question, the plan asks for {plan.trials}.")
+        """Every system of `plan` on every question of `plan`, `plan.trials` times each, as outcomes in the plan's system order."""
         total = len(plan.systems)
 
         def run_one(pair: tuple[int, SystemConfig]) -> SystemOutcome:
-            outcome = self.run_system(pair[0], total, pair[1], documents, plan.questions)
+            outcome = self.run_system(pair[0], total, pair[1], documents, plan.questions, plan.trials)
             if self.on_system_done is not None:
                 self.on_system_done(outcome)
             return outcome
@@ -119,7 +129,9 @@ class SystemRunner:
             thread_name_prefix="ragbench-system",
         )
 
-    def run_system(self, index: int, total: int, system_config: SystemConfig, documents: list[Any], questions: list[Any]) -> SystemOutcome:
+    def run_system(
+        self, index: int, total: int, system_config: SystemConfig, documents: list[Any], questions: list[Any], trials: int = 1
+    ) -> SystemOutcome:
         name = system_config.resolved_name
         system_start = perf_counter()
         self.progress.system_started(name, index, total)
@@ -153,15 +165,16 @@ class SystemRunner:
         else:
             self.progress.ingestion_finished(system.name, 0, ingestion_wall_time_ms)
         question_start = perf_counter()
+        work = [(question, trial) for question in questions for trial in range(trials)]  # a question's trials stay next to each other
         if ingest_error is not None:
             # A broken system must not take the other systems' (possibly paid-for) results down with it.
-            results = [self.evaluator.error_result(system, system_config, q, ingest_error) for q in questions]
-            for done in range(1, len(questions) + 1):
-                self.progress.question_finished(system.name, done, len(questions))
+            results = [self.evaluator.error_result(system, system_config, q, ingest_error, trial) for q, trial in work]
+            for done in range(1, len(work) + 1):
+                self.progress.question_finished(system.name, done, len(work))
         else:
             results = ordered_parallel_map(
-                lambda question: self.evaluator.evaluate_single_question(system, system_config, question),
-                questions,
+                lambda item: self.evaluator.evaluate_single_question(system, system_config, item[0], item[1]),
+                work,
                 workers=self.settings.max_workers,
                 on_done=lambda done, count: self.progress.question_finished(system.name, done, count),
                 thread_name_prefix=f"ragbench-{system.name}",
@@ -203,18 +216,50 @@ class SystemRunner:
             for outcome in outcomes:
                 if outcome.system is None:
                     continue
-                ok_ids = [r["per_question"]["question_id"] for r in outcome.results if not r.get("skipped") and r["per_question"]["error"] is None]
+                ok_ids = list(dict.fromkeys(r["per_question"]["question_id"] for r in outcome.results if not r.get("skipped") and r["per_question"]["error"] is None))
+                if self.settings.latency_probe_questions == "auto":
+                    results[outcome.name] = self._probe_until_stable(outcome, ok_ids, by_id)
+                    continue
                 chosen = evenly_sample(ok_ids, self.settings.latency_probe_questions)
                 probe = ProbeResult()
                 for done, question_id in enumerate(chosen, start=1):
-                    try:
-                        answer = self.evaluator.answer_for_probe(outcome.system, by_id[question_id])
-                    except Exception as exc:
-                        logger.warning("Latency probe failed for %s / %s: %s", outcome.name, question_id, exc)
-                    else:
-                        probe.latencies_ms.append(answer.latency_ms)
-                        probe.cost_usd += answer.cost.total_cost
-                        probe.calls += 1
+                    if not self._probe_once(outcome, by_id[question_id], probe):
+                        break
                     self.progress.latency_probe(outcome.name, done, len(chosen))
                 results[outcome.name] = probe
         return results
+
+    def _probe_once(self, outcome: SystemOutcome, question: Any, probe: ProbeResult) -> bool:
+        """One probe call, charged to the spending cap like everything else the run pays for; False (nothing asked) once the cap is reached."""
+        assert outcome.system is not None
+        if self.evaluator.budget_exhausted():
+            return False
+        try:
+            answer = self.evaluator.answer_for_probe(outcome.system, question)
+        except Exception as exc:
+            logger.warning("Latency probe failed for %s / %s: %s", outcome.name, question.id, exc)
+        else:
+            probe.latencies_ms.append(answer.latency_ms)
+            probe.cost_usd += answer.cost.total_cost
+            probe.calls += 1
+            self.evaluator.charge(answer.cost.total_cost)
+        return True
+
+    def _probe_until_stable(self, outcome: SystemOutcome, ok_ids: list[str], by_id: dict[str, Any]) -> ProbeResult:
+        """`latency_probe_questions: auto`: probe in steps until the p95 is known to within +-AUTO_PROBE_TOLERANCE, or AUTO_PROBE_MAX calls."""
+        probe = ProbeResult()
+        if not ok_ids:
+            return probe
+        order = [ok_ids[i] for i in np.random.default_rng(0).permutation(len(ok_ids))]  # spread over the dataset, reproducibly
+        attempts, target = 0, AUTO_PROBE_START
+        while attempts < AUTO_PROBE_MAX:
+            while attempts < target:
+                if not self._probe_once(outcome, by_id[order[attempts % len(order)]], probe):
+                    return probe
+                attempts += 1
+                self.progress.latency_probe(outcome.name, attempts, AUTO_PROBE_MAX)
+            p95, lo, hi = quantile_ci(probe.latencies_ms, 95)
+            if p95 is not None and lo is not None and hi is not None and max(p95 - lo, hi - p95) <= AUTO_PROBE_TOLERANCE * p95:
+                break
+            target = min(AUTO_PROBE_MAX, target + AUTO_PROBE_STEP)
+        return probe

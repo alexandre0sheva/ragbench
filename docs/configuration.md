@@ -48,6 +48,7 @@ evaluation:
   max_workers: 4
   embedding_cache: true
   # system_workers: 1, ingest_workers: 4, latency_probe_questions: 5  (see Concurrency)
+  # trials: 1  (see Statistics)
   # judge: {...} (see Judge), stats: {n_boot: 2000, seed: 0, baseline: null} (see Statistics)
 # selection: {profile: balanced, constraints: {...}} (see Selection)
 # report: {max_embedded_mb: 4}  (see Report)
@@ -133,6 +134,13 @@ evaluation:
     n_boot: 2000     # bootstrap resamples (at least 100)
     seed: 0          # same results + seed = same intervals and p-values
     baseline: bm25   # system the others are compared with; default: the cheapest ($/Q). Must be a system name from this config
+```
+
+`evaluation.trials` (default `1`) answers and judges every question that many times, each a fresh answer rather than a cache replay, so the intervals and comparisons also cover run-to-run randomness and the summary gains pass@k / pass^k and how stable each rank is ([methodology.md](methodology.md#repeated-trials)). It multiplies the question cost (ingestion is paid once); `ragbench estimate` shows the total. In paid runs, start with `trials: 1` and repeat the agentic systems only.
+
+```yaml
+evaluation:
+  trials: 3
 ```
 
 ## Selection
@@ -401,7 +409,7 @@ Waiting for a slot never holds up other threads, and a single request larger tha
 
 ### Latency measurement
 
-Latency measured while many questions run at once includes time spent queueing behind other requests. So **live** runs finish with a *latency probe*: `evaluation.latency_probe_questions` (default `5`; `0` disables it) questions per system, spread evenly across the dataset, are re-asked one at a time after everything else is done, with the disk cache bypassed. The leaderboard's Latency column then shows the probe's mean, `p95` is added, and `metrics_summary.csv` gains `latency_ms_p50`, `latency_ms_p95`, `latency_source` (`probe` or `concurrent`) and `avg_latency_concurrent_ms`. Probe answers are not scored and are not charged to any system; their cost appears as `probe_cost_usd` in `run_summary.json` and is included in `real_spend_usd`. Mock runs skip the probe, and if you disable it in a live run the reports say latency was measured under concurrency.
+Latency measured while many questions run at once includes time spent queueing behind other requests. So **live** runs finish with a *latency probe*: `evaluation.latency_probe_questions` (default `5`; `0` disables it) questions per system, spread evenly across the dataset, are re-asked one at a time after everything else is done, with the disk cache bypassed. `latency_probe_questions: auto` keeps adding probe calls until the p95 is known to within ±15%: at least 72 calls per system (the fewest that bound a p95 from above) and at most 120 ([methodology.md](methodology.md#latency-measurement)); it costs far more than the default, so use it when latency decides the choice. The leaderboard's Latency column then shows the probe's mean, `p95` is added with its interval, and `metrics_summary.csv` gains `latency_ms_p50`, `latency_ms_p95`, `latency_ms_p95_ci_lo`, `latency_ms_p95_ci_hi`, `latency_source` (`probe` or `concurrent`) and `avg_latency_concurrent_ms`. Probe answers are not scored and are not charged to any system; their cost appears as `probe_cost_usd` in `run_summary.json` and is included in `real_spend_usd`. It does count toward `evaluation.max_cost_usd` (the probe stops at the cap) and is part of `ragbench estimate`'s total. Mock runs skip the probe, and if you disable it in a live run the reports say latency was measured under concurrency.
 
 ## Tools
 

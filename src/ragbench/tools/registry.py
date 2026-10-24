@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import threading
 from collections.abc import Sequence
@@ -137,7 +138,8 @@ def _run_with_timeout(name: str, tool: Tool, arguments: dict[str, Any], ctx: Too
         except Exception as exc:
             outcome.append(exc)
 
-    thread = threading.Thread(target=target, name=f"ragbench-tool-{name}", daemon=True)
+    # In a copy of the caller's context, so the tool sees the answer's trial (a tool that calls a model then gets a fresh answer per trial).
+    thread = threading.Thread(target=contextvars.copy_context().run, args=(target,), name=f"ragbench-tool-{name}", daemon=True)
     thread.start()
     thread.join(timeout)
     if thread.is_alive():  # the thread cannot be killed; as a daemon it will not keep the process alive

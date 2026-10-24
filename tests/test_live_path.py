@@ -105,7 +105,9 @@ def test_live_run_with_parallel_systems_retries_caches_and_probes(tmp_path):
     pd.testing.assert_series_equal(summary.loc["bm25", cols], second.loc["bm25", cols])
 
     # The spending guard counted every charge made on those worker threads: its total is the run's charged cost.
-    assert run1["budget"]["stopped"] is False and run1["budget"]["spent_usd"] == pytest.approx(run1["cache"]["charged_cost_usd"], rel=0.01)
+    # The cap counts what the systems were charged plus what the latency probe spent.
+    expected_spent = run1["cache"]["charged_cost_usd"] + run1["execution"]["probe_cost_usd"]
+    assert run1["budget"]["stopped"] is False and run1["budget"]["spent_usd"] == pytest.approx(expected_spent, rel=0.01)
 
     # Live runs get a clean one-at-a-time latency measurement.
     assert (summary["latency_source"] == "probe").all() and run1["execution"]["probe_calls"] == 12

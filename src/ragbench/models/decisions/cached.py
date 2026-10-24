@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from time import perf_counter
 
 from ragbench.cache import active_cache, cache_key
+from ragbench.cache.trial import trial_key
 from ragbench.models.cost import CostBreakdown, estimate_decision_cost
 from ragbench.models.decisions.base import DecisionModel, DecisionResult, Predicate
 
@@ -30,7 +31,7 @@ class CachedDecisionModel(DecisionModel):
         if runtime is None or not runtime.config.llm:
             return self.inner.decide(text, predicates)
         key = cache_key(
-            "decision", provider=self.inner.provider, model=self.model_name, text=text, predicates=[[p.name, p.instructions] for p in predicates]
+            "decision", provider=self.inner.provider, model=self.model_name, text=text, predicates=[[p.name, p.instructions] for p in predicates], **trial_key()
         )
         stored = runtime.disk.get("decision", key)
         if stored is not None:

@@ -266,8 +266,12 @@ class EvaluationConfig(BaseModel):
     system_workers: int = Field(default=1, ge=1)
     # Parallel LLM enrichment calls / embedding batches during ingestion, per system.
     ingest_workers: int = Field(default=4, ge=1)
-    # Questions re-run one at a time with the disk cache off, after the parallel pass, for clean latency (live runs only).
-    latency_probe_questions: int = Field(default=5, ge=0)
+    # Questions re-run one at a time with the disk cache off, after the parallel pass, for clean latency (live runs only). `auto` keeps
+    # adding questions until the p95's confidence interval is within +-15% of it, up to a cap (docs/methodology.md#latency).
+    latency_probe_questions: Annotated[int, Field(ge=0)] | Literal["auto"] = 5
+    # Times each system answers each question. Above 1, every trial is a fresh answer (the trial index is part of the cache key), the
+    # per-question score is the mean over trials, and intervals and comparisons resample trials as well as questions.
+    trials: int = Field(default=1, ge=1)
     # Share corpus embeddings across systems in one run. Hits are still charged
     # to each system at standalone prices; real savings appear in run_summary.
     embedding_cache: bool = True

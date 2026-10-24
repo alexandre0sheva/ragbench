@@ -16,6 +16,7 @@ from time import perf_counter
 from typing import Any
 
 from ragbench.cache import CacheRuntime, activate_cache, open_cache_runtime
+from ragbench.cache.trial import trial_scope
 from ragbench.config.loader import load_config, load_config_dict
 from ragbench.config.schema import ExperimentConfig, SystemConfig
 from ragbench.config.sweep import expand_sweeps
@@ -251,8 +252,8 @@ class BenchmarkEvaluator:
         if outcomes:
             outputs.write_outputs(self, run_rows, run_wall_time_ms)
         if unfinished:
-            raise self._budget_stop(outcomes, unfinished, plan.num_questions, run_wall_time_ms)
-        failed = failed_systems(run_rows.per_question, plan.num_questions, self.config.evaluation.max_error_rate)
+            raise self._budget_stop(outcomes, unfinished, plan.num_answers, run_wall_time_ms)
+        failed = failed_systems(run_rows.per_question, plan.num_answers, self.config.evaluation.max_error_rate)
         if failed:
             raise BenchmarkRunError(self.output_dir, failed, self.config.evaluation.max_error_rate)
         return self.output_dir
@@ -292,7 +293,7 @@ class BenchmarkEvaluator:
         for position, system_config in enumerate(plan.systems, start=1):
             name = system_config.resolved_name
             checkpoint = self.checkpoints.load(name, self._context_hash(system_config))
-            if checkpoint is None or len(checkpoint.results) != plan.num_questions:
+            if checkpoint is None or len(checkpoint.results) != plan.num_answers:
                 continue
             restored[name] = SystemOutcome(position, name, checkpoint.system_type, None, checkpoint.ingestion_row, checkpoint.results, checkpoint.runtime_row, restored=True)
             self.models_used.update(checkpoint.models_used)
@@ -347,7 +348,8 @@ class BenchmarkEvaluator:
         return modules_to_warm_up(self.config, self.mode)
 
     def _should_probe(self, questions: list) -> bool:
-        return self.mode == "live" and self.config.evaluation.latency_probe_questions > 0 and bool(questions)
+        size = self.config.evaluation.latency_probe_questions
+        return self.mode == "live" and (size == "auto" or size > 0) and bool(questions)
 
     # -- QuestionEvaluator protocol (used by runtime.executor.SystemRunner) -----------------------
 
@@ -363,20 +365,24 @@ class BenchmarkEvaluator:
         self.generator_models[system.name] = (system.llm.provider, system.llm.model_name)
         return system
 
-    def evaluate_single_question(self, system: BaseRAGSystem, system_config: SystemConfig, question) -> dict[str, Any]:
+    def evaluate_single_question(self, system: BaseRAGSystem, system_config: SystemConfig, question, trial: int = 0) -> dict[str, Any]:
         assert self.judge is not None
         if self.budget.exhausted:  # the cap is reached: nothing new is started (questions already running finish)
             return {"skipped": True}
-        result = question_runner.evaluate_question(system, system_config, question, self._qrels.get(question.id, {}), self.judge, self.config.evaluation)
+        with trial_scope(trial):  # every model call of this answer, and of its judging, is keyed to the trial
+            result = question_runner.evaluate_question(system, system_config, question, self._qrels.get(question.id, {}), self.judge, self.config.evaluation)
         self.budget.charge(float(result["per_question"]["cost"]["total_cost"]))
-        return result
+        return self._tagged(result, trial)
 
     def answer_for_probe(self, system: BaseRAGSystem, question) -> AnswerResult:
         """Answer `question` exactly as the main pass does (same depth and context size), without scoring it."""
         return question_runner.answer(system, question, self.config.evaluation)
 
-    def error_result(self, system: BaseRAGSystem, system_config: SystemConfig, question, error: dict[str, str]) -> dict[str, Any]:
-        return rows.error_result(system, system_config, question, error)
+    def error_result(self, system: BaseRAGSystem, system_config: SystemConfig, question, error: dict[str, str], trial: int = 0) -> dict[str, Any]:
+        return self._tagged(rows.error_result(system, system_config, question, error), trial)
+
+    def _tagged(self, result: dict[str, Any], trial: int) -> dict[str, Any]:
+        return rows.tag_trial(result, trial) if self.plan is not None and self.plan.trials > 1 else result
 
 
 def _model_names(system: BaseRAGSystem) -> set[str]:

@@ -72,6 +72,7 @@ def _compute_stats(run: BenchmarkEvaluator, per_question_rows: list[dict[str, An
         n_boot=evaluation.stats.n_boot,
         seed=evaluation.stats.seed,
         baseline=evaluation.stats.baseline,
+        trials=run.plan.trials if run.plan is not None else 1,
     )
 
 
@@ -92,7 +93,14 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
     runtime_df.to_csv(out / "system_runtime.csv", index=False)
 
     summary_rows = build_summary(
-        systems, retrieval_df, answer_df, pd.DataFrame(rows.cost), per_question_rows, runtime_df, probe_results=run.probe_results, judge=run.judge
+        systems,
+        retrieval_df,
+        answer_df,
+        pd.DataFrame(rows.cost),
+        per_question_rows,
+        runtime_df,
+        probe_results=run.probe_results,
+        judge=run.judge,
     )
     run_stats = _compute_stats(run, per_question_rows, summary_rows)
     for summary_row in summary_rows:

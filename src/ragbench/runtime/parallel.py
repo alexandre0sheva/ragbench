@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import importlib
 import logging
 from collections.abc import Callable, Iterable, Sequence
@@ -56,7 +57,8 @@ def ordered_parallel_map(
         return results
     ordered: list[Any] = [None] * total
     with ThreadPoolExecutor(max_workers=min(workers, total), thread_name_prefix=thread_name_prefix) as pool:
-        futures: dict[Future[R], int] = {pool.submit(fn, item): index for index, item in enumerate(work)}
+        # Each item runs in a copy of the caller's context, so context variables (the current trial) reach the worker threads.
+        futures: dict[Future[R], int] = {pool.submit(contextvars.copy_context().run, fn, item): index for index, item in enumerate(work)}
         try:
             for done, future in enumerate(as_completed(futures), start=1):
                 ordered[futures[future]] = future.result()

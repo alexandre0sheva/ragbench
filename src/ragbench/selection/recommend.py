@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from ragbench.evaluation.stats import ALPHA, holm_adjust, paired_bootstrap, pareto_front
+from ragbench.evaluation.stats import ALPHA, grouped_paired_bootstrap, holm_adjust, pareto_front
 from ragbench.selection import explain
 from ragbench.selection.constraints import Constraints, SystemFacts, Violation, check_constraints
 from ragbench.selection.scoring import Profile, Weights, efficiency_penalties, resolve_profile, weighted_scores
@@ -95,7 +95,7 @@ class Recommendation:
 @dataclass
 class _Run:
     summary: dict[str, dict[str, Any]]  # system -> metrics_summary row (NaN -> None), in the run's order
-    rows: dict[str, dict[str, dict[str, Any]]]  # system -> question id -> per_question row (successful questions only)
+    rows: dict[str, dict[str, list[dict[str, Any]]]]  # system -> question id -> its per_question rows, one per trial (successful ones only)
     ingestion: dict[str, float]
     mode: str
     primary_k: int
@@ -114,11 +114,11 @@ def _load_run(run_dir: Path) -> _Run:
     summary = {
         str(record["system"]): {key: (None if pd.isna(value) else value) for key, value in record.items()} for record in frame.to_dict("records")
     }
-    rows: dict[str, dict[str, dict[str, Any]]] = {name: {} for name in summary}
+    rows: dict[str, dict[str, list[dict[str, Any]]]] = {name: {} for name in summary}
     for line in rows_path.read_text(encoding="utf-8").splitlines():
         row = json.loads(line)
         if row["error"] is None and row["system"] in rows:
-            rows[row["system"]][row["question_id"]] = row
+            rows[row["system"]].setdefault(row["question_id"], []).append(row)
     ingestion: dict[str, float] = {name: 0.0 for name in summary}
     costs_path = run_dir / "cost_breakdown.csv"
     if costs_path.exists():
@@ -159,15 +159,19 @@ def _quality_candidates(primary_k: int) -> list[tuple[str, str, Any]]:
     ]
 
 
-def _vectors(run: _Run, extract: Any) -> dict[str, dict[str, float]]:
-    found: dict[str, dict[str, float]] = {}
+def _vectors(run: _Run, extract: Any) -> dict[str, dict[str, list[float]]]:
+    """Per system, each question's measured values, one per trial (questions with none are left out)."""
+    found: dict[str, dict[str, list[float]]] = {}
     for system, rows in run.rows.items():
-        values = {question_id: extract(row) for question_id, row in rows.items()}
-        found[system] = {question_id: float(value) for question_id, value in values.items() if value is not None and not math.isnan(float(value))}
+        found[system] = {}
+        for question_id, trials in rows.items():
+            values = [float(value) for row in trials if (value := extract(row)) is not None and not math.isnan(float(value))]
+            if values:
+                found[system][question_id] = values
     return found
 
 
-def _choose_quality(run: _Run) -> tuple[str, str, dict[str, dict[str, float]]]:
+def _choose_quality(run: _Run) -> tuple[str, str, dict[str, dict[str, list[float]]]]:
     """The first metric every system has; failing that, the first one any system has (the others are then not comparable)."""
     candidates = [(metric, label, _vectors(run, extract)) for metric, label, extract in _quality_candidates(run.primary_k)]
     for metric, label, vectors in candidates:
@@ -183,8 +187,13 @@ def _cost_or_inf(value: float | None) -> float:
     return math.inf if value is None else value
 
 
-def _mean(values: dict[str, float]) -> float | None:
-    return float(np.mean(list(values.values()))) if values else None
+def _question_mean(trials: list[float]) -> float:
+    return trials[0] if len(trials) == 1 else float(np.mean(trials))
+
+
+def _mean(values: dict[str, list[float]]) -> float | None:
+    """The mean over questions of each question's mean over its trials."""
+    return float(np.mean([_question_mean(trials) for trials in values.values()])) if values else None
 
 
 # -- constraints that need the run's config -----------------------------------------------------
@@ -368,16 +377,17 @@ def recommend(
     return base
 
 
-def _step_counts(rows: dict[str, dict[str, Any]]) -> tuple[float, float]:
-    """(mean model calls, mean traced steps) per question: how much machinery a system runs. Calls are the steps that used tokens."""
-    if not rows:
+def _step_counts(rows: dict[str, list[dict[str, Any]]]) -> tuple[float, float]:
+    """(mean model calls, mean traced steps) per answer: how much machinery a system runs. Calls are the steps that used tokens."""
+    answers = [row for trials in rows.values() for row in trials]
+    if not answers:
         return 0.0, 0.0
-    llm = [sum(1 for step in row["steps"] if step.get("prompt_tokens", 0) or step.get("completion_tokens", 0)) for row in rows.values()]
-    return float(np.mean(llm)), float(np.mean([len(row["steps"]) for row in rows.values()]))
+    llm = [sum(1 for step in row["steps"] if step.get("prompt_tokens", 0) or step.get("completion_tokens", 0)) for row in answers]
+    return float(np.mean(llm)), float(np.mean([len(row["steps"]) for row in answers]))
 
 
 def _quality_ties(
-    run: _Run, vectors: dict[str, dict[str, float]], feasible: list[str], leader: str, *, merge: bool, alpha: float
+    run: _Run, vectors: dict[str, dict[str, list[float]]], feasible: list[str], leader: str, *, merge: bool, alpha: float
 ) -> dict[str, explain.TieTest]:
     """Does each system's quality differ from the leader's? Paired on shared questions, Holm-adjusted across the systems tested."""
     others = [system for system in feasible if system != leader]
@@ -389,8 +399,8 @@ def _quality_ties(
     for system in others:
         shared = [q for q in vectors[leader] if q in vectors[system]]
         if shared:
-            tests[system] = paired_bootstrap(
-                np.array([vectors[leader][q] for q in shared]), np.array([vectors[system][q] for q in shared]), n_boot=run.n_boot, seed=run.seed
+            tests[system] = grouped_paired_bootstrap(
+                [vectors[leader][q] for q in shared], [vectors[system][q] for q in shared], n_boot=run.n_boot, seed=run.seed
             )
     adjusted = dict(zip(tests, holm_adjust([test.p_two_sided for test in tests.values()]), strict=True))
     for system in others:
@@ -403,10 +413,12 @@ def _quality_ties(
     return results
 
 
-def _compare(run: _Run, vectors: dict[str, dict[str, float]], winner: str, other: str, cost: dict[str, float | None], alpha: float) -> explain.Comparison:
+def _compare(
+    run: _Run, vectors: dict[str, dict[str, list[float]]], winner: str, other: str, cost: dict[str, float | None], alpha: float
+) -> explain.Comparison:
     shared = [q for q in vectors[winner] if q in vectors[other]]
-    paired = paired_bootstrap(
-        np.array([vectors[winner][q] for q in shared]), np.array([vectors[other][q] for q in shared]), n_boot=run.n_boot, seed=run.seed, alpha=alpha
+    paired = grouped_paired_bootstrap(
+        [vectors[winner][q] for q in shared], [vectors[other][q] for q in shared], n_boot=run.n_boot, seed=run.seed, alpha=alpha
     )
     winner_cost, other_cost = cost[winner], cost[other]
     ratio = winner_cost / other_cost if winner_cost is not None and other_cost else None
@@ -415,14 +427,14 @@ def _compare(run: _Run, vectors: dict[str, dict[str, float]], winner: str, other
 
 
 def _by_category(
-    run: _Run, vectors: dict[str, dict[str, float]], feasible: list[str], cost: dict[str, float | None]
+    run: _Run, vectors: dict[str, dict[str, list[float]]], feasible: list[str], cost: dict[str, float | None]
 ) -> dict[str, tuple[str, dict[str, float]]]:
     """Per question category: the best feasible system by mean quality (the cheaper on an exact tie) and everyone's mean. Descriptive only."""
     by_category: dict[str, dict[str, list[float]]] = {}
     for system in feasible:
-        for question_id, value in vectors[system].items():
-            category = str(run.rows[system][question_id].get("category") or "unknown")
-            by_category.setdefault(category, {}).setdefault(system, []).append(value)
+        for question_id, trials in vectors[system].items():
+            category = str(run.rows[system][question_id][0].get("category") or "unknown")
+            by_category.setdefault(category, {}).setdefault(system, []).append(_question_mean(trials))
     result: dict[str, tuple[str, dict[str, float]]] = {}
     for category in sorted(by_category):
         means = {system: float(np.mean(values)) for system, values in by_category[category].items()}

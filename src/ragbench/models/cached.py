@@ -6,6 +6,7 @@ from time import perf_counter
 from typing import Any
 
 from ragbench.cache import active_cache, cache_key
+from ragbench.cache.trial import trial_key
 from ragbench.models.cost import CostBreakdown, estimate_model_cost
 from ragbench.models.llms import LLM, LLMResult, ToolCall
 
@@ -54,7 +55,7 @@ class CachedLLM(LLM):
         call = {"temperature": temperature, "max_tokens": max_tokens, "json_mode": json_mode, "tools": tools}
 
         params = {name: value for name, value in call.items() if value is not None and value is not False}
-        key = cache_key("llm", provider=self.inner.provider, model=self.model_name, messages=messages, params=params)
+        key = cache_key("llm", provider=self.inner.provider, model=self.model_name, messages=messages, params=params, **trial_key())
 
         stored = runtime.disk.get("llm", key)
         if stored is not None:

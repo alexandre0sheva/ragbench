@@ -12,9 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
-from ragbench.evaluation.stats import ALPHA, holm_adjust, paired_bootstrap
+from ragbench.evaluation.stats import ALPHA, grouped_paired_bootstrap, holm_adjust
 from ragbench.reporting.report_data import _read_csv, _read_json, _read_jsonl
 
 MIN_PAIRED_QUESTIONS = 5
@@ -78,13 +76,14 @@ def _metric_specs(primary_k: Any, columns: set[str]) -> list[tuple[str, str, boo
     return [spec for spec in specs if spec[0] in columns]
 
 
-def _answer_scores(rows: list[dict[str, Any]], system: str) -> dict[str, float]:
-    found: dict[str, float] = {}
+def _answer_scores(rows: list[dict[str, Any]], system: str) -> dict[str, list[float]]:
+    """Each question's answer scores, one per trial."""
+    found: dict[str, list[float]] = {}
     for row in rows:
         if row.get("system") == system and row.get("error") is None:
             score = _number((row.get("answer_judge") or {}).get("answer_score"))
             if score is not None:
-                found[str(row["question_id"])] = score
+                found.setdefault(str(row["question_id"]), []).append(score)
     return found
 
 
@@ -117,7 +116,7 @@ def compare_runs(a_dir: Path, b_dir: Path, *, min_drop: float = DEFAULT_MIN_DROP
         shared = [q for q in scores_a if q in scores_b]
         result = SystemComparison(name, metrics, UNTESTED, paired_questions=len(shared))
         if len(shared) >= MIN_PAIRED_QUESTIONS:
-            paired = paired_bootstrap(np.array([scores_b[q] for q in shared]), np.array([scores_a[q] for q in shared]), n_boot=n_boot, seed=seed)
+            paired = grouped_paired_bootstrap([scores_b[q] for q in shared], [scores_a[q] for q in shared], n_boot=n_boot, seed=seed)
             result.ci = (paired.ci_lo, paired.ci_hi)
             p_values[name] = paired.p_two_sided
             result.p_holm = paired.p_two_sided

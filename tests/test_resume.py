@@ -188,3 +188,18 @@ def test_the_spending_cap_counts_what_restored_systems_already_cost(tmp_path, mo
     with pytest.raises(BudgetExceededError) as stopped:
         run_benchmark(config, run_dir=run_dir)
     assert stopped.value.spent_usd >= spent * 0.6 and "bm25_2" in stopped.value.incomplete
+
+
+def test_a_run_with_trials_resumes_from_its_checkpoints_and_a_changed_trial_count_reruns_everything(tmp_path):
+    config, run_dir, _ = _first_run(tmp_path, trials=2)
+    before = _rows(run_dir)
+    assert all(len(rows) == 2 * len({row["question_id"] for row in rows}) for rows in before.values())
+
+    again = Recorder()
+    run_benchmark(config, force_mock=True, run_dir=run_dir, progress=again)
+    assert sorted(again.restored) == ["bm25", "hybrid", "vector"] and again.started == []
+    assert _rows(run_dir) == before
+
+    changed = Recorder()
+    run_benchmark(_config(tmp_path, trials=3), force_mock=True, run_dir=run_dir, progress=changed)
+    assert changed.restored == [] and sorted(changed.started) == ["bm25", "hybrid", "vector"]

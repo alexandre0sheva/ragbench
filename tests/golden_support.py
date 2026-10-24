@@ -25,6 +25,8 @@ EXCLUDED_COLUMNS = {
     "avg_latency_concurrent_ms",
     "latency_ms_p50",
     "latency_ms_p95",
+    "latency_ms_p95_ci_lo",
+    "latency_ms_p95_ci_hi",
     "latency_source",
     "avg_cost_per_question",
     "system_wall_time_ms",

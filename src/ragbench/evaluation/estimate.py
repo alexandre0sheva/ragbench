@@ -30,6 +30,7 @@ from ragbench.models.usage import UsageRecorder, record_usage
 from ragbench.rag_systems import create_rag_system
 from ragbench.registry import SYSTEMS
 from ragbench.runtime import RuntimeContext, activate_runtime
+from ragbench.runtime.executor import AUTO_PROBE_MAX
 from ragbench.runtime.parallel import evenly_sample
 from ragbench.utils.text import estimate_tokens
 
@@ -57,18 +58,24 @@ class SystemEstimate:
     question_seconds: float  # per question, including judging
     n_questions: int
     error: str | None = None  # set when the system could not be measured; its numbers are then zero
+    trials: int = 1  # `evaluation.trials`: every question is answered and judged this many times
+    probe_calls: int = 0  # latency-probe answers a live run adds (`evaluation.latency_probe_questions`; `auto` counts its cap)
 
     @property
     def query_usd(self) -> float:
-        return self.answer_usd_per_question * self.n_questions
+        return self.answer_usd_per_question * self.n_questions * self.trials
 
     @property
     def judge_usd(self) -> float:
-        return self.judge_usd_per_question * self.n_questions
+        return self.judge_usd_per_question * self.n_questions * self.trials
+
+    @property
+    def probe_usd(self) -> float:
+        return self.answer_usd_per_question * self.probe_calls
 
     @property
     def total_usd(self) -> float:
-        return self.ingestion_usd + self.query_usd + self.judge_usd
+        return self.ingestion_usd + self.query_usd + self.judge_usd + self.probe_usd
 
 
 @dataclass
@@ -82,9 +89,10 @@ class Estimate:
     pricing_as_of: str
     warnings: list[str] = field(default_factory=list)
     unpriced_models: list[str] = field(default_factory=list)
+    trials: int = 1
 
     def to_dict(self) -> dict:
-        return {**asdict(self), "systems": [{**asdict(s), "total_usd": s.total_usd} for s in self.systems]}
+        return {**asdict(self), "systems": [{**asdict(s), "probe_usd": s.probe_usd, "total_usd": s.total_usd} for s in self.systems]}
 
 
 def confirmation_decision(total_usd: float, threshold_usd: float, *, yes: bool, interactive: bool, ci: bool) -> Literal["proceed", "ask", "refuse"]:
@@ -122,7 +130,7 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
     name = system_config.resolved_name
     spec = getattr(SYSTEMS.mapping.get(system_config.type), "spec", None)
     agentic = bool(spec is not None and spec.agentic)
-    empty = SystemEstimate(name, system_config.type, agentic, 0.0, 0.0, 0.0, 0.0, 0.0, n_questions)
+    empty = SystemEstimate(name, system_config.type, agentic, 0.0, 0.0, 0.0, 0.0, 0.0, n_questions, trials=config.evaluation.trials)
     evaluation = config.evaluation
     try:
         refs = system_model_refs(system_config)
@@ -158,6 +166,8 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
             ingestion_seconds=_seconds(ingestion) / max(1, evaluation.ingest_workers),
             question_seconds=(answer_seconds + judge_seconds) / count,
             n_questions=n_questions,
+            trials=evaluation.trials,
+            probe_calls=_probe_calls(evaluation.latency_probe_questions, n_questions),
         )
     except Exception as exc:  # noqa: BLE001 (one system that cannot be measured must not hide the others)
         logger.warning("Could not estimate %s: %s: %s", name, type(exc).__name__, exc)
@@ -206,8 +216,9 @@ def estimate_run(
         pricing.clear_pricing_overrides()
     measured = [s for s in systems if s.error is None]
     workers = max(1, config.evaluation.max_workers)
-    work = [s.ingestion_seconds + s.question_seconds * s.n_questions / workers for s in measured]
+    work = [s.ingestion_seconds + s.question_seconds * s.n_questions * s.trials / workers for s in measured]
     wall = max(sum(work) / max(1, config.evaluation.system_workers), max(work, default=0.0))
+    wall += sum(s.question_seconds * s.probe_calls for s in measured)  # the probe runs one call at a time, after everything else
     return Estimate(
         systems=systems,
         n_questions=len(questions),
@@ -218,7 +229,13 @@ def estimate_run(
         pricing_as_of=pricing.PRICING_AS_OF,
         warnings=_warnings(systems, unpriced, today),
         unpriced_models=unpriced,
+        trials=config.evaluation.trials,
     )
+
+
+def _probe_calls(size: int | Literal["auto"], n_questions: int) -> int:
+    """How many probe answers a live run adds per system: the configured number (at most one per question), or `auto`'s cap."""
+    return AUTO_PROBE_MAX if size == "auto" else min(size, n_questions)
 
 
 def _warnings(systems: list[SystemEstimate], unpriced: list[str], today: date) -> list[str]:

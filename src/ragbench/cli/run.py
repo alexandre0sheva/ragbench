@@ -55,9 +55,13 @@ def print_estimate(estimate: Estimate) -> None:
     table.add_row("Total", "", "", "", f"[bold]{money(estimate.total_usd)}[/bold]")
     console.print(table)
     console.print(
-        f"{estimate.n_questions} questions over {estimate.n_documents} documents (~{estimate.corpus_tokens:,} tokens) · "
+        f"{estimate.n_questions} questions{f' x {estimate.trials} trials' if estimate.trials > 1 else ''} over {estimate.n_documents} documents "
+        f"(~{estimate.corpus_tokens:,} tokens) · "
         f"about {duration(estimate.wall_seconds)} at the configured concurrency (rough) · prices as of {estimate.pricing_as_of}"
     )
+    probe_usd = sum(row.probe_usd for row in estimate.systems if row.error is None)
+    if probe_usd:
+        console.print(f"[dim]Totals include {money(probe_usd)} for the latency probe (`evaluation.latency_probe_questions`), not shown in Query.[/dim]")
     for warning in estimate.warnings:
         console.print(f"[yellow]• {escape(warning)}[/yellow]")
     console.print(

@@ -27,6 +27,7 @@ from ragbench.evaluation.estimate import (
 from ragbench.evaluation.evaluator import run_benchmark
 from ragbench.models import cost as pricing
 from ragbench.models.embeddings import EMBEDDING_CACHE
+from ragbench.runtime.executor import AUTO_PROBE_MAX
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = ROOT / "data" / "demo"
@@ -381,3 +382,24 @@ def test_compare_reports_a_budget_stop_and_exits_nonzero(tmp_path, monkeypatch):
     path = _config(tmp_path / "capped", _three(), max_cost_usd=costs["first"] + 0.4 * costs["second"], cost_confirm_threshold_usd=1e6)
     result = CliRunner().invoke(app, ["compare", "--config", str(path), "--max-workers", "1"])
     assert result.exit_code == 1 and "budget" in result.output.lower() and "first" in result.output and "second" in result.output
+
+
+def test_repeated_trials_multiply_the_question_costs_and_time_but_not_ingestion(tmp_path):
+    systems = [{"type": "bm25", "name": "bm25", "models": {"generator": GENERATOR, "embedding": EMBEDDING}}]
+    once = estimate_run(load_config(_config(tmp_path / "one", systems)))
+    thrice = estimate_run(load_config(_config(tmp_path / "three", systems, trials=3)))
+    a, b = once.systems[0], thrice.systems[0]
+    assert (once.trials, thrice.trials) == (1, 3) and b.trials == 3
+    assert b.ingestion_usd == pytest.approx(a.ingestion_usd)
+    assert b.query_usd == pytest.approx(3 * a.query_usd) and b.judge_usd == pytest.approx(3 * a.judge_usd) and a.judge_usd > 0
+    assert thrice.total_usd == pytest.approx(a.ingestion_usd + 3 * (a.query_usd + a.judge_usd))
+    assert thrice.wall_seconds > once.wall_seconds
+
+
+@pytest.mark.parametrize(("probe", "calls"), [(0, 0), (5, 5), (50, 12), ("auto", AUTO_PROBE_MAX)])
+def test_the_latency_probe_of_a_live_run_is_in_the_estimate(tmp_path, probe, calls):
+    systems = [{"type": "bm25", "name": "bm25", "models": {"generator": GENERATOR, "embedding": EMBEDDING}}]
+    estimate = estimate_run(load_config(_config(tmp_path, systems, latency_probe_questions=probe)))  # 12 questions
+    system = estimate.systems[0]
+    assert system.probe_usd == pytest.approx(calls * system.answer_usd_per_question)
+    assert system.total_usd == pytest.approx(system.ingestion_usd + system.query_usd + system.judge_usd + system.probe_usd)

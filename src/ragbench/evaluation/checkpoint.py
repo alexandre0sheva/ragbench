@@ -34,6 +34,8 @@ NEUTRAL_EVALUATION_KEYS = frozenset(
 def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest: str, mode: str) -> str:
     """Hash of everything the system's results depend on. Change any of it and the checkpoint is stale."""
     evaluation = {key: value for key, value in config.evaluation.model_dump(mode="json").items() if key not in NEUTRAL_EVALUATION_KEYS}
+    if evaluation.get("trials") == 1:
+        del evaluation["trials"]  # the default leaves the hash as it was before trials existed, so older checkpoints stay valid
     payload = {
         "version": __version__,
         "system": system.model_dump(mode="json"),

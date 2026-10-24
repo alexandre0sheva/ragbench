@@ -63,7 +63,7 @@ def leaderboard_columns(keys: Iterable[str], primary_k: int | None = None) -> li
         columns.append(Column("cost_per_correct", "$/correct", "${:.5f}", False))
     columns.append(Column("avg_latency_ms", "Latency", "{:.0f} ms", False))
     if "latency_ms_p95" in keys:
-        columns.append(Column("latency_ms_p95", "p95", "{:.0f} ms", False))
+        columns.append(Column("latency_ms_p95", "p95", "{:.0f} ms", False, interval="latency_ms_p95_ci_lo" in keys and "latency_ms_p95_ci_hi" in keys))
     return columns
 
 
@@ -117,6 +117,10 @@ _EXTRA_COLUMNS: tuple[tuple[str, str, str, bool], ...] = (
     ("tool_error_rate", "Tool errors", "{:.2f}", False),
     ("budget_exhausted_rate", "Budget hit", "{:.2f}", False),
     ("route_accuracy", "Route acc.", "{:.2f}", True),
+    ("pass_at_k", "pass@k", "{:.2f}", True),
+    ("pass_hat_k", "pass^k", "{:.2f}", True),
+    ("answer_score_trial_sd", "Trial SD", "{:.2f}", False),
+    ("rank_stability", "Rank stable", "{:.2f}", True),
     ("n_ok", "Answered", "{:.0f}", True),
     ("n_error", "Failed", "{:.0f}", False),
 )

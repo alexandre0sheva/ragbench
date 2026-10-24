@@ -53,11 +53,11 @@ def test_a_plan_needs_at_least_one_trial():
         EvaluationPlan(systems=[], questions=[], trials=0)
 
 
-def test_the_runner_runs_a_plan_and_refuses_trials_it_cannot_run_yet():
+def test_the_runner_runs_a_plan_and_the_plan_counts_one_answer_per_question_and_trial():
     from ragbench.runtime.executor import ExecutionSettings, SystemRunner
     from ragbench.runtime.progress import ProgressListener
 
     runner = SystemRunner(object(), ExecutionSettings(), ProgressListener())  # type: ignore[arg-type]  # never called: no systems
-    assert runner.run_all(EvaluationPlan(systems=[], questions=QUESTIONS), documents=[]) == []
-    with pytest.raises(ValueError, match="one trial"):
-        runner.run_all(EvaluationPlan(systems=[], questions=QUESTIONS, trials=2), documents=[])
+    assert runner.run_all(EvaluationPlan(systems=[], questions=QUESTIONS, trials=2), documents=[]) == []
+    assert EvaluationPlan(systems=[], questions=QUESTIONS, trials=3).num_answers == 15
+    assert EvaluationPlan.from_config(_config(trials=4), QUESTIONS).trials == 4

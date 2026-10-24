@@ -53,6 +53,14 @@ def _location(metadata: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def tag_trial(result: dict[str, Any], trial: int) -> dict[str, Any]:
+    """Mark every row of one answer with its trial index (only done when a run has more than one trial, so one-trial outputs are unchanged)."""
+    for key in ("per_question", "retrieval_row", "answer_row", "cost_row"):
+        if result.get(key) is not None:
+            result[key]["trial"] = trial
+    return result
+
+
 def error_result(system: BaseRAGSystem, system_config: SystemConfig, question, error: dict[str, str]) -> dict[str, Any]:
     zero_judge = {
         "correctness": 0.0,

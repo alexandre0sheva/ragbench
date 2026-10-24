@@ -12,7 +12,7 @@ from ragbench.config.schema import SystemConfig
 from ragbench.evaluation.answer_judge import AnswerJudge
 from ragbench.evaluation.answer_metrics import refusal_metrics
 from ragbench.evaluation.route_metrics import route_accuracy, route_rows
-from ragbench.evaluation.stats import latency_percentiles
+from ragbench.evaluation.stats import latency_percentiles, quantile_ci
 from ragbench.evaluation.tool_metrics import summary_fields as tool_summary_fields
 from ragbench.evaluation.tool_metrics import tool_steps
 from ragbench.evaluation.tool_metrics import usage_rows as tool_usage_rows
@@ -61,9 +61,12 @@ def build_tool_usage(systems: list[SystemConfig], per_question_rows: list[dict[s
 
 
 def build_qrels_audit(per_question_rows: list[dict[str, Any]], primary_k: int) -> list[dict[str, Any]]:
+    """Answers judged right and grounded although retrieval missed labeled documents: candidates for a missing label. One entry per
+    system and question (with repeated trials, the first trial that qualifies)."""
     audit_rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
     for row in per_question_rows:
-        if row["error"] is not None:
+        if row["error"] is not None or (row["system"], row["question_id"]) in seen:
             continue
         metrics = row["retrieval_metrics"]
         judge = row["answer_judge"]
@@ -79,6 +82,7 @@ def build_qrels_audit(per_question_rows: list[dict[str, Any]], primary_k: int) -
         unlabeled = [doc_id for doc_id in retrieved_doc_ids if doc_id not in set(relevant_doc_ids)]
         if not unlabeled:
             continue
+        seen.add((row["system"], row["question_id"]))
         audit_rows.append(
             {
                 "system": row["system"],
@@ -140,16 +144,30 @@ def _latency_fields(concurrent_ms: list[float], probe: ProbeResult | None) -> di
 
     The headline latency comes from the one-at-a-time probe when there is one (clean: no queueing behind other
     threads, no cache); otherwise from the parallel pass, labeled as such. The parallel-pass mean is always kept.
+    The p95 gets an exact order-statistic interval over the same measurements (no upper bound until there are 72 of them).
     """
     concurrent_mean = float(np.mean(concurrent_ms)) if concurrent_ms else None
     clean = probe.latencies_ms if probe is not None and probe.latencies_ms else None
     values = clean if clean is not None else concurrent_ms
+    _, p95_lo, p95_hi = quantile_ci(values, 95)
     return {
         "avg_latency_ms": float(np.mean(values)) if values else None,
         **{f"latency_ms_{name}": value for name, value in latency_percentiles(values).items()},
+        "latency_ms_p95_ci_lo": p95_lo,
+        "latency_ms_p95_ci_hi": p95_hi,
         "latency_source": "probe" if clean is not None else "concurrent",
         "avg_latency_concurrent_ms": concurrent_mean,
     }
+
+
+def _question_means(frame: pd.DataFrame) -> pd.DataFrame:
+    """With repeated trials (a `trial` column), one row per question holding the mean of its trials' numeric scores, so a question
+    whose trial failed is not outweighed by one answered every time; without trials, the frame as it is."""
+    if frame.empty or "trial" not in frame.columns:
+        return frame
+    scores = [col for col in frame.columns if col not in {"system", "question_id", "category", "trial"} and col != "failure_type"]
+    numeric = frame[scores].apply(pd.to_numeric, errors="coerce")
+    return numeric.groupby(frame["question_id"], sort=False).mean().reset_index()
 
 
 def build_summary(
@@ -171,8 +189,8 @@ def build_summary(
     errors = errors_by_system(per_question_rows)
     rows: list[dict[str, Any]] = []
     for system_name in system_types:
-        r = retrieval_df[retrieval_df["system"] == system_name] if not retrieval_df.empty else retrieval_df
-        a = answer_df[answer_df["system"] == system_name] if not answer_df.empty else answer_df
+        r = _question_means(retrieval_df[retrieval_df["system"] == system_name] if not retrieval_df.empty else retrieval_df)
+        a = _question_means(answer_df[answer_df["system"] == system_name] if not answer_df.empty else answer_df)
         c = cost_df[cost_df["system"] == system_name] if not cost_df.empty else cost_df
         latency_rows = latency[latency["system"] == system_name]
         n_ok = sum(1 for row in ok_rows if row["system"] == system_name)

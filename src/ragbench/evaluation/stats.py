@@ -3,7 +3,8 @@
 With a few dozen questions a gap of a few hundredths between two systems is noise. These helpers say how wide that noise
 is (`bootstrap_ci`), whether one system really beats another on the *same* questions (`paired_bootstrap`, `holm_adjust`),
 which systems are worth considering at all (`pareto_front`) and what a correct answer costs (`cost_per_correct`).
-Missing values (NaN, None) are dropped, never counted as zero.
+With repeated trials (`evaluation.trials`) a question has several scores: the `grouped_*` variants resample questions together with
+their trials (a cluster bootstrap over per-question means). With one trial each they are exactly the plain functions. Missing values (NaN, None) are dropped, never counted as zero.
 """
 
 from __future__ import annotations
@@ -92,6 +93,42 @@ def paired_bootstrap(a: np.ndarray, b: np.ndarray, *, n_boot: int = 5000, alpha:
     return PairedResult(mean_diff, float(lo), float(hi), min(1.0, 2 * min(below, above)), wins, n - wins - losses, losses, n)
 
 
+def _question_means(groups: Sequence[Sequence[float]]) -> list[float | None]:
+    """Each question's mean over its finite trial scores; None for a question with none."""
+    means: list[float | None] = []
+    for group in groups:
+        found = _finite(group)
+        means.append((float(found[0]) if len(found) == 1 else float(found.mean())) if len(found) else None)
+    return means
+
+
+def grouped_bootstrap_ci(groups: Sequence[Sequence[float]], *, n_boot: int = 2000, alpha: float = ALPHA, seed: int = 0) -> tuple[float, float, float]:
+    """`bootstrap_ci` when question i has several scores `groups[i]` (its trials): a cluster bootstrap, resampling questions with all
+    their trials, which is the bootstrap of the per-question means. Trial noise is in it as the extra spread it gives those means;
+    resampling the trials again inside each question would count it twice. With one score per question this is `bootstrap_ci`."""
+    return bootstrap_ci(np.array([mean for mean in _question_means(groups) if mean is not None]), n_boot=n_boot, alpha=alpha, seed=seed)
+
+
+def grouped_paired_bootstrap(
+    a: Sequence[Sequence[float]], b: Sequence[Sequence[float]], *, n_boot: int = 5000, alpha: float = ALPHA, seed: int = 0
+) -> PairedResult:
+    """`paired_bootstrap` on per-question means, `a[i]` and `b[i]` being the same question's trial scores of two systems (a cluster
+    bootstrap, as in `grouped_bootstrap_ci`); questions missing on either side are dropped. With one score each this is `paired_bootstrap`."""
+    if len(a) != len(b):
+        raise ValueError(f"paired samples must have the same length, got {len(a)} and {len(b)}")
+    pairs = [(x, y) for x, y in zip(_question_means(a), _question_means(b), strict=True) if x is not None and y is not None]
+    return paired_bootstrap(np.array([x for x, _ in pairs]), np.array([y for _, y in pairs]), n_boot=n_boot, alpha=alpha, seed=seed)
+
+
+def pass_rates(correct: Sequence[Sequence[bool]]) -> tuple[float | None, float | None]:
+    """`(pass_at_k, pass_hat_k)` over questions, each given as its k trials' correct / not correct: the share of questions answered
+    correctly on at least one trial, and on every trial (the reliability number for a system that is run once per request)."""
+    found = [list(trials) for trials in correct if len(trials)]
+    if not found:
+        return None, None
+    return sum(any(trials) for trials in found) / len(found), sum(all(trials) for trials in found) / len(found)
+
+
 def holm_adjust(p_values: Sequence[float]) -> list[float]:
     """Holm-Bonferroni adjusted p-values, in the input order: the k-th smallest of m is multiplied by m - k + 1 (and kept
     monotone, capped at 1). Controls the chance of any false "significant" across the whole family of comparisons."""
@@ -160,3 +197,39 @@ def latency_percentiles(values: Sequence[float]) -> dict[str, float | None]:
     if not len(values):
         return {"p50": None, "p95": None}
     return {"p50": float(np.percentile(values, 50)), "p95": float(np.percentile(values, 95))}
+
+
+
+def _binomial_cdf(n: int, p: float) -> np.ndarray:
+    """P(B <= j) for j = 0..n, B ~ Binomial(n, p), computed in log space so large n does not underflow."""
+    log_pmf = np.array([math.lgamma(n + 1) - math.lgamma(j + 1) - math.lgamma(n - j + 1) + j * math.log(p) + (n - j) * math.log1p(-p) for j in range(n + 1)])
+    return np.cumsum(np.exp(log_pmf))
+
+
+def quantile_ci(values: Sequence[float], q: float, *, alpha: float = ALPHA) -> tuple[float | None, float | None, float | None]:
+    """The `q`-th percentile of `values` and a distribution-free `(1 - alpha)` interval for it: `(value, lo, hi)`.
+
+    The bounds are order statistics chosen with the binomial distribution (the number of values below the true percentile is
+    Binomial(n, q/100)), so the coverage is exact whatever the shape of the data. A bootstrap would not do here: it cannot reach above
+    the largest value seen, and for a p95 from a few dozen calls it covers far less often than it claims. A bound the data cannot
+    support yet is None: the p95 has no upper bound before `QUANTILE_MIN_N` values. None x3 with no data.
+    """
+    data = np.sort(_finite(values))
+    n = len(data)
+    if not n:
+        return None, None, None
+    value = float(np.percentile(data, q))
+    cdf = _binomial_cdf(n, q / 100)  # cdf[j] = P(at most j values lie below the true percentile)
+    below = [j for j in range(1, n + 1) if cdf[j - 1] <= alpha / 2]  # x_(l) is a lower bound when P(B <= l - 1) <= alpha / 2
+    above = [j for j in range(1, n + 1) if cdf[j - 1] >= 1 - alpha / 2]  # x_(u) is an upper bound when P(B <= u - 1) >= 1 - alpha / 2
+    lo = float(data[below[-1] - 1]) if below else None
+    hi = float(data[above[0] - 1]) if above else None
+    return value, lo, hi
+
+
+def _min_n_for_upper_bound(q: float, alpha: float = ALPHA) -> int:
+    """The fewest values whose maximum is a `1 - alpha / 2` upper bound on the `q`-th percentile: `1 - (q/100)**n >= 1 - alpha / 2`."""
+    return math.ceil(math.log(alpha / 2) / math.log(q / 100))
+
+
+QUANTILE_MIN_N = _min_n_for_upper_bound(95)  # 72: before this many measurements a p95 has no upper bound
