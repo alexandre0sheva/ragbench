@@ -246,3 +246,5 @@ flowchart LR
 ```
 
 The evaluator asks every system the same questions, scores each answer, and writes the files all reports are rebuilt from (`ragbench report RUN`).
+
+The evaluator is the `ragbench/evaluation/` package. `evaluator.py` orchestrates a run (dataset, checkpoints, spending cap, scheduling through `runtime/executor.py`); `plan.py` holds the `EvaluationPlan`, which systems run on which questions and how many trials of each; `question_runner.py` answers and scores one question; `rows.py` turns it into rows; `summary.py` aggregates them per system; `outputs.py` writes every file. A feature that changes what a run covers (a subset of systems or questions, a split, repeated trials) belongs in the plan, not in a new evaluator flag.

@@ -1,19 +1,20 @@
 """Scheduling for a benchmark run: which systems, questions, and probes run when, and on how many threads.
 
-What is *computed* per question (metrics, judging, failure types) stays in `evaluation/evaluator.py`; this module only
+What is *computed* per question (metrics, judging, failure types) lives in `evaluation/question_runner.py`; this module only
 decides how the work is spread over threads and keeps results in deterministic (config / dataset) order.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Protocol
 
 from ragbench.cache import activate_cache
 from ragbench.config.schema import SystemConfig
+from ragbench.evaluation.plan import EvaluationPlan
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
 from ragbench.runtime.parallel import evenly_sample, ordered_parallel_map
 from ragbench.runtime.progress import ProgressListener
@@ -99,18 +100,21 @@ class SystemRunner:
 
     # -- main pass ------------------------------------------------------------------------------
 
-    def run_all(self, system_configs: Sequence[SystemConfig], documents: list[Any], questions: list[Any]) -> list[SystemOutcome]:
-        total = len(system_configs)
+    def run_all(self, plan: EvaluationPlan, documents: list[Any]) -> list[SystemOutcome]:
+        """Every system of `plan` on every question of `plan`, as outcomes in the plan's system order."""
+        if plan.trials != 1:
+            raise ValueError(f"The runner supports one trial per question, the plan asks for {plan.trials}.")
+        total = len(plan.systems)
 
         def run_one(pair: tuple[int, SystemConfig]) -> SystemOutcome:
-            outcome = self.run_system(pair[0], total, pair[1], documents, questions)
+            outcome = self.run_system(pair[0], total, pair[1], documents, plan.questions)
             if self.on_system_done is not None:
                 self.on_system_done(outcome)
             return outcome
 
         return ordered_parallel_map(
             run_one,
-            list(enumerate(system_configs, start=1)),
+            list(enumerate(plan.systems, start=1)),
             workers=self.settings.system_workers,
             thread_name_prefix="ragbench-system",
         )
