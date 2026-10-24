@@ -314,6 +314,21 @@ def _agents(summary: list[dict[str, Any]], order: list[str], tools: list[dict[st
     return {"rows": rows, "tools": tools, "routes": routes}
 
 
+def _judge(run_dir: Path, run_summary: dict[str, Any]) -> dict[str, Any]:
+    """The judge panel and the human audit of the judge, when the run has either (`{}` otherwise, so plain runs keep their shape)."""
+    panel = run_summary.get("judge")
+    audit = _read_json(run_dir / "judge_audit.json")
+    if not panel and not audit:
+        return {}
+    answer = (audit.get("axes") or {}).get("answer_score") or {}
+    return {
+        "judge": {
+            "panel": panel or None,
+            "audit": {"file": "judge_audit.md", "n": audit.get("n_labeled"), "alpha": answer.get("alpha"), "bias": answer.get("bias")} if audit else None,
+        }
+    }
+
+
 def _qrels_audit(rows: list[dict[str, Any]], systems: list[str]) -> dict[str, Any]:
     by_system = {name: {"high": 0, "medium": 0} for name in systems}
     for row in rows:
@@ -434,6 +449,7 @@ def build_report(run_dir: Path, max_embedded_mb: float = DEFAULT_MAX_EMBEDDED_MB
         "schema": SCHEMA_VERSION,
         "run": run,
         "notices": notices,
+        **_judge(run_dir, run_summary),
         "dataset": dataset,
         "cost": cost,
         "recommendation": _recommendation(recommendation, winner_yaml, by_name),

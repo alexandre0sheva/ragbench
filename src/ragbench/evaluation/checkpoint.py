@@ -36,6 +36,9 @@ def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest:
     evaluation = {key: value for key, value in config.evaluation.model_dump(mode="json").items() if key not in NEUTRAL_EVALUATION_KEYS}
     if evaluation.get("trials") == 1:
         del evaluation["trials"]  # the default leaves the hash as it was before trials existed, so older checkpoints stay valid
+    judge = evaluation["judge"]
+    if not judge["panel"] and judge["aggregate"] == "mean":
+        del judge["panel"], judge["aggregate"]  # likewise for a one-judge run, from before judge panels
     payload = {
         "version": __version__,
         "system": system.model_dump(mode="json"),

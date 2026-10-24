@@ -107,7 +107,7 @@ def system_model_refs(system: SystemConfig) -> ModelRefs:
 
 
 def collect_model_refs(config: ExperimentConfig) -> ModelRefs:
-    """Every model ref the run will actually call: each system's generator, embedder (only systems that embed), and the judge."""
+    """Every model ref the run will actually call: each system's generator, embedder (only systems that embed), and every judge."""
     refs = ModelRefs()
     for system in config.systems:
         own = system_model_refs(system)
@@ -116,7 +116,8 @@ def collect_model_refs(config: ExperimentConfig) -> ModelRefs:
         for ref in own.embedding:
             _add(refs.embedding, ref)
     if config.evaluation.judge_enabled:
-        _add(refs.llm, config.evaluation.judge_model)
+        for ref in config.evaluation.judge_models:
+            _add(refs.llm, ref)
     return refs
 
 

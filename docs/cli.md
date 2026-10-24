@@ -36,6 +36,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `cache`: Inspect or clear the persistent cache of...
 * `completion`: Shell completion for the `ragbench` command.
 * `report`: Rebuild every report of a finished run...
+* `judge-audit`: Calibrate the judge against a human: draw...
 * `compare-runs`: How a later run moved against an earlier...
 * `doctor`: Check Python, packages, optional extras,...
 * `runs`: List, inspect, remove and index the runs...
@@ -464,6 +465,32 @@ $ ragbench report [OPTIONS] {run}
 
 * `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
 * `--open`: Open report.html in your browser when done.
+* `--help`: Show this message and exit.
+
+## `ragbench judge-audit`
+
+Calibrate the judge against a human: draw a blind sheet of answers to score by hand, then compare it with the judge.
+
+Without --labels it writes judge_audit_sheet.csv into the run (fill in the five 0-5 axes; blank cells are skipped). With
+--labels it writes judge_audit.md (judge-human agreement per axis, bias per system) and links it from the report. Nothing is paid for.
+
+**Usage**:
+
+```console
+$ ragbench judge-audit [OPTIONS] {run}
+```
+
+**Arguments**:
+
+* `run`: A run directory, its name under --results-dir, `latest`, or part of a name.  [required]
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--sample <int range>`: Answers to put on the sheet, drawn evenly from each system and judge-score band.  [default: 50; x>=1]
+* `--seed <int>`: Random seed of the draw: the same seed draws the same sheet.  [default: 0]
+* `--labels <file>`: The filled-in sheet: report how well the judge agrees with it.
+* `--force`: Draw a new sheet over an existing one.
 * `--help`: Show this message and exit.
 
 ## `ragbench compare-runs`

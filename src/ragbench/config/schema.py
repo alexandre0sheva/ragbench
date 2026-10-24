@@ -219,11 +219,19 @@ class JudgeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     model: str | None = Field(default=None, description="Model ref of the judge. Default: `evaluation.judge_model`. Prefer a different model family than the generators.")
+    panel: list[str] = Field(
+        default_factory=list,
+        description="Model refs of a judge panel (two or more, instead of `model`): each judges every answer independently and the scores are aggregated.",
+    )
+    aggregate: Literal["mean", "median"] = Field(default="mean", description="How a panel's scores are combined, per axis.")
     samples: int = Field(default=1, ge=1, le=10, description="Independent judgments per question, averaged; the spread is recorded. Needs `temperature` above 0.")
     temperature: float = Field(default=0.0, ge=0.0, le=2.0, description="Judge sampling temperature. Leave at 0 for one deterministic (and cacheable) judgment.")
     independent: bool = Field(
         default=True,
-        description="Expect the judge to be a different model than the generators: the report warns when it is the same one (self-preference). Set false to accept that.",
+        description=(
+            "Keep judges from scoring their own model family (self-preference): a panel judge of the generator's family sits out that system's "
+            "answers, and the report warns when no other judge could score them. Set false to accept that."
+        ),
     )
 
 
@@ -284,9 +292,20 @@ class EvaluationConfig(BaseModel):
         """The config key the judge's model was set under, for error messages."""
         return "evaluation.judge.model" if self._judge_model_in_section else "evaluation.judge_model"
 
+    @property
+    def judge_models(self) -> list[str]:
+        """Every judge's model ref: the panel, or the one judge."""
+        return list(self.judge.panel) or [self.judge_model]
+
     @model_validator(mode="after")
     def _sync_judge_model(self) -> EvaluationConfig:
         explicit = "judge_model" in self.model_fields_set
+        if self.judge.panel:
+            if len(set(self.judge.panel)) < 2:
+                raise ValueError("evaluation.judge.panel needs at least two different judges (use evaluation.judge.model for one)")
+            if explicit or self.judge.model is not None:
+                raise ValueError("set evaluation.judge.panel or a single judge (evaluation.judge.model / judge_model), not both")
+            self.judge.model = self.judge_model = self.judge.panel[0]  # the lead judge, for what needs one model (relevance grading)
         self._judge_model_in_section = self.judge.model is not None
         if self.judge.model is None:
             self.judge.model = self.judge_model
@@ -577,8 +596,10 @@ class ExperimentConfig(BaseModel):
                     validate_model_ref(str(system.models["embedding"]), "embedding", self.providers)
                 except ValueError as exc:
                     raise ValueError(f"{label}.models.embedding: {exc}") from None
-        try:
-            validate_model_ref(self.evaluation.judge_model, "llm", self.providers)
-        except ValueError as exc:
-            raise ValueError(f"{self.evaluation.judge_model_key}: {exc}") from None
+        panel = self.evaluation.judge.panel
+        for index, ref in enumerate(self.evaluation.judge_models):
+            try:
+                validate_model_ref(ref, "llm", self.providers)
+            except ValueError as exc:
+                raise ValueError(f"{f'evaluation.judge.panel[{index}]' if panel else self.evaluation.judge_model_key}: {exc}") from None
         return self

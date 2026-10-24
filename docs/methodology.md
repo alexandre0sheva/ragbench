@@ -97,14 +97,28 @@ evaluation:
     model: anthropic:claude-haiku-5-5   # default: evaluation.judge_model
     samples: 3                          # independent judgments per question, averaged
     temperature: 0.5                    # must be above 0 when samples > 1
-    independent: true                   # warn when the judge is also a generator
+    independent: true                   # a judge never scores its own model family when another can
 ```
 
 With `samples > 1` the five axes are averaged, a flag is set when most samples set it (`is_hallucinated` at half), the cost of every sample is charged, and the population variance of `answer_score` across samples is stored as `answer_score_variance`. Use it to see how noisy the judge is on your data. Samples at temperature 0 would be identical, so that combination is rejected when the config loads.
 
+### Judge panels and agreement
+
+`evaluation.judge.panel` replaces the one judge with two or more, ideally from different model families. Each judge scores every answer on its own (same prompt, same context, its own samples and retries), and the panel's verdict is the mean of each axis across judges (`aggregate: median` takes the median, which one outlying judge cannot move); a flag is set when most judges set it (`is_hallucinated` at half). A judge whose verdict was unusable is left out of that answer's aggregate; only when every judge failed does the heuristic score the answer (`fallback: true`). Every judge's calls are charged to the judge cost, and `ragbench estimate` counts them. The first judge of the panel is the lead: what needs a single model (grading relevance in `ragbench dataset label`) uses it.
+
+With `independent: true` (the default) a judge **sits out** the answers of every system whose generator is from its own model family, so with `panel: [anthropic:claude-haiku-5-5, gpt-6-luna]` Haiku scores the GPT systems, GPT-6 Luna scores the Claude systems, and both score the rest. The family comes from the model name (`claude`, `gpt`, `gemini`, `llama`, `qwen`, `deepseek`, …) or, failing that, the OpenRouter vendor, so `openrouter:anthropic/claude-haiku-5.5` is Anthropic. When every judge is of a system's family, all of them score it and the self-preference warning names that system.
+
+Each judged row records the panel in `answer_judge.metadata`: `judges` (who scored it), `sat_out`, `member_fallbacks`, and `panel_scores` (every judge's five axes and `answer_score`; empty for one that sat out or failed). From those, the run computes **`judge_agreement`**: Krippendorff's alpha (interval metric) between the judges, per axis and for `answer_score`, over every answer of the run, with a judge that sat out an answer counted as a missing value. Alpha is 1 when the judges give the same scores, 0 when they agree no better than chance, and negative when they disagree systematically. It is written to `run_summary.json` under `judge.agreement` and shown in the report banner; below 0.667 (the usual floor for even tentative conclusions) the reports warn that small score differences between systems are not trustworthy. A one-judge run has no `judge` block and no agreement number: use `samples` for its noise, and a human audit for its accuracy.
+
+### Calibrating the judge against a human
+
+Agreement between judges says they are consistent, not that they are right. `ragbench judge-audit RUN --sample 50` draws answers for a person to score by hand into `judge_audit_sheet.csv`: answers are grouped by system and by the judge's score band (below 2, 2 to 4, 4 and up) and drawn from the groups in turn (seeded), so every system and the whole score range are represented, failed questions excluded. The sheet shows what the judge saw (question, reference, the context the generator was given, the answer) and neither the system nor the judge's scores, so the person cannot anchor on them; `judge_audit_key.json` maps each row back to its answer. The person fills in any of the five axes from 0 to 5, with the same anchors as the judge prompt; blank cells are skipped.
+
+`ragbench judge-audit RUN --labels filled.csv` then writes `judge_audit.md` and `judge_audit.json` and links them from the report banner. Per axis it reports the number of labels, Krippendorff's alpha between judge and human, the mean absolute difference, and the **bias** (judge minus human: above 0 the judge is lenient). The human `answer_score` is the mean of the five axes and is compared only where all five are filled. It also reports **verdict agreement**, the share of answers that judge and human both call correct (answer score at least 4) or both call not correct; the bias per system, since a judge lenient with one system favours it in the leaderboard; and, for a panel, each judge's alpha against the human. Fifty answers are enough to see a large bias; small differences need more.
+
 ### Bias and noise
 
-- **Self-preference.** An LLM judge tends to rate answers from its own model family higher. When the judge model is also the generator of a system (same provider and model), the leaderboard and `report.html` carry a "Self-preference risk" warning naming those systems. Pick a judge from another family under `evaluation.judge.model` ([which one](models.md#picking-models)), or set `independent: false` to accept the risk. The warning is only raised when an LLM judge scored the run.
+- **Self-preference.** An LLM judge tends to rate answers from its own model family higher. When every judge that scored a system is from the family of that system's generator (a single judge always is, when the families match), the leaderboard and `report.html` carry a "Self-preference risk" warning naming those systems. Pick a judge from another family under `evaluation.judge.model` ([which one](models.md#picking-models)), add one to a [panel](#judge-panels-and-agreement) so it takes over those systems, or set `independent: false` to accept the risk. The warning is only raised when an LLM judge scored the run. The shipped configs judge their OpenAI generators with `anthropic:claude-haiku-5-5`.
 - **Noise.** A judge is not deterministic across models, prompts or sampling. With a few dozen questions a difference of a few tenths of a point is usually noise; see [Statistics](#statistics).
 - **Reference dependence.** Correctness is judged against `reference_answer`; a wrong or incomplete reference misleads the judge. An answerable question with no reference (label-free datasets often have none) is judged against the retrieved context alone: correctness and completeness then say how well the answer uses what the context offers, so they track faithfulness and cannot catch an answer that is faithful to the wrong passages. Add reference answers when you can.
 
@@ -258,7 +272,7 @@ Synthetic questions are shaped by the generator: they tend to be answerable from
 ## Limitations
 
 - **Document-level relevance.** A retrieved chunk counts if its document is relevant, whether or not that chunk holds the evidence. Context precision is therefore generous, and unlabeled but helpful documents count against a system (`qrels_audit.md` surfaces them).
-- **LLM-judge noise and bias.** See [Bias and noise](#bias-and-noise). Scores are only comparable within one run (one judge, one prompt version).
+- **LLM-judge noise and bias.** See [Bias and noise](#bias-and-noise). Scores are only comparable within one run (one judge or panel, one prompt version), and a judge's accuracy is unknown until a [human audit](#calibrating-the-judge-against-a-human) measures it.
 - **Heuristic refusal detection.** Abstention metrics rely on recognizing refusals by wording. Models that decline in unusual phrasing are counted as answering.
 - **Deterministic metrics are literal.** `exact_match` and `token_f1` penalize correct paraphrases and reward verbose answers that repeat the reference.
 - **Failure classification is heuristic** and depends on labels you supply (`answer_type`, qrels).

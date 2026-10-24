@@ -11,7 +11,7 @@
 #   decision_gate_sufficiency_only the chunk filter off: the top chunks are kept and only the sufficiency check can abstain
 # `hybrid_rerank` (same ranking, no gate), `corrective` (LLM grades and retries, never abstains by rule) and `no_retrieval` (the floor: what the bare
 # model does with questions it cannot know) are the references.
-# Needs OPENAI_API_KEY for a live run; `ragbench run --mock` runs it offline with deterministic stand-in probabilities.
+# Needs OPENAI_API_KEY and, for the judge, ANTHROPIC_API_KEY + `pip install 'ragbench[anthropic]'` for a live run; `ragbench run --mock` runs it offline with deterministic stand-in probabilities.
 
 run:
   name: decision_gate_demo
@@ -144,6 +144,6 @@ systems:
 evaluation:
   k_values: [1, 3, 5, 10]
   judge_enabled: true
-  judge_model: gpt-6-luna
+  judge_model: anthropic:claude-haiku-5-5   # another model family than the generators (self-preference); live: ANTHROPIC_API_KEY + ragbench[anthropic]
   max_questions: null
   max_workers: 4

@@ -1,4 +1,4 @@
-"""`ragbench report` and `ragbench compare-runs`: work on finished runs without running anything."""
+"""`ragbench report`, `ragbench compare-runs` and `ragbench judge-audit`: work on finished runs without running anything."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ from ragbench.evaluation.compare_runs import (
     compare_runs,
     comparison_to_dict,
 )
+from ragbench.evaluation.judge_audit import REPORT_FILE, score_audit, write_audit_sheet
 from ragbench.reporting.history import resolve_run
 from ragbench.reporting.regenerate import regenerate_reports
 from ragbench.reporting.report_data import ReportError
@@ -80,6 +81,37 @@ def _print_comparison(comparison: RunComparison) -> None:
             console.print(f"{label}: {escape(', '.join(names))}", soft_wrap=True)
     for note in comparison.notes:
         console.print(f"[yellow]• {escape(note)}[/yellow]", soft_wrap=True)
+
+
+@commands.command("judge-audit")
+def judge_audit_command(
+    run: str = typer.Argument(..., help="A run directory, its name under --results-dir, `latest`, or part of a name."),
+    results_dir: Path = RESULTS_DIR,
+    sample: int = typer.Option(50, "--sample", min=1, help="Answers to put on the sheet, drawn evenly from each system and judge-score band."),
+    seed: int = typer.Option(0, "--seed", help="Random seed of the draw: the same seed draws the same sheet."),
+    labels: Path | None = typer.Option(None, "--labels", exists=True, dir_okay=False, help="The filled-in sheet: report how well the judge agrees with it."),
+    force: bool = typer.Option(False, "--force", help="Draw a new sheet over an existing one."),
+) -> None:
+    """Calibrate the judge against a human: draw a blind sheet of answers to score by hand, then compare it with the judge.
+
+    Without --labels it writes judge_audit_sheet.csv into the run (fill in the five 0-5 axes; blank cells are skipped). With
+    --labels it writes judge_audit.md (judge-human agreement per axis, bias per system) and links it from the report. Nothing is paid for.
+    """
+    run_dir = resolve_run(run, results_dir)
+    if labels is None:
+        sheet = write_audit_sheet(run_dir, sample=sample, seed=seed, overwrite=force)
+        console.print(f"[green]Wrote {sheet.n} answers to score into {sheet.sheet_path}[/green]", soft_wrap=True)
+        console.print(f"  Score each answer 0-5 on correctness, faithfulness, completeness, relevance and citation_quality, then run\n  ragbench judge-audit {run_dir} --labels {sheet.sheet_path}", soft_wrap=True)
+        return
+    result = score_audit(run_dir, labels)
+    answer = result["axes"]["answer_score"]
+    alpha = "—" if answer["alpha"] is None else f"{answer['alpha']:.2f}"
+    console.print(f"[green]{result['n_labeled']} labeled answers; judge-human alpha on the answer score: {alpha} (n={answer['n']})[/green]", soft_wrap=True)
+    try:
+        regenerate_reports(run_dir)
+    except ReportError as exc:
+        console.print(f"  [yellow]•[/yellow] report not rebuilt: {escape(str(exc))}", soft_wrap=True)
+    console.print(f"  {run_dir / REPORT_FILE}", soft_wrap=True)
 
 
 @commands.command("compare-runs")

@@ -22,6 +22,7 @@ from ragbench.cache import activate_cache
 from ragbench.config.schema import ExperimentConfig, SystemConfig
 from ragbench.datasets.loader import load_dataset
 from ragbench.documents.loaders import load_dataset_documents
+from ragbench.evaluation.judge_panel import scoring_judges
 from ragbench.evaluation.judge_prompts import build_messages
 from ragbench.models import cost as pricing
 from ragbench.models.embeddings import EMBEDDING_CACHE
@@ -138,6 +139,7 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
         embedding = refs.embedding[0] if refs.embedding else None
         system = create_rag_system(_for_measuring(system_config), force_mock=True)
         decision = getattr(system, "decision_model_ref", None)
+        judges = scoring_judges(evaluation.judge_models, generator, independent=evaluation.judge.independent)
         with record_usage() as ingestion:
             system.ingest(documents)
         answer_usd = judge_usd = answer_seconds = judge_seconds = 0.0
@@ -151,10 +153,10 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
                 given = answer.metadata.get("context_chunk_ids")
                 chunks = [c for c in answer.retrieval_result.chunks if given is None or c.chunk_id in given]
                 prompt = "\n".join(message["content"] for message in build_messages(question, answer.answer, chunks))
-                prompt_tokens = estimate_tokens(prompt, evaluation.judge_model)
                 calls = evaluation.judge.samples
-                judge_usd += calls * pricing.estimate_model_cost(evaluation.judge_model, prompt_tokens, JUDGE_COMPLETION_TOKENS)
-                judge_seconds += calls * (LLM_CALL_BASE_S + JUDGE_COMPLETION_TOKENS / LLM_TOKENS_PER_S)
+                for judge in judges:
+                    judge_usd += calls * pricing.estimate_model_cost(judge, estimate_tokens(prompt, judge), JUDGE_COMPLETION_TOKENS)
+                judge_seconds += len(judges) * calls * (LLM_CALL_BASE_S + JUDGE_COMPLETION_TOKENS / LLM_TOKENS_PER_S)  # panel judges run one after another
         count = max(1, len(sample))
         return SystemEstimate(
             name,

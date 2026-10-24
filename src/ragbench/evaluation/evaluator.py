@@ -25,9 +25,9 @@ from ragbench.datasets.schema import Dataset, has_relevance_labels
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import load_dataset_documents
 from ragbench.evaluation import outputs, question_runner, rows
-from ragbench.evaluation.answer_judge import AnswerJudge
 from ragbench.evaluation.budget import BudgetExceededError, BudgetGuard
 from ragbench.evaluation.checkpoint import Checkpoint, CheckpointStore, context_hash
+from ragbench.evaluation.judge_panel import JudgePanel
 from ragbench.evaluation.manifest import dataset_hash, utc_now_iso
 from ragbench.evaluation.plan import EvaluationPlan
 from ragbench.evaluation.rows import RunRows
@@ -129,7 +129,7 @@ class BenchmarkEvaluator:
         self.probe_results: dict[str, ProbeResult] = {}
         self.generator_models: dict[str, tuple[str, str]] = {}  # system name -> (provider, model) of its generator, for the self-preference check
         self._qrels: dict[str, dict[str, int]] = {}
-        self.judge: AnswerJudge | None = None
+        self.judge: JudgePanel | None = None
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_id = f"{self.config.run.name}_{timestamp}"
         # Runs can finish within one second of each other (a fully cached re-run is fast): never reuse a directory.
@@ -200,15 +200,9 @@ class BenchmarkEvaluator:
         plan = self.plan = self._plan(dataset)
         questions = plan.questions
         self.progress.run_started(len(plan.systems), plan.num_questions)
-        judge = AnswerJudge(
-            model_name=self.config.evaluation.judge_model,
-            enabled=self.config.evaluation.judge_enabled,
-            force_mock=self.force_mock,
-            samples=self.config.evaluation.judge.samples,
-            temperature=self.config.evaluation.judge.temperature,
-        )
+        judge = JudgePanel.from_config(self.config.evaluation, self.force_mock)
         if judge.enabled:
-            self.models_used.add(judge.llm.model_name)
+            self.models_used.update(judge.model_names())
 
         self._qrels, self.judge = dataset.qrels, judge
         labeled = sum(has_relevance_labels(question, dataset.qrels.get(question.id, {})) for question in questions)

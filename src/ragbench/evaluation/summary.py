@@ -9,13 +9,14 @@ import numpy as np
 import pandas as pd
 
 from ragbench.config.schema import SystemConfig
-from ragbench.evaluation.answer_judge import AnswerJudge
 from ragbench.evaluation.answer_metrics import refusal_metrics
+from ragbench.evaluation.judge_panel import JudgePanel, scoring_judges
 from ragbench.evaluation.route_metrics import route_accuracy, route_rows
 from ragbench.evaluation.stats import latency_percentiles, quantile_ci
 from ragbench.evaluation.tool_metrics import summary_fields as tool_summary_fields
 from ragbench.evaluation.tool_metrics import tool_steps
 from ragbench.evaluation.tool_metrics import usage_rows as tool_usage_rows
+from ragbench.models.family import model_family
 from ragbench.registry import SYSTEMS
 from ragbench.runtime import ProbeResult
 from ragbench.utils.text import unique_preserve_order
@@ -100,21 +101,30 @@ def build_qrels_audit(per_question_rows: list[dict[str, Any]], primary_k: int) -
     return audit_rows
 
 
-def judge_fallback_rate(judge: AnswerJudge | None, rows: list[dict[str, Any]]) -> float | None:
+def judge_fallback_rate(judge: JudgePanel | None, rows: list[dict[str, Any]]) -> float | None:
     """Share of questions the heuristic had to score because the LLM judge failed; None when no LLM judge was in use."""
     if judge is None or not judge.uses_llm or not rows:
         return None
     return sum(1 for row in rows if row["answer_judge"]["metadata"].get("fallback")) / len(rows)
 
 
-def judge_notices(judge: AnswerJudge | None, generator_models: dict[str, tuple[str, str]], independent: bool, summary_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """Facts about the judge that `build_notices` turns into report warnings: self-preference and heuristic fallbacks."""
+def judge_notices(judge: JudgePanel | None, generators: dict[str, str], summary_rows: list[dict[str, Any]], agreement: dict[str, float | None]) -> dict[str, Any]:
+    """Facts about the judges that `build_notices` turns into report warnings: self-preference, heuristic fallbacks, a panel that disagrees.
+
+    `generators` maps each system to its generator's model ref. A system is at risk of self-preference when, with `independent`, every
+    judge that scored it is of its generator's family (no judge of another family was there to take over).
+    """
     if judge is None or not judge.uses_llm:
         return {}
-    judge_model = (judge.llm.provider, judge.llm.model_name)
-    same_model = [name for name, model in generator_models.items() if model == judge_model] if independent else []
+    same_family = []
+    if judge.independent:
+        for name, generator in generators.items():
+            family = model_family(generator)
+            if all(model_family(ref) == family for ref in scoring_judges(judge.refs, generator, independent=True)):
+                same_family.append(name)
+    label = f"the judge ({judge.refs[0]})" if not judge.is_panel else f"every judge on the panel ({', '.join(judge.refs)})"
     fallbacks = {row["system"]: row["judge_fallback_rate"] for row in summary_rows if (row.get("judge_fallback_rate") or 0) > 0}
-    return {"judge_model": judge.llm.model_name, "judge_shares_model_with": same_model, "judge_fallbacks": fallbacks}
+    return {"judge_model": label, "judge_shares_family_with": same_family, "judge_fallbacks": fallbacks, "judge_agreement": agreement.get("answer_score")}
 
 
 def _agent_fields(agents: list[dict[str, Any]]) -> dict[str, float]:
@@ -179,7 +189,7 @@ def build_summary(
     runtime_df: pd.DataFrame | None,
     *,
     probe_results: dict[str, ProbeResult],
-    judge: AnswerJudge | None,
+    judge: JudgePanel | None,
 ) -> list[dict[str, Any]]:
     """One row per system, in config order: mean scores, cost, refusals, tools, routing, agent / gate behaviour and latency."""
     system_types = {cfg.resolved_name: cfg.type for cfg in systems}

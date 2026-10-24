@@ -15,6 +15,7 @@ import yaml
 
 from ragbench.cache import summarize_cache
 from ragbench.config.schema import SelectionConfig
+from ragbench.evaluation.judge_panel import panel_agreement
 from ragbench.evaluation.manifest import build_manifest, utc_now_iso
 from ragbench.evaluation.rows import RunRows
 from ragbench.evaluation.run_stats import SIGNIFICANCE_COLUMNS, RunStats, compute_run_stats
@@ -22,6 +23,7 @@ from ragbench.evaluation.summary import build_qrels_audit, build_routes, build_s
 from ragbench.models import cost as pricing
 from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.providers.openrouter import manifest_settings
+from ragbench.models.refs import system_model_refs
 from ragbench.reporting.html_report import write_report as write_html_report
 from ragbench.reporting.markdown_report import stage_summary, write_failures, write_leaderboard, write_qrels_audit
 from ragbench.reporting.notices import build_notices
@@ -128,9 +130,12 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
         reason=run.cache_reason,
         extra_spend_usd=probe_cost,
     )
-    notices = build_notices(
-        run.mode, unknown_priced, concurrent_latency=concurrent_latency, **judge_notices(run.judge, run.generator_models, evaluation.judge.independent, summary_rows)
-    )
+    panel = run.judge is not None and run.judge.is_panel
+    agreement = panel_agreement(per_question_rows) if panel else {}
+    generators = {cfg.resolved_name: system_model_refs(cfg).llm[0] for cfg in systems}
+    notices = build_notices(run.mode, unknown_priced, concurrent_latency=concurrent_latency, **judge_notices(run.judge, generators, summary_rows, agreement))
+    # Only a panel gets a block: a one-judge run's summary stays as it was.
+    judge_block = {"judge": {"models": evaluation.judge_models, "aggregate": evaluation.judge.aggregate, "independent": evaluation.judge.independent, "agreement": agreement}} if panel else {}
     write_leaderboard(
         out / "leaderboard.md",
         summary_rows,
@@ -177,6 +182,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
                 "cache": cache_summary,
                 "dataset": run.dataset_info,
                 "notices": notices,
+                **judge_block,
                 "dataset_warnings": run.dataset_warnings,
                 "document_warnings": run.document_warnings,
                 "outputs": {

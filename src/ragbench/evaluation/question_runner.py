@@ -10,11 +10,12 @@ from typing import Any
 
 from ragbench.config.schema import EvaluationConfig, SystemConfig
 from ragbench.datasets.schema import has_relevance_labels
-from ragbench.evaluation.answer_judge import AnswerJudge
 from ragbench.evaluation.context_metrics import context_precision, context_recall_doc
 from ragbench.evaluation.failure_analysis import classify_failure
+from ragbench.evaluation.judge_panel import JudgePanel
 from ragbench.evaluation.retrieval_metrics import compute_retrieval_metrics
 from ragbench.evaluation.rows import build_question_rows, error_result
+from ragbench.models.refs import system_model_refs
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ def evaluate_question(
     system_config: SystemConfig,
     question,
     qrels: dict[str, int],
-    judge: AnswerJudge,
+    judge: JudgePanel,
     evaluation: EvaluationConfig,
 ) -> dict[str, Any]:
     """The question's rows; a question that raises becomes an error result instead of failing the run."""
@@ -51,7 +52,7 @@ def _score_question(
     system_config: SystemConfig,
     question,
     qrels: dict[str, int],
-    judge: AnswerJudge,
+    judge: JudgePanel,
     evaluation: EvaluationConfig,
 ) -> dict[str, Any]:
     result = answer(system, question, evaluation)
@@ -72,7 +73,7 @@ def _score_question(
         "context_recall": context_recall_doc(context_chunks, relevant) if retrieves else None,
         "context_precision": context_precision(context_chunks, relevant) if retrieves else None,
     }
-    judge_result = judge.judge(question, result.answer, context_chunks)
+    judge_result = judge.judge(question, result.answer, context_chunks, generator=system_model_refs(system_config).llm[0])
     failure_type = classify_failure(
         question,
         result.answer,

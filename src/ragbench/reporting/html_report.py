@@ -169,6 +169,7 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         "run": data["run"],
         "started": _date(data["run"]["started_utc"]),
         "notices": data["notices"],
+        "judge": data.get("judge"),
         "dataset": data["dataset"],
         "cost": data["cost"],
         "money": money,

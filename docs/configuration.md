@@ -43,7 +43,7 @@ systems:
 evaluation:
   k_values: [1, 3, 5, 10]
   judge_enabled: true
-  judge_model: gpt-6-luna      # shorthand for judge.model (see Judge)
+  judge_model: anthropic:claude-haiku-5-5   # shorthand for judge.model (see Judge); another model family than the generator
   max_questions: null
   max_workers: 4
   embedding_cache: true
@@ -119,10 +119,22 @@ evaluation:
     model: anthropic:claude-haiku-5-5   # a model ref; default: evaluation.judge_model
     samples: 3                          # independent judgments per question, averaged (default 1)
     temperature: 0.5                    # judge sampling temperature (default 0); must be above 0 when samples > 1
-    independent: true                   # warn in the reports when the judge model is also a generator (default true)
+    independent: true                   # keep judges off their own model family's answers (default true)
 ```
 
-`evaluation.judge_model` keeps working as a shorthand for `judge.model`; set only one of them (two different models are an error). The two always agree after loading. Choose a judge from a different model family than your generators: when it is the same model as a system's generator, the leaderboard and `report.html` warn about self-preference, and `independent: false` silences that on purpose. Every sample is a paid call, and temperature-0 judgments are cached on disk like any other LLM call; sampled ones are not unless `cache.llm_nonzero_temperature` is on.
+`evaluation.judge_model` keeps working as a shorthand for `judge.model`; set only one of them (two different models are an error). The two always agree after loading. Choose a judge from a different model family than your generators: when the only judge of a system is from its generator's family, the leaderboard and `report.html` warn about self-preference, and `independent: false` silences that on purpose. Every sample is a paid call, and temperature-0 judgments are cached on disk like any other LLM call; sampled ones are not unless `cache.llm_nonzero_temperature` is on.
+
+A **judge panel** lists two or more different model refs instead of `model` (setting `panel` together with `model` or `judge_model` is an error):
+
+```yaml
+evaluation:
+  judge:
+    panel: [anthropic:claude-haiku-5-5, gpt-6-luna]   # each judges independently; the first is the lead judge
+    aggregate: mean                                   # or median (default mean)
+    independent: true                                 # a panel judge sits out the systems of its own model family
+```
+
+`samples` and `temperature` apply to every judge of the panel, and each needs its provider's key in a live run. How the verdicts are combined, which judge sits out which system, and the `judge_agreement` number are in [methodology.md](methodology.md#judge-panels-and-agreement); checking the judge against your own scores (`ragbench judge-audit`) is in [Calibrating the judge against a human](methodology.md#calibrating-the-judge-against-a-human).
 
 ## Statistics
 
