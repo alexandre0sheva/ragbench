@@ -1,0 +1,72 @@
+name: Release
+
+# Push a tag `vX.Y.Z` (the version in pyproject.toml) to publish to PyPI and create the GitHub release; see docs/release-checklist.md.
+# PyPI trusted publishing (OIDC): no token is stored in this repository.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: The tag, the version and the changelog agree
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      - name: Check the tag and extract the release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: python scripts/release_notes.py "$TAG" --output release_notes.md
+      - name: Keep the notes for the release job
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-notes
+          path: release_notes.md
+          retention-days: 7
+          if-no-files-found: error
+
+  package:
+    name: Build and check the package
+    uses: ./.github/workflows/package.yml
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [verify, package]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/ragbench/
+    permissions:
+      id-token: write # the OIDC token PyPI exchanges for a short-lived upload credential
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  github-release:
+    name: Create the GitHub release
+    needs: [verify, publish-pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-notes
+      - name: Create the release from the CHANGELOG section
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/* --title "RAGBench $TAG" --notes-file release_notes.md --verify-tag

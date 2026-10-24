@@ -131,34 +131,22 @@ jobs:
 
   build:
     name: Package build
+    uses: ./.github/workflows/package.yml
+
+  docker:
+    name: Docker image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.13"
-          cache: pip
-      - name: Build the sdist and wheel and check their metadata
+      - name: Build the image
+        run: docker build --tag ragbench:ci .
+      - name: It runs as a non-root user and the demo works with no API key
         run: |
-          python -m pip install --upgrade pip build twine
-          python -m build
-          twine check --strict dist/*
-      - name: The wheel carries the demo data, the report templates and the typing marker
-        run: |
-          python - <<'PY'
-          import glob, zipfile
-          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
-          for needed in ("ragbench/py.typed", "ragbench/reporting/templates/report.html.j2", "ragbench/reporting/templates/runs_index.html.j2", "ragbench/_data/demo/questions.jsonl"):
-              assert needed in names, f"missing from the wheel: {needed}"
-          PY
-      - name: The wheel installs and runs in a clean environment
-        run: |
-          python -m venv /tmp/clean
-          /tmp/clean/bin/pip install dist/*.whl
-          cd "$(mktemp -d)"
-          /tmp/clean/bin/ragbench --version
-          /tmp/clean/bin/ragbench demo
-          /tmp/clean/bin/ragbench run --preset quick --docs data/demo/docs --questions data/demo/questions.jsonl --mock --max-workers 2
+          docker run --rm --entrypoint sh ragbench:ci -c 'test "$(id -u)" != 0'
+          docker run --rm ragbench:ci --version
+          docker run --rm ragbench:ci demo
+          # The demo data lives in the container's working directory, so the run that reads it shares a container with the command that writes it.
+          docker run --rm --entrypoint sh ragbench:ci -c 'ragbench demo && ragbench run --preset quick --docs data/demo/docs --questions data/demo/questions.jsonl --mock --max-workers 2'
 
   audit:
     name: Dependency audit (advisory)

@@ -6,6 +6,11 @@ The format follows Keep a Changelog, and this project uses semantic versioning o
 
 ## [Unreleased]
 
+### Added
+
+- **Release plumbing.** `.github/workflows/release.yml` publishes to PyPI with trusted publishing (OIDC, no stored token) and creates the GitHub release from the matching `CHANGELOG.md` section when a tag `vX.Y.Z` is pushed; `scripts/release_notes.py` first checks that the tag, `pyproject.toml`, `CITATION.cff` and the changelog agree. The package checks (sdist and wheel, `twine check --strict`, demo data in the wheel, clean-environment install) moved to the reusable `.github/workflows/package.yml`, which CI and the release both call, so the release publishes the very files that passed them. The distribution name is `ragbench` (free on PyPI); the README says how it differs from Galileo's RAGBench dataset.
+- A `Dockerfile` (slim, multi-stage, non-root, `ENTRYPOINT ["ragbench"]`; the mock demo works with no key) and a CI job that builds it and runs the demo in it. The README quickstart is now `pip install ragbench` / `uvx ragbench demo`; `docs/release-checklist.md` has the tag-and-publish steps, including the one-time PyPI trusted-publisher setup.
+
 ### Changed
 
 - **Dependency floors are the latest releases** (checked 2026-10-24), for the core, `dev` and every extra, including the majors `anthropic` 2 and `twine` 7, plus `ruff` 0.17, `mypy` 2.4, `openai` 3.37, `pandas` 3.1, `numpy` 2.5 (2.4.6 on Python 3.11, which numpy 2.5 no longer supports), `pydantic` 2.14 and `sentence-transformers` 6.2. The build requires `setuptools>=84.2.1`.

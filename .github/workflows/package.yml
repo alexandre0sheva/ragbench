@@ -1,0 +1,47 @@
+name: Package checks
+
+# Reusable: CI runs it on every push, and the release workflow runs it before publishing and publishes the very files it uploads as `dist`.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Build the sdist and wheel and check their metadata
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          twine check --strict dist/*
+      - name: The wheel carries the demo data, the report templates and the typing marker
+        run: |
+          python - <<'PY'
+          import glob, zipfile
+          names = zipfile.ZipFile(glob.glob("dist/*.whl")[0]).namelist()
+          for needed in ("ragbench/py.typed", "ragbench/reporting/templates/report.html.j2", "ragbench/reporting/templates/runs_index.html.j2", "ragbench/_data/demo/questions.jsonl"):
+              assert needed in names, f"missing from the wheel: {needed}"
+          PY
+      - name: The wheel installs and runs in a clean environment
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install dist/*.whl
+          cd "$(mktemp -d)"
+          /tmp/clean/bin/ragbench --version
+          /tmp/clean/bin/ragbench demo
+          /tmp/clean/bin/ragbench run --preset quick --docs data/demo/docs --questions data/demo/questions.jsonl --mock --max-workers 2
+      - name: Keep the checked files for the release job
+        uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+          if-no-files-found: error

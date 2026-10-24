@@ -51,6 +51,7 @@ Homepage = "https://github.com/alexandre0sheva/ragbench"
 Repository = "https://github.com/alexandre0sheva/ragbench"
 Issues = "https://github.com/alexandre0sheva/ragbench/issues"
 Documentation = "https://github.com/alexandre0sheva/ragbench#readme"
+Changelog = "https://github.com/alexandre0sheva/ragbench/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

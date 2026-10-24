@@ -42,4 +42,19 @@ twine check --strict dist/*
 ```
 
 - [ ] Install the wheel in a clean virtual environment and run `ragbench demo` and `ragbench run --preset quick --docs data/demo/docs --questions data/demo/questions.jsonl --mock`.
-- [ ] Tag the release and publish.
+- [ ] `docker build -t ragbench .` and `docker run --rm ragbench demo` work (CI builds the image on every push, so this only matters for a local check).
+
+## Tag and publish
+
+Publishing is automated by `.github/workflows/release.yml` and runs when a tag `vX.Y.Z` is pushed. The tag must equal `v` plus the version in `pyproject.toml`, `CITATION.cff` must carry the same version, and `CHANGELOG.md` needs a non-empty `## [X.Y.Z]` section (it becomes the GitHub release notes): `python scripts/release_notes.py vX.Y.Z` checks all three locally. The workflow then repeats the package checks, uploads the files that passed to PyPI with trusted publishing (OIDC, no token stored anywhere) and creates the GitHub release with those files attached.
+
+- [ ] **Once, before the first release:** on PyPI, add a *pending trusted publisher* (Account settings → Publishing) for the project `ragbench`: owner `alexandre0sheva`, repository `ragbench`, workflow `release.yml`, environment `pypi`. In the GitHub repository settings create the environment `pypi` (add a required reviewer if you want a manual approval before each upload).
+- [ ] Tag the commit and push the tag (pushing is the step that publishes; it cannot be undone, because PyPI never accepts the same version twice):
+
+```bash
+git tag -a vX.Y.Z -m "RAGBench X.Y.Z"
+git push origin vX.Y.Z
+```
+
+- [ ] Watch the **Release** run. If a check fails before the upload, delete the tag (`git push --delete origin vX.Y.Z`, `git tag -d vX.Y.Z`), fix, and tag again.
+- [ ] In a clean environment: `pip install ragbench==X.Y.Z` and `ragbench demo`.

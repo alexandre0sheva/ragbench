@@ -17,8 +17,16 @@ PYPROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 CI = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
 
 
+def _job_steps(body: dict) -> list[dict]:
+    """A job's steps; a job that calls a local reusable workflow (`uses: ./.github/workflows/x.yml`) contributes that workflow's steps."""
+    if "uses" in body:
+        called = yaml.safe_load((ROOT / body["uses"]).read_text(encoding="utf-8"))
+        return [step for job in called["jobs"].values() for step in job["steps"]]
+    return body["steps"]
+
+
 def _steps() -> list[tuple[str, dict]]:
-    return [(job, step) for job, body in CI["jobs"].items() for step in body["steps"]]
+    return [(job, step) for job, body in CI["jobs"].items() for step in _job_steps(body)]
 
 
 def _commands() -> list[str]:
@@ -26,7 +34,7 @@ def _commands() -> list[str]:
 
 
 def test_the_workflow_has_every_job_the_project_relies_on():
-    assert set(CI["jobs"]) >= {"lint", "docs", "test", "extras", "smoke", "build", "audit"}
+    assert set(CI["jobs"]) >= {"lint", "docs", "test", "extras", "smoke", "build", "docker", "audit"}
     assert CI["jobs"]["test"]["strategy"]["matrix"]["python-version"] == ["3.11", "3.12", "3.13", "3.14", "3.15"]
     assert CI["jobs"]["audit"]["continue-on-error"] is True  # advisory: a new advisory must not block unrelated work
     assert CI["jobs"]["test"]["continue-on-error"] == "${{ matrix.python-version == '3.15' }}"

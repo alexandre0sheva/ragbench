@@ -10,12 +10,16 @@
 
 It is not a demo chatbot, and it needs no API key to try: without one it runs on deterministic mock models so you can see the whole pipeline first.
 
+*Not to be confused with* Galileo's [RAGBench](https://arxiv.org/abs/2407.11005) (arXiv 2407.11005, `rungalileo/ragbench`), a labelled dataset for RAG evaluation. This project is a tool that benchmarks RAG systems on your own data; it can read datasets like that one, and it shares only the name.
+
 ## Quickstart
 
 ```bash
-pip install -e .
+pip install ragbench                      # or try it with no install: uvx ragbench demo
 ragbench auto --docs ./my_docs --mock     # drop --mock for a real run: it estimates the cost and asks before spending
 ```
+
+From a clone, `pip install -e .` installs the same thing; without Python, `docker run --rm ragbench demo` uses the image built from the [Dockerfile](Dockerfile) (`docker build -t ragbench .`; mount your working directory with `-v "$PWD":/work` and pass keys with `-e OPENAI_API_KEY`).
 
 `auto` profiles your documents, writes questions from them if you have none (flagged `needs_review`; bring your own with `--questions`), runs a preset of systems, and prints the recommended one with the paths of `winner.yaml`, `report.html` and `recommendation.md`. If it stops, `ragbench auto --resume RUN_DIR` continues without paying again. Prefer to write the config yourself? `ragbench init my_ds --docs ./my_docs` scaffolds one; `ragbench demo` and `ragbench run --config configs/all.yaml --mock` run the bundled demo.
 
