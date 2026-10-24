@@ -12,7 +12,7 @@ cd ragbench
 uv venv --python 3.12 && source .venv/bin/activate      # or: python -m venv .venv && source .venv/bin/activate
 uv pip install -e ".[dev,anthropic,pdf,docx]"           # the extras CI installs, so the SDK and loader tests run instead of skipping
 ragbench demo
-pytest
+pytest -m "not slow" -n auto                      # the fast loop (under a minute on a laptop); plain `pytest` runs everything
 ```
 
 Every dependency floor in `pyproject.toml` is the latest release the day it was last checked, so a fresh environment is the supported one: `uv pip list --outdated` should print nothing in it (the one exception is a package that is itself pinned by another, such as `mpmath` under PyTorch). Raise the floors, never pin an old major; an upper bound needs a comment naming the incompatibility. GitHub Actions and pre-commit hooks follow the same rule (`pre-commit autoupdate`), and Dependabot opens one grouped pull request a week for `pip` and for `github-actions`.
@@ -28,12 +28,13 @@ CI runs these; run them before you push.
 ```bash
 ruff check .
 mypy
-pytest --cov                                 # fails below the coverage floor in pyproject.toml; raise the floor when coverage rises, never lower it
+pytest -n auto --cov                         # everything, in parallel; fails below the coverage floor in pyproject.toml; raise the floor when coverage rises, never lower it
 python scripts/generate_docs.py --check      # docs/systems.md, docs/cli.md, docs/tools.md and the README system table match the code
 python scripts/audit_docs.py                 # no duplicated or broken documentation (see below)
 ragbench compare --config configs/all.yaml --mock --max-workers 4
 ```
 
+- **Slow tests.** A test that takes several seconds even in parallel (a full parallel run, the live path) carries `@pytest.mark.slow`. CI runs the fast tests (`-m "not slow"`) on every Python version and the whole suite once, with coverage, so mark a new test slow rather than skipping it; `--strict-markers` is on, so a misspelt marker is an error. mypy runs with `check_untyped_defs`: annotate new code, and do not add blanket ignores.
 - **Golden snapshot.** `tests/golden/mock_metrics_v3.json` pins what every system retrieves and answers in a mock run. It must not change unless your change is meant to alter retrieval or answers; then run `python scripts/update_golden.py`, say so in the pull request, and note it in the changelog. `RAGBENCH_GOLDEN_STRICT=1 pytest tests/test_golden_mock.py` is the strict check.
 - **Report structure.** `tests/golden/report_structure_v1.json` pins the sections and data keys of `report.html`. After an intended change: `RAGBENCH_UPDATE_SNAPSHOTS=1 pytest tests/test_report_snapshot.py`.
 - **Every system and chunker is tested end to end** by `tests/test_e2e_matrix.py` as soon as it is registered: it must run, write every output, trace its cost, and be reproducible. Fix what it finds rather than excluding a component.

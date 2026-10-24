@@ -68,6 +68,7 @@ def _run(config: Path, server: FakeOpenAIServer, work: Path) -> tuple[Path, dict
     return out, json.loads((out / "run_summary.json").read_text())
 
 
+@pytest.mark.slow
 def test_live_run_with_parallel_systems_retries_caches_and_probes(tmp_path):
     config = _config(tmp_path)
     with FakeOpenAIServer() as server:
@@ -111,6 +112,7 @@ def test_live_run_with_parallel_systems_retries_caches_and_probes(tmp_path):
     assert run1["execution"]["system_workers"] == 4 and run1["cache"]["real_spend_usd"] > 0
 
 
+@pytest.mark.slow
 def test_live_run_through_an_openai_compatible_endpoint_needs_no_openai_key(tmp_path):
     """A config that uses only `providers:` endpoints is a live run even with no OPENAI_API_KEY / ANTHROPIC_API_KEY at all."""
     shutil.copytree(ROOT / "data" / "demo", tmp_path / "demo")
@@ -162,6 +164,7 @@ def test_live_run_through_an_openai_compatible_endpoint_needs_no_openai_key(tmp_
     assert (summary["latency_source"] == "probe").all()
 
 
+@pytest.mark.slow
 def test_live_run_with_parallel_systems_stops_cleanly_at_its_budget(tmp_path):
     """The spending cap on real threads: a cap smaller than any system's ingestion stops the run with a clear message, not a traceback."""
     config = _config(tmp_path)
@@ -186,6 +189,7 @@ def test_live_run_with_parallel_systems_stops_cleanly_at_its_budget(tmp_path):
     assert budget["stopped"] is True and budget["spent_usd"] > 0 and set(budget["incomplete_systems"]) >= {"vector", "hybrid_rerank"}
 
 
+@pytest.mark.slow
 def test_live_label_free_run_judges_answers_and_leaves_retrieval_blank(tmp_path):
     """Label-free questions over the real client path: no labels anywhere, half without a reference answer, and the judge is told so."""
     shutil.copytree(ROOT / "data" / "demo", tmp_path / "demo")
@@ -217,6 +221,7 @@ def test_live_label_free_run_judges_answers_and_leaves_retrieval_blank(tmp_path)
     assert json.loads((out / "recommendation.json").read_text())["winner"] in summary.index, "a label-free run still ends with a recommendation"
 
 
+@pytest.mark.slow
 def test_live_generate_questions_and_label_use_the_real_client_and_the_disk_cache(tmp_path):
     """`generate-questions` and `label` over real HTTP: valid questions, grades through the cache, and a re-run that costs (almost) nothing."""
     from ragbench.evaluation.evaluator import run_benchmark
@@ -277,6 +282,7 @@ def test_live_generate_questions_and_label_use_the_real_client_and_the_disk_cach
         assert server.stats["/v1/chat/completions"] < 0.2 * cold_label["/v1/chat/completions"], "grades are cached"
 
 
+@pytest.mark.slow
 def test_live_auto_run_checkpoints_on_worker_threads_and_resume_runs_only_the_missing_system(tmp_path):
     """`ragbench auto` over real HTTP with systems on parallel threads: checkpoints written from those threads, then a resume (cache off, so
     restoration and not caching is what saves the calls) that re-runs the one system whose checkpoint is gone."""

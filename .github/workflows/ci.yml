@@ -70,8 +70,12 @@ jobs:
           python -m pip install --upgrade pip
           # The SDK and loader extras are installed so the real-SDK provider tests and the PDF / Word loader tests run instead of skipping.
           python -m pip install -e ".[dev,anthropic,pdf,docx]"
-      - name: Tests with coverage (the floor is `fail_under` in pyproject.toml)
-        run: pytest --cov --cov-report=term --cov-report=xml
+      - name: Fast tests (everything not marked `slow`, in parallel)
+        if: matrix.python-version != '3.13'
+        run: pytest -m "not slow" -n auto
+      - name: Every test, with coverage (the floor is `fail_under` in pyproject.toml); the slow tests run here, on one version
+        if: matrix.python-version == '3.13'
+        run: pytest -n auto --cov --cov-report=term --cov-report=xml
       - name: Upload the coverage report
         if: matrix.python-version == '3.13'
         uses: actions/upload-artifact@v7
@@ -94,7 +98,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,anthropic,pdf,docx,chroma,faiss,qdrant]"
       - name: Full test suite (backend tests and the live path run against real Chroma / FAISS / Qdrant)
-        run: pytest
+        run: pytest -n auto
 
   smoke:
     name: CLI smoke test (mock mode)

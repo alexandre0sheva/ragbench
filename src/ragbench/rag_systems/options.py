@@ -202,8 +202,8 @@ class DecisionModelOptions(BaseModel):
         default="openai_decisions",
         description=(
             "`openai_decisions` (OpenAI's Decisions API, `POST /v1/decisions`, needs `OPENAI_API_KEY`), `llm_json` (the same questions put to a chat model "
-            "that replies with JSON; the like-for-like control for `openai_decisions`), `mock` (deterministic word-overlap probabilities, no key), or `jev` "
-            "(reserved: raises a clear error until a client exists). Mock runs (`--mock`, or no key) always use `mock`."
+            "that replies with JSON; the like-for-like control for `openai_decisions`), `mock` (deterministic word-overlap probabilities, no key), "
+            "or a registered third-party backend. Mock runs (`--mock`, or no key) always use `mock`."
         ),
     )
     model: str | None = Field(

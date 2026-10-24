@@ -17,7 +17,7 @@ Use this before tagging a release. CI runs most of the automatic checks; the man
 ## Verify (all of this is also in CI)
 
 - [ ] `ruff check .` and `mypy`.
-- [ ] `pytest --cov` passes and meets the coverage floor.
+- [ ] `pytest -n auto --cov` passes (the whole suite, slow tests included) and meets the coverage floor.
 - [ ] `RAGBENCH_GOLDEN_STRICT=1 pytest tests/test_golden_mock.py`: the golden snapshot did not change, or the change is intended and in the changelog.
 - [ ] `python scripts/generate_docs.py --check` and `python scripts/audit_docs.py`.
 - [ ] `ragbench auto --docs data/demo/docs --questions data/demo/questions.jsonl --preset quick --mock --yes` ends with a recommendation, and its `report.html` opens and renders in light and dark.

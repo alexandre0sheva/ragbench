@@ -33,7 +33,7 @@ from ragbench.models.decisions import (
     formats,
 )
 from ragbench.models.decisions.llm_json import parse_probabilities
-from ragbench.models.errors import ModelInitError, PermanentModelError
+from ragbench.models.errors import PermanentModelError
 from ragbench.models.llms import LLMResult, MockLLM
 from ragbench.rag_systems import all_specs, create_rag_system
 from ragbench.rag_systems.decision_gate_rag import ABSTAIN_ANSWER, INSUFFICIENT_EVIDENCE, NO_RELEVANT_CHUNKS
@@ -440,12 +440,6 @@ def test_the_factory_builds_by_name_and_falls_back_to_the_mock_like_chat_models_
     assert isinstance(live, CachedDecisionModel) and live.model_name == "gpt-6-luna" and live.provider == "openai_decisions"
     with pytest.raises(UnknownComponentError, match="llm_json"):
         create_decision_model("llm_jsn")
-
-
-def test_the_jev_backend_is_reserved_and_says_so():
-    with pytest.raises(ModelInitError, match="not implemented"):
-        create_decision_model("jev")
-    assert isinstance(create_decision_model("jev", force_mock=True), MockDecisionModel)  # `--mock` never needs a real backend
 
 
 # --- the cache --------------------------------------------------------------------------------------------------------

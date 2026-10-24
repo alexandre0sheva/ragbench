@@ -103,6 +103,7 @@ def test_failure_classification_uses_primary_k_not_a_hardcoded_hit_at_5(tmp_path
     assert row["failure_type"] != "retrieval_miss"  # doc_002 is in the top 3; there is no `hit@5` key here
 
 
+@pytest.mark.slow
 def test_every_real_system_reports_monotonic_recall_and_some_differ_at_10(tmp_path):
     import shutil
     from pathlib import Path

@@ -50,7 +50,7 @@ def test_every_step_is_a_checkout_setup_or_a_command_and_actions_are_pinned_to_a
 
 def test_the_gate_commands_are_in_the_workflow():
     text = "\n".join(_commands())
-    for needed in ("ruff check .", "mypy", "pytest --cov", "generate_docs.py --check", "audit_docs.py", "twine check --strict", "pip-audit", "python -m build", "ragbench auto"):
+    for needed in ("ruff check .", "mypy", "pytest -n auto --cov", "generate_docs.py --check", "audit_docs.py", "twine check --strict", "pip-audit", "python -m build", "ragbench auto"):
         assert needed in text, f"CI does not run `{needed}`"
 
 
@@ -82,3 +82,13 @@ def test_files_the_workflow_names_exist():
         for path in re.findall(r"(?:configs|data/demo|scripts)/[\w./-]+", command):
             assert (ROOT / path.rstrip(".")).exists(), f"CI refers to {path}, which does not exist"
     assert (ROOT / "scripts" / "generate_docs.py").exists()
+
+
+def test_slow_tests_are_marked_and_ci_runs_them_on_one_python_version_and_the_rest_everywhere():
+    markers = PYPROJECT["tool"]["pytest"]["ini_options"]
+    assert "--strict-markers" in markers["addopts"] and any(m.startswith("slow:") for m in markers["markers"])
+    test_steps = [step for step in CI["jobs"]["test"]["steps"] if "pytest" in step.get("run", "")]
+    fast = [step for step in test_steps if '-m "not slow"' in step["run"]]
+    full = [step for step in test_steps if '-m "not slow"' not in step["run"]]
+    assert len(fast) == 1 and fast[0]["if"] == "matrix.python-version != '3.13'" and "-n auto" in fast[0]["run"]
+    assert len(full) == 1 and full[0]["if"] == "matrix.python-version == '3.13'" and "--cov" in full[0]["run"]

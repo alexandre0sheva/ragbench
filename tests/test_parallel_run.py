@@ -79,6 +79,7 @@ def _rows(out: Path) -> list[dict]:
     return rows
 
 
+@pytest.mark.slow
 def test_parallel_systems_give_the_same_results_in_the_same_order_as_sequential(tmp_path):
     sequential = run_benchmark(_all_systems_config(_workdir(tmp_path, "a"), system_workers=1, max_workers=1), force_mock=True)
     parallel = run_benchmark(_all_systems_config(_workdir(tmp_path, "b"), system_workers=4, max_workers=2), force_mock=True)
