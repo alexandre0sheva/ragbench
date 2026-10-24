@@ -415,5 +415,4 @@ retrieval:
 - **There is no silent fallback.** Asking for a backend whose library is not installed fails when the system is built, with the `pip install` to run. `RetrievalResult.metadata["vector_backend"]` (and so `per_question_results.jsonl`) always names the backend that actually ran.
 - `in_memory` is a deprecated alias of `numpy` (it logs a warning once). Chroma used to be the default and a mandatory dependency; configs that say `vector_store: chroma` keep working once `ragbench[chroma]` is installed.
 - `persist_directory` only applies to `chroma` and `qdrant`; setting it with another backend is a config error.
-- FAISS publishes no macOS wheel for Python 3.14 yet (Linux and Python 3.11-3.13 are fine).
 - Backends are pluggable: register a class with `@VECTOR_BACKENDS.register("name")` (see [extending.md](extending.md)).

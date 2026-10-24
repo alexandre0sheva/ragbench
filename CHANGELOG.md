@@ -6,6 +6,12 @@ The format follows Keep a Changelog, and this project uses semantic versioning o
 
 ## [Unreleased]
 
+### Changed
+
+- **Dependency floors are the latest releases** (checked 2026-10-24), for the core, `dev` and every extra, including the majors `anthropic` 2 and `twine` 7, plus `ruff` 0.17, `mypy` 2.4, `openai` 3.37, `pandas` 3.1, `numpy` 2.5 (2.4.6 on Python 3.11, which numpy 2.5 no longer supports), `pydantic` 2.14 and `sentence-transformers` 6.2. The build requires `setuptools>=84.2.1`.
+- CI: `actions/upload-artifact@v7` (replaces the open Dependabot branch for it), Python 3.14 is a normal matrix cell now that every dependency ships wheels for it, and Python 3.15 is added as a best-effort cell (`pyyaml` has no 3.15 wheel yet). The note that FAISS has no macOS wheel for 3.14 is gone: 1.15 ships `abi3` wheels.
+- pre-commit hooks updated (`ruff-pre-commit` v0.17.2, `mirrors-mypy` v2.4.0); Dependabot groups the weekly `pip` and `github-actions` updates into one pull request each.
+
 ### Added
 
 - **`decision_gate`, a decision-gated RAG system.** It retrieves exactly like `hybrid_rerank`, then asks a typed decision model two yes/no questions before generating: does each retrieved chunk help answer the question (chunks below `answerability_threshold` are dropped), and is what is left enough to answer it (below `sufficiency_threshold` the system abstains: no generator call, the usual "could not find" answer). The ranking handed back and scored is the ungated one, so retrieval metrics stay comparable; the context metrics and the judge see the kept chunks. Every request is a traced `grade` step, the probability of every judged chunk is saved per question in a new `gate` block of `per_question_results.jsonl`, and new summary columns report `gate_abstain_rate`, `avg_chunks_kept` and `avg_decision_calls` (correct and wrong refusals are scored by the existing abstention metrics). The measured comparison with `hybrid_rerank`, `corrective` and the `no_retrieval` floor, with real API runs, is in [docs/decision-gate-evaluation.md](docs/decision-gate-evaluation.md); `configs/decision_gate.yaml` reproduces it, and `configs/all.yaml` now includes the default and strict gate, so the [example run](docs/example-run.md) (regenerated from a joint run on 7 Oct 2026) is the one leaderboard of every system.

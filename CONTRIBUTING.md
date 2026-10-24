@@ -9,11 +9,13 @@ Requires Python 3.11 or newer.
 ```bash
 git clone https://github.com/alexandre0sheva/ragbench.git
 cd ragbench
-uv venv && source .venv/bin/activate      # or: python -m venv .venv && source .venv/bin/activate
-uv pip install -e ".[dev]"                # or: pip install -e ".[dev]"
+uv venv --python 3.12 && source .venv/bin/activate      # or: python -m venv .venv && source .venv/bin/activate
+uv pip install -e ".[dev,anthropic,pdf,docx]"           # the extras CI installs, so the SDK and loader tests run instead of skipping
 ragbench demo
 pytest
 ```
+
+Every dependency floor in `pyproject.toml` is the latest release the day it was last checked, so a fresh environment is the supported one: `uv pip list --outdated` should print nothing in it (the one exception is a package that is itself pinned by another, such as `mpmath` under PyTorch). Raise the floors, never pin an old major; an upper bound needs a comment naming the incompatibility. GitHub Actions and pre-commit hooks follow the same rule (`pre-commit autoupdate`), and Dependabot opens one grouped pull request a week for `pip` and for `github-actions`.
 
 RAGBench must work without `OPENAI_API_KEY`. Tests must not need the network, a paid API or a model download: use the mock models and the fixtures in `tests/conftest.py` (a tiny dataset, a scripted LLM), and `tests/fake_openai_server.py` for code that talks to a real SDK. Every `ragbench` command and option is in [docs/cli.md](docs/cli.md).
 
@@ -77,5 +79,5 @@ Include a concise explanation of the evaluation impact and mention any API-cost 
 
 - Enable GitHub Actions and Dependabot (`.github/dependabot.yml` groups routine bumps).
 - Enable private vulnerability reporting (see [SECURITY.md](SECURITY.md)).
-- Protect `main` once there are outside contributors, and require the CI jobs to pass before merging: *Lint and types*, *Generated docs are current*, *Tests* (Python 3.11 to 3.13), *Tests with every optional extra*, *CLI smoke test* and *Package build*. *Tests (Python 3.14)* and the dependency audit are advisory.
+- Protect `main` once there are outside contributors, and require the CI jobs to pass before merging: *Lint and types*, *Generated docs are current*, *Tests* (Python 3.11 to 3.14), *Tests with every optional extra*, *CLI smoke test* and *Package build*. *Tests (Python 3.15)* and the dependency audit are advisory.
 - Never commit `.env`, `results/`, `dist/`, `build/`, `*.egg-info/` or caches (`git status --short` before a first push).

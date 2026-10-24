@@ -27,9 +27,9 @@ def _commands() -> list[str]:
 
 def test_the_workflow_has_every_job_the_project_relies_on():
     assert set(CI["jobs"]) >= {"lint", "docs", "test", "extras", "smoke", "build", "audit"}
-    assert CI["jobs"]["test"]["strategy"]["matrix"]["python-version"] == ["3.11", "3.12", "3.13", "3.14"]
+    assert CI["jobs"]["test"]["strategy"]["matrix"]["python-version"] == ["3.11", "3.12", "3.13", "3.14", "3.15"]
     assert CI["jobs"]["audit"]["continue-on-error"] is True  # advisory: a new advisory must not block unrelated work
-    assert CI["jobs"]["test"]["continue-on-error"] == "${{ matrix.python-version == '3.14' }}"
+    assert CI["jobs"]["test"]["continue-on-error"] == "${{ matrix.python-version == '3.15' }}"
     assert CI["permissions"] == {"contents": "read"}
 
 

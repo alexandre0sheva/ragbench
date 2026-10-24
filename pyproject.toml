@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=77", "wheel"]
+requires = ["setuptools>=84.2.1", "wheel>=0.48"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -30,18 +30,20 @@ classifiers = [
   "Typing :: Typed",
 ]
 dependencies = [
-  "typer>=0.27",
-  "pydantic>=2.13",
+  "typer>=0.27.3",
+  "pydantic>=2.14.1",
   "pyyaml>=6.0.3",
-  "rich>=15",
-  "pandas>=3.0",
-  "numpy>=2.3",
-  "scikit-learn>=1.9",
+  "rich>=15.0.0",
+  "pandas>=3.1",
+  # numpy 2.5 needs Python 3.12; 2.4.6 is the last release for 3.11.
+  "numpy>=2.5.4; python_version >= '3.12'",
+  "numpy>=2.4.6; python_version < '3.12'",
+  "scikit-learn>=1.9.1",
   "rank-bm25>=0.2.2",
   "tiktoken>=0.14",
-  "openai>=3.22",
+  "openai>=3.37",
   "jinja2>=3.1.6",
-  "markdown>=3.11",
+  "markdown>=3.11.2",
 ]
 
 [project.urls]
@@ -52,29 +54,28 @@ Documentation = "https://github.com/alexandre0sheva/ragbench#readme"
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=9.1",
+  "pytest>=9.1.1",
   "httpx>=0.28",  # the wire-level tests drive the real OpenAI SDK through httpx.MockTransport; the SDK no longer installs it
-  "ruff>=0.16",
-  "build>=1.6",
-  "twine>=6",
-  "pytest-cov>=7",
-  "mypy>=2.3",
-  "pre-commit>=4.6",
-  "types-PyYAML>=6.0.12",
-  "types-Markdown>=3.10",
+  "ruff>=0.17.2",
+  "build>=1.6.1",
+  "twine>=7",
+  "pytest-cov>=7.1",
+  "mypy>=2.4",
+  "pre-commit>=4.7",
+  "types-PyYAML>=6.0.12.20260906",
+  "types-Markdown>=3.10.2.20261007",
 ]
-pdf = ["pypdf>=6.19"]
+pdf = ["pypdf>=6.21.2"]
 docx = ["python-docx>=1.2"]
-anthropic = ["anthropic>=1.10"]
+anthropic = ["anthropic>=2.3"]
 # Vector backends (`retrieval.vector_store`); the default, `numpy`, needs none of them.
-chroma = ["chromadb>=1.5"]
-# faiss-cpu ships no macOS wheel for Python 3.14 yet (Linux and Python <=3.13 are fine).
-faiss = ["faiss-cpu>=1.10"]
-qdrant = ["qdrant-client>=1.19"]
+chroma = ["chromadb>=1.5.9"]
+faiss = ["faiss-cpu>=1.15.1"]
+qdrant = ["qdrant-client>=1.20"]
 # Local embeddings (`local:<hf-model>`).
-local = ["sentence-transformers>=6.1"]
+local = ["sentence-transformers>=6.2"]
 # Cross-encoder reranker (`reranker: cross_encoder`); the same library as `local`, listed separately so each use case reads naturally.
-rerank = ["sentence-transformers>=6.1"]
+rerank = ["sentence-transformers>=6.2"]
 
 [project.scripts]
 ragbench = "ragbench.cli:app"
