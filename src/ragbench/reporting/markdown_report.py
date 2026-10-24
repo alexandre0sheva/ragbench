@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from ragbench.rag_systems.trace import STAGE_KEYS, UNTRACKED, mean_by_stage
-from ragbench.reporting.columns import Column, format_cell, leaderboard_columns
+from ragbench.reporting.columns import MISSING, Column, format_cell, leaderboard_columns, to_float
 
 
 def stage_summary(per_question_rows: list[dict[str, Any]], systems: list[str]) -> list[dict[str, Any]]:
@@ -49,6 +49,7 @@ def write_leaderboard(
     stage_rows: list[dict[str, Any]] | None = None,
     significance_rows: list[dict[str, Any]] | None = None,
     stats_info: dict[str, Any] | None = None,
+    pairwise: dict[str, Any] | None = None,
 ) -> None:
     columns = leaderboard_columns({key for row in summary_rows for key in row}, primary_k)
     pareto = any("pareto_optimal" in row for row in summary_rows)
@@ -68,8 +69,47 @@ def write_leaderboard(
         content.extend([*(f"> **Note:** {notice}" for notice in notices), ""])
     content.extend([_markdown_table(headers, rows), ""])
     content.extend(_statistics_sections(summary_rows, columns, significance_rows or [], stats_info or {}, pareto))
+    content.extend(_pairwise_section(summary_rows, pairwise))
     content.extend(_stage_sections(stage_rows or []))
     path.write_text("\n".join(content), encoding="utf-8")
+
+
+def _pairwise_section(summary_rows: list[dict[str, Any]], pairwise: dict[str, Any] | None) -> list[str]:
+    """The arena (Bradley-Terry score of the head-to-head verdicts), who beat whom, and how much the answers' order swayed the judge."""
+    if not pairwise:
+        return []
+    names = [str(row["system"]) for row in summary_rows]
+    by_name = {str(row["system"]): row for row in summary_rows}
+    pairs = {"all": "every pair of systems", "vs_baseline": f"every system against {pairwise.get('baseline')}", "adaptive": "pairs picked adaptively"}
+    lines = [
+        "## Pairwise arena",
+        "",
+        f"{pairwise.get('comparisons', 0)} head-to-head comparisons ({pairs.get(str(pairwise.get('pairs')), pairwise.get('pairs'))}, judged by "
+        f"{', '.join(pairwise.get('judges') or [])}), each in both orders. The arena score is a Bradley-Terry strength on the Elo scale "
+        "(1000 = average; 400 points apart = 10:1 odds) with a 95% interval from resampling questions.",
+        "",
+    ]
+    rates = pairwise.get("win_rates") or {}
+    if rates:
+        header = ["Win rate (row vs column)", *names]
+        table = [{"Win rate (row vs column)": x, **{y: _rate((rates.get(x) or {}).get(y)) for y in names}} for x in names]
+        lines += [_markdown_table(header, table), ""]
+    bias = pairwise.get("position_bias") or {}
+    if bias.get("flip_rate") is not None:
+        lines += [
+            f"Position bias: the verdict followed the answers' position in {bias['flip_rate']:.0%} of the comparisons (counted as draws); "
+            f"{bias['first_position_rate']:.0%} of decisive verdicts went to the answer shown first (50% is unbiased).",
+            "",
+        ]
+    missing = [name for name in names if to_float(by_name[name].get("arena_score")) is None]
+    if missing:
+        lines += [f"No complete comparison, so no arena score: {', '.join(missing)}.", ""]
+    return lines
+
+
+def _rate(value: Any) -> str:
+    number = to_float(value)
+    return MISSING if number is None else f"{number:.0%}"
 
 
 def _p_text(p: float) -> str:

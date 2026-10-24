@@ -137,6 +137,21 @@
       <p class="hint">Shaded: best in the column. Missing values show "—", never 0: a system that retrieves nothing has no retrieval score, and a label-free question has no recall.</p>
     </section>
 
+    {% if arena %}
+    <section class="block" id="arena" aria-labelledby="h-arena">
+      <header><span class="num">{{ sec.arena }}</span><h2 id="h-arena">Pairwise arena</h2></header>
+      <p class="lede">{{ arena.comparisons }} head-to-head comparisons of anonymous answers ({% if arena.pairs == 'vs_baseline' %}every system against <strong>{{ arena.baseline }}</strong>{% elif arena.pairs == 'adaptive' %}pairs picked adaptively{% else %}every pair of systems{% endif %}), each judged in both orders by {{ arena.judges | join(', ') }}. The arena score is a Bradley-Terry strength on the Elo scale: 1000 is average and 400 points apart means 10:1 odds. Intervals come from resampling questions.{% if arena.position_bias and arena.position_bias.flip_rate is not none %} The verdict followed the answers' position in {{ '%.0f' | format(100 * arena.position_bias.flip_rate) }}% of comparisons; those count as draws.{% endif %}</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>System</th><th class="n">Arena score</th><th class="n">95% interval</th><th class="n">Points won</th><th class="n">W–T–L</th></tr></thead>
+        <tbody>{% for row in arena.rows %}<tr><th scope="row">{{ row.system }}</th><td class="n">{{ '%.0f' | format(row.score) if row.score is not none else '—' }}</td><td class="n">{% if row.lo is not none %}{{ '%.0f' | format(row.lo) }} to {{ '%.0f' | format(row.hi) }}{% else %}—{% endif %}</td><td class="n">{{ '%.0f%%' | format(100 * row.win_rate) if row.win_rate is not none else '—' }}</td><td class="n">{{ row.record }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+      <details class="tableview"><summary>Who beat whom (share of points, row against column)</summary><div class="table-scroll"><table>
+        <thead><tr><th>System</th>{% for name in arena.systems %}<th class="n">{{ name }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in arena.matrix %}<tr><th scope="row">{{ row.system }}</th>{% for v in row.cells %}<td class="n">{{ '%.0f%%' | format(100 * v) if v is not none else '—' }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table></div></details>
+    </section>
+    {% endif %}
+
     {% if heat %}
     <section class="block" id="categories" aria-labelledby="h-categories">
       <header><span class="num">{{ sec.categories }}</span><h2 id="h-categories">By question category</h2></header>

@@ -24,6 +24,7 @@ from ragbench.datasets.loader import load_dataset
 from ragbench.documents.loaders import load_dataset_documents
 from ragbench.evaluation.judge_panel import scoring_judges
 from ragbench.evaluation.judge_prompts import build_messages
+from ragbench.evaluation.pairwise import pairwise_messages
 from ragbench.models import cost as pricing
 from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.refs import system_model_refs
@@ -39,6 +40,7 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_QUESTIONS = 6  # questions each system is actually run on; per-question figures are their mean
 JUDGE_COMPLETION_TOKENS = 120  # a judge verdict (five scores, two flags, a sentence of reasoning)
+PAIRWISE_COMPLETION_TOKENS = 40  # a pairwise verdict (the winner and one sentence)
 STALE_PRICES_AFTER_DAYS = 90
 # Rough API latencies for the time projection: a model call, its generation speed, and an embedding request.
 LLM_CALL_BASE_S = 0.7
@@ -61,6 +63,7 @@ class SystemEstimate:
     error: str | None = None  # set when the system could not be measured; its numbers are then zero
     trials: int = 1  # `evaluation.trials`: every question is answered and judged this many times
     probe_calls: int = 0  # latency-probe answers a live run adds (`evaluation.latency_probe_questions`; `auto` counts its cap)
+    answer_tokens: float = 0.0  # mean length of the sampled answers, for pricing pairwise verdicts
 
     @property
     def query_usd(self) -> float:
@@ -91,6 +94,8 @@ class Estimate:
     warnings: list[str] = field(default_factory=list)
     unpriced_models: list[str] = field(default_factory=list)
     trials: int = 1
+    pairwise_calls: int = 0  # head-to-head judge requests (`evaluation.pairwise`), both orders counted
+    pairwise_usd: float = 0.0
 
     def to_dict(self) -> dict:
         return {**asdict(self), "systems": [{**asdict(s), "probe_usd": s.probe_usd, "total_usd": s.total_usd} for s in self.systems]}
@@ -142,12 +147,13 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
         judges = scoring_judges(evaluation.judge_models, generator, independent=evaluation.judge.independent)
         with record_usage() as ingestion:
             system.ingest(documents)
-        answer_usd = judge_usd = answer_seconds = judge_seconds = 0.0
+        answer_usd = judge_usd = answer_seconds = judge_seconds = answer_tokens = 0.0
         for question in sample:
             context_k = system.configured_context_k() or evaluation.context_k
             with record_usage() as usage:
                 answer = system.answer_question(question.question, top_k=max(evaluation.resolved_retrieval_depth, context_k), context_k=context_k)
             answer_usd += _usd(usage, generator, embedding, decision)
+            answer_tokens += estimate_tokens(answer.answer)
             answer_seconds += _seconds(usage)
             if evaluation.judge_enabled:
                 given = answer.metadata.get("context_chunk_ids")
@@ -170,6 +176,7 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
             n_questions=n_questions,
             trials=evaluation.trials,
             probe_calls=_probe_calls(evaluation.latency_probe_questions, n_questions),
+            answer_tokens=answer_tokens / count,
         )
     except Exception as exc:  # noqa: BLE001 (one system that cannot be measured must not hide the others)
         logger.warning("Could not estimate %s: %s: %s", name, type(exc).__name__, exc)
@@ -211,6 +218,7 @@ def estimate_run(
                 if progress is not None:
                     progress(system_config.resolved_name)
                 systems.append(_estimate_system(system_config, config, documents, sample, len(questions)))
+        pairwise_calls, pairwise_usd = _pairwise(config, [s for s in systems if s.error is None], sample, len(questions))
         unpriced = sorted(pricing.unknown_priced_models())
     finally:
         EMBEDDING_CACHE.clear()
@@ -221,18 +229,43 @@ def estimate_run(
     work = [s.ingestion_seconds + s.question_seconds * s.n_questions * s.trials / workers for s in measured]
     wall = max(sum(work) / max(1, config.evaluation.system_workers), max(work, default=0.0))
     wall += sum(s.question_seconds * s.probe_calls for s in measured)  # the probe runs one call at a time, after everything else
+    wall += pairwise_calls * (LLM_CALL_BASE_S + PAIRWISE_COMPLETION_TOKENS / LLM_TOKENS_PER_S) / workers
     return Estimate(
         systems=systems,
         n_questions=len(questions),
         n_documents=len(documents),
         corpus_tokens=sum(estimate_tokens(document.text) for document in documents),
-        total_usd=sum(s.total_usd for s in measured),
+        total_usd=sum(s.total_usd for s in measured) + pairwise_usd,
         wall_seconds=wall,
         pricing_as_of=pricing.PRICING_AS_OF,
         warnings=_warnings(systems, unpriced, today),
         unpriced_models=unpriced,
         trials=config.evaluation.trials,
+        pairwise_calls=pairwise_calls,
+        pairwise_usd=pairwise_usd,
     )
+
+
+def _pairs_per_question(mode: str, systems: int, max_pairs: int | None) -> int:
+    """How many pairs each question's answers meet in (see `pairwise_run.schedule`)."""
+    every = systems * (systems - 1) // 2
+    if mode == "adaptive":
+        return min(max_pairs or systems, every)
+    pairs = systems - 1 if mode == "vs_baseline" else every
+    return min(pairs, max_pairs) if max_pairs is not None else pairs
+
+
+def _pairwise(config: ExperimentConfig, measured: list[SystemEstimate], sample: list, n_questions: int) -> tuple[int, float]:
+    """Calls and dollars of the pairwise stage: two verdicts per pair, priced at the lead judge's rate (a pair that no judge of the panel
+    is neutral on is judged by all of them, which this leaves out)."""
+    settings = config.evaluation.pairwise
+    if not settings.enabled or not config.evaluation.judge_enabled or len(measured) < 2:
+        return 0, 0.0
+    calls = 2 * n_questions * _pairs_per_question(settings.pairs, len(measured), settings.max_pairs_per_question)
+    judge = config.evaluation.judge_models[0]
+    answer = sum(s.answer_tokens for s in measured) / len(measured)
+    asked = sum(estimate_tokens(" ".join(m["content"] for m in pairwise_messages(q, "", ""))) for q in sample) / max(1, len(sample))
+    return calls, calls * pricing.estimate_model_cost(judge, int(asked + 2 * answer), PAIRWISE_COMPLETION_TOKENS)
 
 
 def _probe_calls(size: int | Literal["auto"], n_questions: int) -> int:

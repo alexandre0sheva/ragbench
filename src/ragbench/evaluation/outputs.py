@@ -15,8 +15,10 @@ import yaml
 
 from ragbench.cache import summarize_cache
 from ragbench.config.schema import SelectionConfig
+from ragbench.evaluation.arena import ARENA_SUMMARY_COLUMNS
 from ragbench.evaluation.judge_panel import panel_agreement
 from ragbench.evaluation.manifest import build_manifest, utc_now_iso
+from ragbench.evaluation.pairwise_run import summarize
 from ragbench.evaluation.rows import RunRows
 from ragbench.evaluation.run_stats import SIGNIFICANCE_COLUMNS, RunStats, compute_run_stats
 from ragbench.evaluation.summary import build_qrels_audit, build_routes, build_summary, build_tool_usage, errors_by_system, judge_notices
@@ -78,6 +80,21 @@ def _compute_stats(run: BenchmarkEvaluator, per_question_rows: list[dict[str, An
     )
 
 
+def _write_pairwise(run: BenchmarkEvaluator, out: Path, summary_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """`pairwise.jsonl` and `arena.csv`, the arena columns of `summary_rows`, and the `pairwise` block of the run summary (None without the stage)."""
+    if run.pairwise is None:
+        return None
+    stats = run.config.evaluation.stats
+    result = summarize(run.pairwise, [row["system"] for row in summary_rows], n_boot=stats.n_boot, seed=stats.seed)
+    arena = {row["system"]: row for row in result["arena"]}
+    for summary_row in summary_rows:
+        summary_row.update({key: arena[summary_row["system"]][key] for key in ARENA_SUMMARY_COLUMNS})
+    write_jsonl(out / "pairwise.jsonl", run.pairwise.records)
+    pd.DataFrame(result["arena"]).to_csv(out / "arena.csv", index=False)
+    settings = run.config.evaluation.pairwise
+    return {**result["summary"], "max_pairs_per_question": settings.max_pairs_per_question, "win_rates": result["win_rates"]}
+
+
 def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: float) -> None:
     """Every output file of a run that has at least one finished system, report last (it reads all the others)."""
     out = run.output_dir
@@ -107,6 +124,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
     run_stats = _compute_stats(run, per_question_rows, summary_rows)
     for summary_row in summary_rows:
         summary_row.update(run_stats.summary_fields[summary_row["system"]])
+    pairwise = _write_pairwise(run, out, summary_rows)
     summary_df = pd.DataFrame(summary_rows)
     summary_df.to_csv(out / "metrics_summary.csv", index=False)
     pd.DataFrame(run_stats.significance_rows, columns=SIGNIFICANCE_COLUMNS).to_csv(out / "significance.csv", index=False)
@@ -117,7 +135,8 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
     if tool_usage := build_tool_usage(systems, per_question_rows):
         pd.DataFrame(tool_usage).to_csv(out / "tool_usage.csv", index=False)
     unknown_priced = pricing.unknown_priced_models()
-    charged = float(sum(row.get("total_cost", 0.0) for row in [*rows.ingestion, *rows.cost]))
+    # Pairwise judging is charged like pointwise judging (standalone prices, cache hits included), but to the run rather than a system.
+    charged = float(sum(row.get("total_cost", 0.0) for row in [*rows.ingestion, *rows.cost])) + (pairwise or {}).get("cost_usd", 0.0)
     in_process = EMBEDDING_CACHE.stats()
     probe_cost = sum(probe.cost_usd for probe in run.probe_results.values())
     probe_calls = sum(probe.calls for probe in run.probe_results.values())
@@ -133,7 +152,13 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
     panel = run.judge is not None and run.judge.is_panel
     agreement = panel_agreement(per_question_rows) if panel else {}
     generators = {cfg.resolved_name: system_model_refs(cfg).llm[0] for cfg in systems}
-    notices = build_notices(run.mode, unknown_priced, concurrent_latency=concurrent_latency, **judge_notices(run.judge, generators, summary_rows, agreement))
+    notices = build_notices(
+        run.mode,
+        unknown_priced,
+        concurrent_latency=concurrent_latency,
+        pairwise_flip_rate=(pairwise or {}).get("position_bias", {}).get("flip_rate") if run.mode == "live" else None,
+        **judge_notices(run.judge, generators, summary_rows, agreement),
+    )
     # Only a panel gets a block: a one-judge run's summary stays as it was.
     judge_block = {"judge": {"models": evaluation.judge_models, "aggregate": evaluation.judge.aggregate, "independent": evaluation.judge.independent, "agreement": agreement}} if panel else {}
     write_leaderboard(
@@ -144,6 +169,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
         stage_rows=stage_summary(per_question_rows, [cfg.resolved_name for cfg in systems]),
         significance_rows=run_stats.significance_rows,
         stats_info=run_stats.stats,
+        pairwise=pairwise,
     )
     write_failures(out / "failures.md", per_question_rows)
     qrels_audit_rows = build_qrels_audit(per_question_rows, evaluation.resolved_primary_k)
@@ -183,6 +209,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
                 "dataset": run.dataset_info,
                 "notices": notices,
                 **judge_block,
+                **({"pairwise": pairwise} if pairwise is not None else {}),
                 "dataset_warnings": run.dataset_warnings,
                 "document_warnings": run.document_warnings,
                 "outputs": {
@@ -193,6 +220,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
                     "significance": "significance.csv",
                     "pareto": "pareto.json",
                     "recommendation": "recommendation.md",
+                    **({"arena": "arena.csv", "pairwise": "pairwise.jsonl"} if pairwise is not None else {}),
                 },
             },
             indent=2,

@@ -53,6 +53,8 @@ def leaderboard_columns(keys: Iterable[str], primary_k: int | None = None) -> li
         headline("answer_score", "Answer", "{:.2f}"),
         headline("faithfulness", "Faithful", "{:.2f}"),
     ]
+    if "arena_score" in keys:  # head-to-head judging (`evaluation.pairwise`)
+        columns.append(headline("arena_score", "Arena", "{:.0f}"))
     # Deterministic and context metrics (see docs/methodology.md); older runs do not have them.
     if "token_f1" in keys:
         columns.append(Column("token_f1", "F1", "{:.2f}", True))

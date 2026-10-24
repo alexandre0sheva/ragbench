@@ -235,6 +235,20 @@ class JudgeConfig(BaseModel):
     )
 
 
+class PairwiseConfig(BaseModel):
+    """`evaluation.pairwise:` section: head-to-head judging of the systems' answers into an arena score (see docs/methodology.md#pairwise-arena)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=False, description="Judge pairs of answers to the same question, in both orders, after the main pass.")
+    pairs: Literal["all", "vs_baseline", "adaptive"] = Field(
+        default="all", description="Which answers meet: every pair, every system against `evaluation.stats.baseline`, or `adaptive` (rounds that favour close pairs)."
+    )
+    max_pairs_per_question: int | None = Field(
+        default=None, ge=1, description="At most this many pairs per question (a seeded sample); `adaptive` defaults to the number of systems."
+    )
+
+
 class StatsConfig(BaseModel):
     """`evaluation.stats:` section: how uncertainty and significance are computed (see docs/methodology.md#statistics)."""
 
@@ -263,6 +277,7 @@ class EvaluationConfig(BaseModel):
     # Judge details. `judge.model`, when set, wins over `judge_model` (setting both to different models is an error); afterwards both agree.
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
     stats: StatsConfig = Field(default_factory=StatsConfig)
+    pairwise: PairwiseConfig = Field(default_factory=PairwiseConfig)
     max_questions: int | None = None
     # Hard spending cap in dollars: once the run has been charged this much it starts no more questions, finishes the ones in flight and
     # reports the systems that completed. Counts charged cost (standalone prices), an upper bound of real spend when the cache is warm.
@@ -596,6 +611,8 @@ class ExperimentConfig(BaseModel):
                     validate_model_ref(str(system.models["embedding"]), "embedding", self.providers)
                 except ValueError as exc:
                     raise ValueError(f"{label}.models.embedding: {exc}") from None
+        if self.evaluation.pairwise.enabled and len(self.systems) < 2:
+            raise ValueError("evaluation.pairwise needs at least two systems to compare")
         panel = self.evaluation.judge.panel
         for index, ref in enumerate(self.evaluation.judge_models):
             try:

@@ -314,6 +314,30 @@ def _agents(summary: list[dict[str, Any]], order: list[str], tools: list[dict[st
     return {"rows": rows, "tools": tools, "routes": routes}
 
 
+def _arena(run_dir: Path, run_summary: dict[str, Any], order: list[str]) -> dict[str, Any]:
+    """The pairwise arena (`arena.csv` and the run summary's `pairwise` block); `{}` for a run without one."""
+    pairwise = run_summary.get("pairwise")
+    if not pairwise:
+        return {}
+    table = {str(row["system"]): row for row in _read_csv(run_dir / "arena.csv")}
+    names = [name for name in order if name in table]
+    rows = [
+        {
+            "system": name,
+            "score": to_float(table[name].get("arena_score")),
+            "lo": to_float(table[name].get("arena_score_ci_lo")),
+            "hi": to_float(table[name].get("arena_score_ci_hi")),
+            "win_rate": to_float(table[name].get("arena_win_rate")),
+            "record": f"{int(table[name].get('arena_wins') or 0)}–{int(table[name].get('arena_ties') or 0)}–{int(table[name].get('arena_losses') or 0)}",
+        }
+        for name in names
+    ]
+    rates = pairwise.get("win_rates") or {}
+    matrix = [{"system": x, "cells": [to_float((rates.get(x) or {}).get(y)) for y in names]} for x in names]
+    keys = ("comparisons", "judges", "pairs", "baseline", "position_bias", "failed", "skipped_by_budget")
+    return {"arena": {"systems": names, "rows": rows, "matrix": matrix, **{key: pairwise.get(key) for key in keys}}}
+
+
 def _judge(run_dir: Path, run_summary: dict[str, Any]) -> dict[str, Any]:
     """The judge panel and the human audit of the judge, when the run has either (`{}` otherwise, so plain runs keep their shape)."""
     panel = run_summary.get("judge")
@@ -450,6 +474,7 @@ def build_report(run_dir: Path, max_embedded_mb: float = DEFAULT_MAX_EMBEDDED_MB
         "run": run,
         "notices": notices,
         **_judge(run_dir, run_summary),
+        **_arena(run_dir, run_summary, order),
         "dataset": dataset,
         "cost": cost,
         "recommendation": _recommendation(recommendation, winner_yaml, by_name),

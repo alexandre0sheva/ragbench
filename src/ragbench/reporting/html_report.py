@@ -150,6 +150,8 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         sections.append(("recommendation", "Recommendation"))
     sections.append(("tradeoff", "Quality vs cost" if cost_axis else "Quality vs latency"))
     sections.append(("leaderboard-section", "Leaderboard"))
+    if data.get("arena"):
+        sections.append(("arena", "Pairwise arena"))
     if heat:
         sections.append(("categories", "Categories"))
     sections.append(("costs", "Cost and latency"))
@@ -161,7 +163,7 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         sections.append(("questions", "Questions"))
     sections.append(("repro", "Reproducibility"))
     numbers = {key: f"{n:02d}" for n, (key, _) in enumerate(sections, start=1)}
-    sec = {"recommendation": numbers.get("recommendation"), "tradeoff": numbers["tradeoff"], "leaderboard": numbers["leaderboard-section"], "categories": numbers.get("categories"),
+    sec = {"recommendation": numbers.get("recommendation"), "tradeoff": numbers["tradeoff"], "leaderboard": numbers["leaderboard-section"], "arena": numbers.get("arena"), "categories": numbers.get("categories"),
            "costs": numbers["costs"], "agents": numbers.get("agents"), "failures": numbers.get("failures"), "audit": numbers.get("audit"), "questions": numbers.get("questions"), "repro": numbers["repro"]}
     return {
         "css": _asset("report.css"),
@@ -170,6 +172,7 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         "started": _date(data["run"]["started_utc"]),
         "notices": data["notices"],
         "judge": data.get("judge"),
+        "arena": data.get("arena"),
         "dataset": data["dataset"],
         "cost": data["cost"],
         "money": money,

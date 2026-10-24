@@ -50,6 +50,7 @@ evaluation:
   # system_workers: 1, ingest_workers: 4, latency_probe_questions: 5  (see Concurrency)
   # trials: 1  (see Statistics)
   # judge: {...} (see Judge), stats: {n_boot: 2000, seed: 0, baseline: null} (see Statistics)
+  # pairwise: {enabled: false, pairs: all} (see Pairwise judging)
 # selection: {profile: balanced, constraints: {...}} (see Selection)
 # report: {max_embedded_mb: 4}  (see Report)
 # max_cost_usd: 25, cost_confirm_threshold_usd: 1.0  (see Estimating cost and capping it)
@@ -154,6 +155,20 @@ evaluation:
 evaluation:
   trials: 3
 ```
+
+## Pairwise judging
+
+`evaluation.pairwise` judges the systems' answers head to head after the main pass and ranks them by an arena score; it needs no reference answers, so it is the quality ranking to look at on a label-free dataset. Off by default.
+
+```yaml
+evaluation:
+  pairwise:
+    enabled: true
+    pairs: all                  # all | vs_baseline | adaptive (default all)
+    max_pairs_per_question: 6   # optional cap per question (a seeded sample); for adaptive, pairs per question (default: the number of systems)
+```
+
+It needs at least two systems, uses the run's judge (or panel), seed (`evaluation.stats.seed`) and baseline (`evaluation.stats.baseline`), and costs two judge calls per pair and question: n systems with `pairs: all` is n(n − 1) calls per question, so `ragbench estimate` shows the line before a paid run. How pairs are picked and judged and what the arena score means is in [methodology.md](methodology.md#pairwise-arena). Changing this section does not invalidate resume checkpoints.
 
 ## Selection
 

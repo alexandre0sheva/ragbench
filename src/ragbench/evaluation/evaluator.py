@@ -29,14 +29,17 @@ from ragbench.evaluation.budget import BudgetExceededError, BudgetGuard
 from ragbench.evaluation.checkpoint import Checkpoint, CheckpointStore, context_hash
 from ragbench.evaluation.judge_panel import JudgePanel
 from ragbench.evaluation.manifest import dataset_hash, utc_now_iso
+from ragbench.evaluation.pairwise import PairwiseJudge
+from ragbench.evaluation.pairwise_run import PairwiseResult, run_pairwise
 from ragbench.evaluation.plan import EvaluationPlan
 from ragbench.evaluation.rows import RunRows
+from ragbench.evaluation.run_stats import cheapest_system
 from ragbench.evaluation.summary import failed_systems
 from ragbench.evaluation.warm_up import modules_to_warm_up
 from ragbench.models import cost as pricing
 from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.errors import ModelInitError
-from ragbench.models.refs import missing_credentials, resolve_run_mode
+from ragbench.models.refs import missing_credentials, resolve_run_mode, system_model_refs
 from ragbench.rag_systems import create_rag_system
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
 from ragbench.runtime import (
@@ -130,6 +133,7 @@ class BenchmarkEvaluator:
         self.generator_models: dict[str, tuple[str, str]] = {}  # system name -> (provider, model) of its generator, for the self-preference check
         self._qrels: dict[str, dict[str, int]] = {}
         self.judge: JudgePanel | None = None
+        self.pairwise: PairwiseResult | None = None  # the head-to-head stage, when `evaluation.pairwise.enabled`
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_id = f"{self.config.run.name}_{timestamp}"
         # Runs can finish within one second of each other (a fully cached re-run is fast): never reuse a directory.
@@ -241,6 +245,8 @@ class BenchmarkEvaluator:
             for name, probe in fresh_probes.items():
                 self.checkpoints.save_probe(name, asdict(probe))
         run_rows = RunRows.collect(outcomes)
+        if self.config.evaluation.pairwise.enabled and len(outcomes) > 1 and not unfinished:
+            self.pairwise = self._run_pairwise(run_rows, questions)
 
         run_wall_time_ms = (perf_counter() - run_start) * 1000
         if outcomes:
@@ -251,6 +257,30 @@ class BenchmarkEvaluator:
         if failed:
             raise BenchmarkRunError(self.output_dir, failed, self.config.evaluation.max_error_rate)
         return self.output_dir
+
+    def _run_pairwise(self, run_rows: RunRows, questions: list) -> PairwiseResult:
+        """Head-to-head judging of the finished systems' answers (`evaluation.pairwise`), charged to the run's spending cap."""
+        assert self.judge is not None
+        evaluation = self.config.evaluation
+        systems = self.reported_systems
+        names = [cfg.resolved_name for cfg in systems]
+        costs: dict[str, list[float]] = {}
+        for row in run_rows.cost:
+            costs.setdefault(row["system"], []).append(float(row["total_cost"]))
+        priced = [{"system": name, "avg_cost_per_question": sum(costs[name]) / len(costs[name]) if costs.get(name) else None} for name in names]
+        return run_pairwise(
+            run_rows.per_question,
+            questions,
+            names,
+            judges={ref: PairwiseJudge.from_answer_judge(judge) for ref, judge in self.judge.judges.items()},
+            generators={cfg.resolved_name: system_model_refs(cfg).llm[0] for cfg in systems},
+            settings=evaluation.pairwise,
+            independent=evaluation.judge.independent,
+            baseline=evaluation.stats.baseline or cheapest_system(priced),  # the same default baseline as `significance.csv`
+            seed=evaluation.stats.seed,
+            workers=self.max_workers,
+            budget=self.budget,
+        )
 
     def _context_hash(self, system_config: SystemConfig) -> str:
         return context_hash(system_config, self.config, self.dataset_digest, self.mode)

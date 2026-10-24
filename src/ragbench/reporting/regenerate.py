@@ -48,6 +48,7 @@ def regenerate_reports(run_dir: Path) -> tuple[list[Path], list[str]]:
         stage_rows=stage_summary(per_question, [str(row["system"]) for row in summary]),
         significance_rows=_read_csv(run_dir / "significance.csv"),
         stats_info=stats or None,
+        pairwise=run_summary.get("pairwise"),
     )
     written.append(run_dir / "leaderboard.md")
     if per_question:

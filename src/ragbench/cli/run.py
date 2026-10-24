@@ -51,6 +51,9 @@ def print_estimate(estimate: Estimate) -> None:
             table.add_row(row.system, "[red]could not be estimated[/red]", "", "", "")
             continue
         table.add_row(row.system + (" ~" if row.agentic else ""), money(row.ingestion_usd), money(row.query_usd), money(row.judge_usd), money(row.total_usd))
+    if estimate.pairwise_calls:
+        table.add_section()
+        table.add_row(f"Pairwise judging ({estimate.pairwise_calls} calls)", "", "", money(estimate.pairwise_usd), money(estimate.pairwise_usd))
     table.add_section()
     table.add_row("Total", "", "", "", f"[bold]{money(estimate.total_usd)}[/bold]")
     console.print(table)
