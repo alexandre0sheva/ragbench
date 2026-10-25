@@ -36,6 +36,7 @@ class ExternalReply:
     cost_usd: float | None = None
     cost: CostBreakdown | None = None  # a full breakdown (an `AnswerResult`'s), which wins over `cost_usd` and the tokens
     steps: list[Step] = field(default_factory=list)  # the system's own trace of this answer, when it reports one
+    agent: dict[str, Any] | None = None  # an agentic external system's loop summary (steps, llm_calls, budget_exhausted, ...)
 
 
 def unscored_retrieval(metadata: dict[str, Any]) -> bool:
@@ -99,6 +100,9 @@ class ExternalRAG(BaseRAGSystem):
         external: dict[str, Any] = {"unmapped_doc_ids": unmapped, "cost_known": cost_known}
         if reply.contexts is None:
             external["no_contexts"] = True
+        metadata: dict[str, Any] = {"system_type": self.config.type, "context_chunk_ids": [chunk.chunk_id for chunk in chunks], "external": external}
+        if reply.agent is not None:
+            metadata["agent"] = reply.agent
         return AnswerResult(
             question=question,
             answer=reply.answer,
@@ -113,7 +117,7 @@ class ExternalRAG(BaseRAGSystem):
             latency_ms=total.elapsed_ms,
             cost=cost,
             token_usage={"prompt_tokens": prompt, "completion_tokens": completion},
-            metadata={"system_type": self.config.type, "context_chunk_ids": [chunk.chunk_id for chunk in chunks], "external": external},
+            metadata=metadata,
             steps=reconcile_steps(steps, cost),
         )
 

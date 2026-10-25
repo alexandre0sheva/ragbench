@@ -113,11 +113,14 @@ def _view(build: ReportBuild) -> dict[str, Any]:
     latency_table = [{"system": r["system"], "p50": _num(r["p50"], "{:.0f}"), "p95": _num(r["p95"], "{:.0f}"), "source": r["source"] or MISSING} for r in data["latency"]]
 
     agents = data["agents"]
-    agent_headers = ["Steps", "LLM calls", "Tool calls", "Tool errors", "Required tool used", "Budget hit", "Route accuracy"]
+    agent_headers = ["Steps", "LLM calls", "Tool calls", "Tool errors", "Redundant searches", "Steps to evidence", "Required tool used", "Budget hit", "Route accuracy"]
     agent_table: list[dict[str, Any]] = []
     if agents and agents["rows"]:
-        keys = ["avg_steps", "avg_llm_calls", "avg_tool_calls", "tool_error_rate", "required_tool_used_rate", "budget_exhausted_rate", "route_accuracy"]
-        formats = ["{:.1f}", "{:.1f}", "{:.1f}", "{:.0%}", "{:.0%}", "{:.0%}", "{:.0%}"]
+        keys = [
+            "avg_steps", "avg_llm_calls", "avg_tool_calls", "tool_error_rate", "redundant_search_rate", "avg_steps_to_evidence",
+            "required_tool_used_rate", "budget_exhausted_rate", "route_accuracy",
+        ]  # fmt: skip
+        formats = ["{:.1f}", "{:.1f}", "{:.1f}", "{:.0%}", "{:.0%}", "{:.1f}", "{:.0%}", "{:.0%}", "{:.0%}"]
         peaks = {k: max((r[k] or 0 for r in agents["rows"]), default=0) or 1 for k in keys[:3]}
         for row in agents["rows"]:
             cells = [{"text": _num(row[k], f), "bar": round(48 * (row[k] or 0) / peaks[k]) if k in peaks and row[k] is not None else None} for k, f in zip(keys, formats, strict=True)]

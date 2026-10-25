@@ -34,7 +34,7 @@ def usage_rows(system: str, configured: list[str], rows: list[dict[str, Any]]) -
                 "errors": errors,
                 "error_rate": errors / len(calls) if calls else None,
                 "truncated": sum(1 for _, step in calls if step.get("metadata", {}).get("truncated")),
-                "questions_using": len({index for index, _ in calls}),
+                "questions_using": len({rows[index].get("question_id", index) for index, _ in calls}),  # questions, not answers: trials repeat them
                 "avg_latency_ms": sum(step["latency_ms"] for _, step in calls) / len(calls) if calls else None,
                 "total_cost_usd": sum(step["cost"]["total_cost"] for _, step in calls),
             }

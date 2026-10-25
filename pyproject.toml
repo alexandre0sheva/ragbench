@@ -74,7 +74,8 @@ anthropic = ["anthropic>=2.3"]
 hub = ["pyarrow>=26"]
 # Framework adapters (`ragbench.adapters.*`) and the `examples/*_default.py` reference pipelines built with them.
 langchain = ["langchain-core>=1.7", "langchain-text-splitters>=1.1.3", "langchain-openai>=1.7.2"]
-llamaindex = ["llama-index-core>=0.14.25", "llama-index-llms-openai>=0.8.3", "llama-index-embeddings-openai>=0.7"]
+# Not llama-index-llms-openai: every release requires openai<3 (0.8.3, 2026-10-12); the reference pipeline reaches OpenAI through RAGBench's client.
+llamaindex = ["llama-index-core>=0.14.25"]
 haystack = ["haystack-ai>=3.3"]
 # Vector backends (`retrieval.vector_store`); the default, `numpy`, needs none of them.
 chroma = ["chromadb>=1.5.9"]

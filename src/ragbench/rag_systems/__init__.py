@@ -5,6 +5,7 @@ from ragbench.rag_systems.adaptive_rag import AdaptiveRAG
 from ragbench.rag_systems.agent_search_rag import AgentSearchRAG
 from ragbench.rag_systems.base import BaseRAGSystem
 from ragbench.rag_systems.bm25_rag import BM25RAG
+from ragbench.rag_systems.cli_agent_rag import CliAgentRAG
 from ragbench.rag_systems.contextual_rag import ContextualRAG
 from ragbench.rag_systems.corrective_rag import CorrectiveRAG
 from ragbench.rag_systems.decision_gate_rag import DecisionGateRAG
@@ -56,6 +57,7 @@ __all__ = [
     "SYSTEMS",
     "SYSTEM_REGISTRY",
     "BaseRAGSystem",
+    "CliAgentRAG",
     "ContextualRAG",
     "CorrectiveRAG",
     "DecisionGateRAG",

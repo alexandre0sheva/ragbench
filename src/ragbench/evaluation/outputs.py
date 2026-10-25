@@ -209,6 +209,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
                 "num_systems": len(systems),
                 "budget": run.budget_summary([cfg.resolved_name for cfg in systems], {}),
                 "num_question_rows": len(per_question_rows),
+                **({"trials": run.plan.trials} if run.plan is not None and run.plan.trials > 1 else {}),  # absent for one trial: the file is as before
                 "num_errors": sum(errors.values()),
                 "errors_by_system": errors,
                 "k_values": evaluation.k_values,

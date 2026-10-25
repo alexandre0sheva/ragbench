@@ -13,7 +13,9 @@ in-memory vector store) and `index.as_query_engine()` with LlamaIndex's own ques
 systems' (`gpt-6-luna`, `text-embedding-3-small`); the retrieval depth is RAGBench's `top_k` (LlamaIndex's own default is 2), so the systems are compared at the same
 depth. The file path stays out of the text LlamaIndex embeds and shows the model (its readers would add it), so no system reads more than the document says.
 
-With no key, or without `RAGBENCH_REFERENCE_LIVE=1`, it runs on RAGBench's mock models (see `ragbench.adapters.offline`).
+With no key, or without `RAGBENCH_REFERENCE_LIVE=1`, it runs on RAGBench's mock models (see `ragbench.adapters.offline`). Live, LlamaIndex talks to OpenAI through
+RAGBench's own client, wrapped in LlamaIndex's `CustomLLM` (a chat model, like its OpenAI integration) and `BaseEmbedding`: `llama-index-llms-openai` requires
+`openai<3`, so it cannot be installed next to RAGBench. The pipeline, its splitter and its prompts are LlamaIndex's either way.
 """
 
 from __future__ import annotations
@@ -23,12 +25,23 @@ from typing import Any
 
 from llama_index.core import Document, VectorStoreIndex
 from llama_index.core.base.embeddings.base import BaseEmbedding
-from llama_index.core.llms import CompletionResponse, CompletionResponseGen, CustomLLM, LLMMetadata
-from llama_index.core.llms.callbacks import llm_completion_callback
+from llama_index.core.llms import (
+    ChatMessage,
+    ChatResponse,
+    ChatResponseGen,
+    CompletionResponse,
+    CompletionResponseGen,
+    CustomLLM,
+    LLMMetadata,
+    MessageRole,
+)
+from llama_index.core.llms.callbacks import llm_chat_callback, llm_completion_callback
 
 from ragbench.adapters import offline
 from ragbench.adapters.llamaindex import from_query_engine
 from ragbench.models.defaults import DEFAULT_EMBEDDING_MODEL, DEFAULT_GENERATOR_MODEL
+from ragbench.models.embeddings import create_embedding_model
+from ragbench.models.llms import create_llm
 
 
 class OfflineEmbedding(BaseEmbedding):
@@ -60,6 +73,52 @@ class OfflineLLM(CustomLLM):
         raise NotImplementedError("the offline model does not stream")
 
 
+class OpenAIEmbedding(BaseEmbedding):
+    """`text-embedding-3-small` through RAGBench's client."""
+
+    def _get_query_embedding(self, query: str) -> list[float]:
+        return self._get_text_embeddings([query])[0]
+
+    def _get_text_embedding(self, text: str) -> list[float]:
+        return self._get_text_embeddings([text])[0]
+
+    def _get_text_embeddings(self, texts: list[str]) -> list[list[float]]:
+        return [[float(x) for x in row] for row in create_embedding_model(DEFAULT_EMBEDDING_MODEL).embed_texts(texts).vectors]
+
+    async def _aget_query_embedding(self, query: str) -> list[float]:
+        return self._get_query_embedding(query)
+
+
+class OpenAI(CustomLLM):
+    """`gpt-6-luna` through RAGBench's client, as a chat model at temperature 0 (what `llama_index.llms.openai.OpenAI(temperature=0)` would be)."""
+
+    @property
+    def metadata(self) -> LLMMetadata:
+        return LLMMetadata(model_name=DEFAULT_GENERATOR_MODEL, is_chat_model=True)
+
+    def _generate(self, messages: list[dict[str, str]]) -> tuple[str, dict[str, Any]]:
+        result = create_llm(DEFAULT_GENERATOR_MODEL).generate(messages, temperature=0)
+        return result.text, {"model": result.model, "usage": {"prompt_tokens": result.prompt_tokens, "completion_tokens": result.completion_tokens}}
+
+    @llm_chat_callback()
+    def chat(self, messages: Any, **kwargs: Any) -> ChatResponse:
+        text, raw = self._generate([{"role": message.role.value, "content": message.content or ""} for message in messages])
+        return ChatResponse(message=ChatMessage(role=MessageRole.ASSISTANT, content=text), raw=raw)
+
+    @llm_completion_callback()
+    def complete(self, prompt: str, formatted: bool = False, **kwargs: Any) -> CompletionResponse:
+        text, raw = self._generate([{"role": "user", "content": prompt}])
+        return CompletionResponse(text=text, raw=raw)
+
+    @llm_chat_callback()
+    def stream_chat(self, messages: Any, **kwargs: Any) -> ChatResponseGen:
+        raise NotImplementedError("the reference pipeline does not stream")
+
+    @llm_completion_callback()
+    def stream_complete(self, prompt: str, formatted: bool = False, **kwargs: Any) -> CompletionResponseGen:
+        raise NotImplementedError("the reference pipeline does not stream")
+
+
 _index: VectorStoreIndex | None = None
 _llm: Any = None
 
@@ -67,11 +126,8 @@ _llm: Any = None
 def ingest(documents: list[Any]) -> None:
     global _index, _llm
     if offline.live():
-        from llama_index.embeddings.openai import OpenAIEmbedding
-        from llama_index.llms.openai import OpenAI
-
-        embed_model: Any = OpenAIEmbedding(model=DEFAULT_EMBEDDING_MODEL)
-        _llm = OpenAI(model=DEFAULT_GENERATOR_MODEL, temperature=0)
+        embed_model: Any = OpenAIEmbedding()
+        _llm = OpenAI()
     else:
         embed_model, _llm = OfflineEmbedding(), OfflineLLM()
     nodes_source = [

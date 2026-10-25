@@ -84,6 +84,8 @@
   "LLM calls",
   "Tool calls",
   "Tool errors",
+  "Redundant searches",
+  "Steps to evidence",
   "Budget hit",
   "Answered",
   "Failed"

@@ -25,7 +25,7 @@ def route_rows(system: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "system": system,
                 "route": route,
-                "questions": len(mine),
+                "questions": len({row.get("question_id", index) for index, row in enumerate(mine)}),  # trials of one question count once
                 "share": len(mine) / len(routed),
                 "avg_answer_score": sum(row["answer_judge"]["answer_score"] for row in mine) / len(mine),
                 "avg_cost_per_question": sum(row["cost"]["total_cost"] for row in mine) / len(mine),

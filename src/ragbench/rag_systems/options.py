@@ -606,3 +606,73 @@ class PythonCallableOptions(ExternalOptions):
             if not where or not name.isidentifier():
                 raise ValueError(f"{value!r} must look like module:function or path/to/file.py:function")
         return value
+
+
+CliPreset = Literal["claude_code", "codex", "opencode", "custom"]
+CliOutputFormat = Literal["claude_code", "codex", "opencode", "text"]
+RESERVED_WORKSPACE_NAMES = ("docs", "TASK.md")
+
+
+class CliAgentOptions(ExternalOptions):
+    preset: CliPreset = Field(
+        description=(
+            "The harness: `claude_code` (`claude -p`), `codex` (`codex exec`), `opencode` (`opencode run`), or `custom` (your own `command`). "
+            "A preset builds the command line, picks the event parser and switches the harness's network tools off."
+        )
+    )
+    command: list[str] | None = Field(
+        default=None,
+        description=(
+            "The command of a `custom` harness, one argument per item; `{prompt}`, `{model}`, `{workspace}` and `{task_file}` are filled in. "
+            "With a preset it replaces the preset's command line (the parser stays)."
+        ),
+    )
+    harness_model: str | None = Field(
+        default=None,
+        description=(
+            "The model name as the harness spells it. Unset: derived from `model` (`anthropic:claude-haiku-5-5` -> `claude-haiku-5-5`; "
+            "for `opencode`, `openrouter:z-ai/glm-5.3` -> `openrouter/z-ai/glm-5.3`). Neither set: the harness's own default model."
+        ),
+    )
+    output_format: CliOutputFormat | None = Field(
+        default=None,
+        description="How to read the harness's stdout: the event stream of `claude_code`, `codex` or `opencode`, or `text` (stdout is the answer, no trajectory). Unset: the preset's own (`text` for `custom`).",
+    )
+    answer_file: str | None = Field(
+        default=None,
+        description="A file in the workspace the harness writes its answer to (the task says so). Unset, or not written: the answer is the harness's final message.",
+    )
+    system_prompt: str | None = Field(default=None, description="Text added to the harness's system prompt (`claude_code`) or to the instructions file (the others).")
+    instructions: str | None = Field(
+        default=None,
+        description="A file copied into the workspace as the harness's instructions file (`AGENTS.md`; `claude_code` reads it as an appended system prompt).",
+    )
+    files: dict[str, str] = Field(
+        default_factory=dict,
+        description="More harness files: workspace path -> a file or directory to copy there (a skills directory, a settings file, ...).",
+    )
+    network: Literal["off", "on"] = Field(
+        default="off",
+        description="`off`: the harness's web tools are switched off (Claude Code's WebFetch/WebSearch, Codex's sandbox network, OpenCode's webfetch). A `custom` harness cannot be switched off; RAGBench warns.",
+    )
+    timeout_s: float = Field(default=300.0, gt=0, description="Seconds one question may take; the harness is then stopped and the question fails.")
+    max_steps: int = Field(default=30, ge=1, description="Tool calls per question; the harness is stopped at the next one and its last message is the answer.")
+    env: dict[str, str] = Field(default_factory=dict, description="Extra environment variables for the harness; `${VAR}` is filled from the environment.")
+    limits: EndpointLimits = Field(default_factory=EndpointLimits, description="How many harnesses run at once (`max_concurrent_requests`) or start per minute.")
+
+    @model_validator(mode="after")
+    def _custom_needs_a_command(self) -> CliAgentOptions:
+        if self.preset == "custom" and not self.command:
+            raise ValueError("preset `custom` needs a `command` (a list of arguments)")
+        return self
+
+    @field_validator("files")
+    @classmethod
+    def _workspace_paths(cls, files: dict[str, str]) -> dict[str, str]:
+        from pathlib import PurePosixPath
+
+        for target in files:
+            path = PurePosixPath(target)
+            if path.is_absolute() or ".." in path.parts or not path.parts or path.parts[0] in RESERVED_WORKSPACE_NAMES:
+                raise ValueError(f"files: {target!r} must be a relative workspace path outside `docs/` and `TASK.md`")
+        return files

@@ -16,6 +16,7 @@ from ragbench.evaluation.stats import latency_percentiles, quantile_ci
 from ragbench.evaluation.tool_metrics import summary_fields as tool_summary_fields
 from ragbench.evaluation.tool_metrics import tool_steps
 from ragbench.evaluation.tool_metrics import usage_rows as tool_usage_rows
+from ragbench.evaluation.trajectory_metrics import summary_fields as trajectory_summary_fields
 from ragbench.models.family import model_family
 from ragbench.registry import SYSTEMS
 from ragbench.runtime import ProbeResult
@@ -140,6 +141,11 @@ def _agent_fields(agents: list[dict[str, Any]]) -> dict[str, float]:
     }
 
 
+def _agentic(system_type: str) -> bool:
+    spec = getattr(SYSTEMS.mapping.get(system_type), "spec", None)
+    return bool(spec is not None and spec.agentic)
+
+
 def _gate_fields(gates: list[dict[str, Any]]) -> dict[str, float]:
     """Share of questions the gate abstained on, mean decision requests and mean chunks kept; empty for a system without a gate."""
     if not gates:
@@ -231,6 +237,7 @@ def build_summary(
         if (accuracy := route_accuracy(ok_system_rows)) is not None:
             row["route_accuracy"] = accuracy
         row.update(_agent_fields([r["agent"] for r in ok_rows if r["system"] == system_name and r.get("agent")]))
+        row.update(trajectory_summary_fields(ok_system_rows, agentic=_agentic(system_types[system_name])))
         row.update(_gate_fields([r["gate"] for r in ok_system_rows if r.get("gate")]))
         row.update(_latency_fields(latency_rows["latency_ms"].tolist(), probe_results.get(system_name)))
         if runtime_df is not None and not runtime_df.empty:

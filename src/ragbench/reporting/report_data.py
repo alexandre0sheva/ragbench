@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import math
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -301,7 +301,10 @@ def _failure_detail(rows_all: list[dict[str, Any]]) -> Counter[str]:
 
 
 def _agents(summary: list[dict[str, Any]], order: list[str], tools: list[dict[str, Any]], routes: list[dict[str, Any]]) -> dict[str, Any] | None:
-    keys = ("avg_steps", "avg_llm_calls", "avg_tool_calls", "tool_error_rate", "required_tool_used_rate", "budget_exhausted_rate", "route_accuracy")
+    keys = (
+        "avg_steps", "avg_llm_calls", "avg_tool_calls", "tool_error_rate", "redundant_search_rate", "avg_steps_to_evidence",
+        "required_tool_used_rate", "budget_exhausted_rate", "route_accuracy",
+    )  # fmt: skip
     by_name = {str(row["system"]): row for row in summary}
     rows = []
     for name in order:
@@ -394,6 +397,8 @@ def build_report(run_dir: Path, max_embedded_mb: float = DEFAULT_MAX_EMBEDDED_MB
 
     columns = leaderboard_columns({key for row in summary for key in row}, primary_k)
     extras = extra_columns({key for row in summary for key in row}, columns)
+    if trials := run_summary.get("trials"):  # `pass@k` reads `pass@3` once the run says what k is
+        extras = [replace(c, header=c.header.replace("k", str(trials))) if c.key in ("pass_at_k", "pass_hat_k") else c for c in extras]
     winner = recommendation.get("winner")
     ties, pareto = set(recommendation.get("tied_with_winner", [])), {str(n) for n in recommendation.get("pareto", [])} | {str(r["system"]) for r in summary if r.get("pareto_optimal") is True}
     baseline = stats.get("baseline")

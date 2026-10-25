@@ -1,0 +1,62 @@
+# Agent harnesses as RAG systems, next to a built-in baseline (docs/benchmarking-external-systems.md#agent-harnesses).
+#   ragbench run --config configs/cli_agent_example.yaml --mock      # never starts a harness: a bundled offline one stands in
+# A live run starts the real harnesses (`claude`, `codex`, `opencode` on PATH, each with its own key or login) and spends money:
+# `ragbench estimate` cannot price them, so keep `max_questions` small and `evaluation.max_cost_usd` set.
+run:
+  name: cli_agent_example
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: bm25
+    name: bm25_default
+    chunker:
+      type: word
+      chunk_size: 450
+      chunk_overlap: 70
+    retrieval:
+      top_k: 5
+    models:
+      generator: gpt-6-luna
+
+  # Claude Code: `claude -p --restricted --tools Read,Grep,Glob` (file tools confined to the workspace, no shell, no web), ANTHROPIC_API_KEY.
+  - type: cli_agent
+    name: claude_code
+    retrieval:
+      preset: claude_code
+      model: anthropic:claude-haiku-5-5
+      max_steps: 20
+      timeout_s: 300
+      limits: {max_concurrent_requests: 2}
+
+  # Codex: `codex exec --json` in its read-only, network-off sandbox.
+  - type: cli_agent
+    name: codex
+    retrieval:
+      preset: codex
+      model: gpt-6-luna
+      max_steps: 20
+      limits: {max_concurrent_requests: 2}
+
+  # OpenCode on an open-weight model through OpenRouter; edits, shell and webfetch are denied in the workspace's opencode.json.
+  - type: cli_agent
+    name: opencode_glm
+    retrieval:
+      preset: opencode
+      model: openrouter:z-ai/glm-5.3
+      max_steps: 20
+      limits: {max_concurrent_requests: 2}
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge:
+    panel: [anthropic:claude-haiku-5-5, gpt-6-luna]   # a judge sits out the harness of its own model family
+    independent: true
+  max_questions: 10
+  max_cost_usd: 0.50
+  max_workers: 4

@@ -231,6 +231,24 @@ def test_llamaindex_questions_answered_at_once_do_not_share_steps(llamaindex_exa
     assert len({result.answer for result in results}) == len(QUESTIONS)
 
 
+def test_the_llamaindex_reference_pipeline_runs_live_on_ragbench_clients_without_the_openai_integration(monkeypatch):
+    """Live, the pipeline is LlamaIndex's own, but its model and embeddings go through RAGBench's (here the paid fakes: no network)."""
+    pytest.importorskip("llama_index.core")
+    from paid_fakes import install as install_paid_fakes
+
+    install_paid_fakes(monkeypatch)
+    monkeypatch.setenv("RAGBENCH_REFERENCE_LIVE", "1")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-used")
+    module = _example("llamaindex_default")
+    module.ingest(_documents())
+    assert type(module._llm).__name__ == "OpenAI" and module._llm.metadata.is_chat_model
+    result = _system(module.answer).answer_question(QUESTIONS[0], top_k=3)
+
+    assert _kinds(result) == [("retrieve", "llamaindex_retriever"), ("generate", "llamaindex_llm")]
+    generate = result.steps[-1]
+    assert generate.prompt_tokens > 0 and generate.completion_tokens > 0 and result.cost.total_cost > 0
+
+
 def test_llamaindex_events_outside_a_question_are_ignored(llamaindex_example):
     engine = llamaindex_example._index.as_query_engine(llm=llamaindex_example._llm, similarity_top_k=2)  # the handler is registered, but no question is being recorded
     assert "$200" in str(engine.query(QUESTIONS[0]))

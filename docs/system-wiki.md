@@ -636,6 +636,32 @@ flowchart LR
 
 **Use it** as the "do I need retrieval infrastructure at all?" test. On a small, exact-match-heavy corpus it can match indexed systems with zero index; as the corpus grows, or when questions are paraphrased so no grep pattern finds them, it falls behind and its per-question cost climbs. Options: [systems.md](systems.md#grep_agent).
 
+### Agent harnesses
+
+#### `cli_agent`
+
+An agent harness you did not write (Claude Code, Codex, OpenCode, or any command) is treated as a black box with a visible trajectory: RAGBench prepares a workspace, starts the harness, reads its event stream as it arrives, and turns it into steps.
+
+```mermaid
+flowchart TD
+    I["ingest: write the corpus once<br/>(paths relative to the corpus root)"] --> W
+    Q["Question"] --> W["fresh temp workspace:<br/>docs/ (read-only copy), TASK.md,<br/>AGENTS.md / harness files"]
+    W --> H{{"harness process<br/>(preset command, web tools off)"}}
+    H -->|"stdout, one event per line"| P["parser: claude_code / codex / opencode / text"]
+    P --> CAP{"tool calls > max_steps?<br/>past timeout_s?"}
+    CAP -->|"step cap"| STOP["stop the process group,<br/>answer = last message"]
+    CAP -->|timeout| FAIL["question fails"]
+    CAP -->|no| P
+    P -->|"exit"| T["turns -> llm / generate steps<br/>tool calls -> tool steps + doc_ids"]
+    STOP --> T
+    T --> C["passages: files read (their text),<br/>then files only matched by searches"]
+    T --> COST["cost: reported total or per-step cost,<br/>else tokens x model price"]
+```
+
+- **Evidence.** A tool call is classified as a read (`Read`, `cat`, `sed -n`, ...), a search (`Grep`, `rg`, `grep`, ...), a listing (`Glob`, `ls`, `find`, `rg --files`: no evidence) or other; reads count the files they name, searches the files whose matching lines their output shows (a bare list of matching file names is no evidence). Shell commands are unwrapped (`bash -lc '...'`) and split on `&&`, `|` and `;`.
+- **Isolation.** The corpus is copied per question, not linked, so a harness that changes a file cannot affect another question; `docs/` is read-only, the workspace root is writable (for `answer_file`). `PWD` is set to the workspace (OpenCode otherwise worked in the caller's directory, and read its files, in the first live test). File-tool paths outside the workspace are flagged as `outside_workspace`. The process runs in its own process group, so stopping it stops everything it started.
+- **Mock.** `--mock` swaps the command for the bundled offline harness in the same output format: keyword grep, two reads, the best-matching sentence as the answer.
+
 ### Routing
 
 #### `adaptive`

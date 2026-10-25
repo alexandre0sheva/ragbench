@@ -29,6 +29,7 @@ Profiles are relative: **cost** `low` = one generation call plus embeddings, `me
 | [`decision_gate`](#decision_gate) | Decision-gated RAG | high | medium | yes | no | Corpora where many questions have no answer in the documents, and a confident wrong answer costs more than a refusal |
 | [`full_context`](#full_context) | Full context | high | medium | no | no | Small corpora, and measuring how much a retrieval pipeline loses against reading everything |
 | [`agent_search`](#agent_search) | Tool-using agent (search) | high | slow | yes | yes | Questions that need computation, exact lookups, or several searches |
+| [`cli_agent`](#cli_agent) | CLI agent harness | high | slow | no | yes | Measuring a coding-agent harness as a RAG system: how well, how fast and at what cost it finds the answer in your documents |
 | [`corrective`](#corrective) | Corrective RAG | high | slow | yes | yes | Corpora where the first search often misses and a bad context should be noticed rather than answered from |
 | [`grep_agent`](#grep_agent) | Grep agent (no index) | high | slow | yes | yes | Small or exact-match-heavy corpora, and testing whether you need retrieval infrastructure at all |
 | [`iterative`](#iterative) | Iterative multi-hop | high | slow | yes | yes | Multi-hop questions whose second search depends on what the first one found |
@@ -36,7 +37,7 @@ Profiles are relative: **cost** `low` = one generation call plus embeddings, `me
 
 ## Chunker options
 
-All systems except `no_retrieval`, `parent_doc`, `sentence_window`, `external_http`, `python_callable`, `adaptive`, `full_context`, `grep_agent` use this `chunker:` section:
+All systems except `no_retrieval`, `parent_doc`, `sentence_window`, `external_http`, `python_callable`, `adaptive`, `full_context`, `cli_agent`, `grep_agent` use this `chunker:` section:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -442,6 +443,35 @@ Best for: Questions that need computation, exact lookups, or several searches. C
 | `max_tool_calls` | `int` | unset | Most tool calls per question; further calls are refused and the agent is asked to answer. No cap by default. |
 
 This system accepts a `tools:` list (see [tools.md](tools.md)).
+
+## `cli_agent`
+
+**CLI agent harness.** An agent harness (Claude Code, Codex, OpenCode or any command) answers each question by searching a read-only copy of the corpus in a fresh workspace.
+
+Best for: Measuring a coding-agent harness as a RAG system: how well, how fast and at what cost it finds the answer in your documents. Cost: high; latency: slow.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `model` | `str` | unset | The model your system generates with (a model ref, e.g. `gpt-6-luna`). RAGBench never calls it: it prices reported token usage and keeps the judge independent of it. Unset: a judge of any family scores the answers. |
+| `preset` | `claude_code` \| `codex` \| `opencode` \| `custom` | *required* | The harness: `claude_code` (`claude -p`), `codex` (`codex exec`), `opencode` (`opencode run`), or `custom` (your own `command`). A preset builds the command line, picks the event parser and switches the harness's network tools off. |
+| `command` | `list` | unset | The command of a `custom` harness, one argument per item; `{prompt}`, `{model}`, `{workspace}` and `{task_file}` are filled in. With a preset it replaces the preset's command line (the parser stays). |
+| `harness_model` | `str` | unset | The model name as the harness spells it. Unset: derived from `model` (`anthropic:claude-haiku-5-5` -> `claude-haiku-5-5`; for `opencode`, `openrouter:z-ai/glm-5.3` -> `openrouter/z-ai/glm-5.3`). Neither set: the harness's own default model. |
+| `output_format` | `claude_code` \| `codex` \| `opencode` \| `text` | unset | How to read the harness's stdout: the event stream of `claude_code`, `codex` or `opencode`, or `text` (stdout is the answer, no trajectory). Unset: the preset's own (`text` for `custom`). |
+| `answer_file` | `str` | unset | A file in the workspace the harness writes its answer to (the task says so). Unset, or not written: the answer is the harness's final message. |
+| `system_prompt` | `str` | unset | Text added to the harness's system prompt (`claude_code`) or to the instructions file (the others). |
+| `instructions` | `str` | unset | A file copied into the workspace as the harness's instructions file (`AGENTS.md`; `claude_code` reads it as an appended system prompt). |
+| `files` | `dict` | empty | More harness files: workspace path -> a file or directory to copy there (a skills directory, a settings file, ...). |
+| `network` | `off` \| `on` | `off` | `off`: the harness's web tools are switched off (Claude Code's WebFetch/WebSearch, Codex's sandbox network, OpenCode's webfetch). A `custom` harness cannot be switched off; RAGBench warns. |
+| `timeout_s` | `float` | `300.0` | Seconds one question may take; the harness is then stopped and the question fails. |
+| `max_steps` | `int` | `30` | Tool calls per question; the harness is stopped at the next one and its last message is the answer. |
+| `env` | `dict` | empty | Extra environment variables for the harness; `${VAR}` is filled from the environment. |
+| `limits` | block | its fields below | How many harnesses run at once (`max_concurrent_requests`) or start per minute. |
+| `limits.max_concurrent_requests` | `int` | unset | Requests in flight at once, across all questions. |
+| `limits.requests_per_minute` | `int` | unset | Requests started per rolling minute. |
+
+This system takes no `chunker:` section.
 
 ## `corrective`
 

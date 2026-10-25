@@ -59,6 +59,12 @@ def resolve_tools(refs: Sequence[ToolRef], settings: ToolsConfig | None = None) 
     return tools
 
 
+def _doc_ids(data: Any) -> list[str]:
+    """The documents a tool's structured result names (a hit list or one document, each with a `doc_id`), in order, each once."""
+    items = data if isinstance(data, list) else [data]
+    return list(dict.fromkeys(str(item["doc_id"]) for item in items if isinstance(item, dict) and item.get("doc_id") is not None))
+
+
 class ToolBox:
     """A system's tools plus the rules for calling them. `call` never raises and never hangs past the timeout."""
 
@@ -97,6 +103,8 @@ class ToolBox:
             step.set_output(result.text)
             step.set_cost(CostBreakdown(tool_cost=result.cost_usd))
             step.set_meta(truncated=result.truncated, **({"error": result.error} if result.error else {}))
+            if doc_ids := _doc_ids(result.data):
+                step.set_meta(doc_ids=doc_ids)  # the evidence this call surfaced, for the trajectory metrics
         return result
 
     def _execute(self, name: str, arguments: Any, ctx: ToolContext) -> ToolResult:

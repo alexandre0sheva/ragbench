@@ -416,3 +416,29 @@ def test_a_tool_runs_in_the_trial_of_the_answer_that_called_it():
     with trial_scope(2):
         result = _run_with_timeout("trial_tool", TrialTool(), {}, ToolContext(corpus=None), timeout=5.0)  # type: ignore[arg-type]
     assert result.text == "2"  # a custom tool that calls a model must not replay trial 0's cache entry
+
+
+def test_trials_are_counted_as_questions_where_a_table_says_questions():
+    from ragbench.datasets.pooling import merge_trial_rankings
+    from ragbench.evaluation.route_metrics import route_rows
+    from ragbench.evaluation.tool_metrics import usage_rows
+
+    tool = {"kind": "tool", "name": "calculator", "latency_ms": 1.0, "cost": {"total_cost": 0.0}, "metadata": {}}
+    answers = [{"question_id": q, "trial": t, "steps": [tool], "route": "lexical", "answer_judge": {"answer_score": 4.0}, "cost": {"total_cost": 0.0}}
+               for q in ("q1", "q2") for t in range(3)]
+    (row,) = usage_rows("agent", ["calculator"], answers)
+    assert (row["calls"], row["questions_using"]) == (6, 2)  # six calls, from two questions answered three times each
+    (route,) = route_rows("adaptive", answers)
+    assert route["questions"] == 2 and route["share"] == 1.0
+    # Pooling for `ragbench label`: every trial's documents, each at its best rank, not only the last trial's.
+    assert merge_trial_rankings([["d1", "d2"], ["d3", "d1"], ["d4", "d2"]]) == ["d1", "d3", "d4", "d2"]
+
+
+def test_the_run_summary_and_the_report_name_the_number_of_trials(tmp_path, monkeypatch):
+    out, _, _ = _run(tmp_path, monkeypatch, trials=3)
+    assert json.loads((out / "run_summary.json").read_text())["trials"] == 3
+    headers = {column["key"]: column["header"] for column in build_report(out).data["leaderboard"]["columns"]}
+    assert headers["pass_at_k"] == "pass@3" and headers["pass_hat_k"] == "pass^3"
+    (tmp_path / "one").mkdir()
+    one, _, _ = _run(tmp_path / "one", monkeypatch)
+    assert "trials" not in json.loads((one / "run_summary.json").read_text())  # one trial: the file is as before

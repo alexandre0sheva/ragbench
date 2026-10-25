@@ -119,6 +119,8 @@ _EXTRA_COLUMNS: tuple[tuple[str, str, str, bool], ...] = (
     ("avg_llm_calls", "LLM calls", "{:.1f}", False),
     ("avg_tool_calls", "Tool calls", "{:.1f}", False),
     ("tool_error_rate", "Tool errors", "{:.2f}", False),
+    ("redundant_search_rate", "Redundant searches", "{:.2f}", False),
+    ("avg_steps_to_evidence", "Steps to evidence", "{:.1f}", False),
     ("budget_exhausted_rate", "Budget hit", "{:.2f}", False),
     ("route_accuracy", "Route acc.", "{:.2f}", True),
     ("pass_at_k", "pass@k", "{:.2f}", True),

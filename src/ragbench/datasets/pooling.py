@@ -75,7 +75,7 @@ def load_run(run_dir: Path) -> RunData:
         dataset = load_dataset(config.dataset.questions_path, config.dataset.qrels_path)
     except (FileNotFoundError, ValueError) as exc:
         raise LabelError(f"The run's dataset can no longer be loaded ({exc}). Run `ragbench label` from the directory the run used, or restore the files.") from exc
-    rankings: dict[str, dict[str, list[str]]] = defaultdict(dict)
+    trials: dict[str, dict[str, list[list[str]]]] = defaultdict(lambda: defaultdict(list))  # question -> system -> one ranking per trial
     flagged: dict[str, list[str]] = defaultdict(list)
     for row in read_jsonl(results):
         if row.get("error") is not None:
@@ -84,10 +84,20 @@ def load_run(run_dir: Path) -> RunData:
         for context in row.get("retrieved_contexts", []):
             if context["doc_id"] not in ranked:
                 ranked.append(context["doc_id"])
-        rankings[row["question_id"]][row["system"]] = ranked
-        if row.get("failure_type") == "possible_qrels_gap":
+        trials[row["question_id"]][row["system"]].append(ranked)
+        if row.get("failure_type") == "possible_qrels_gap" and row["system"] not in flagged[row["question_id"]]:
             flagged[row["question_id"]].append(row["system"])
-    return RunData(run_dir, config, {document.doc_id: document for document in documents}, dataset, dict(rankings), dict(flagged))
+    rankings = {question_id: {system: merge_trial_rankings(runs) for system, runs in by_system.items()} for question_id, by_system in trials.items()}
+    return RunData(run_dir, config, {document.doc_id: document for document in documents}, dataset, rankings, dict(flagged))
+
+
+def merge_trial_rankings(rankings: list[list[str]]) -> list[str]:
+    """One system's rankings of a question over its trials as one: every document any trial retrieved, at its best rank (ties: first seen)."""
+    best: dict[str, int] = {}
+    for ranked in rankings:
+        for rank, doc_id in enumerate(ranked):
+            best[doc_id] = min(rank, best.get(doc_id, rank))
+    return sorted(best, key=lambda doc_id: best[doc_id])
 
 
 @dataclass

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import math
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -51,6 +52,9 @@ def system_block(kind: str, rag_url: str = "") -> dict[str, Any]:
     """A minimal valid config block for any registered system type (`rag_url`: the fake RAG service the external ones call)."""
     if kind == "external_http":
         return {"type": kind, "name": kind, "retrieval": {"url": f"{rag_url}/ask", "post_documents_to": f"{rag_url}/documents"}}
+    if kind == "cli_agent":  # the offline harness in Claude Code's event format, started as a custom command (a preset would need `--mock`)
+        command = [sys.executable, "-m", "ragbench.rag_systems.cli_agent_mock", "--format", "claude_code"]
+        return {"type": kind, "name": kind, "retrieval": {"preset": "custom", "command": command, "output_format": "claude_code", "network": "on", "model": GENERATOR}}
     if kind == "python_callable":  # the example reports token usage only, priced at the declared model
         return {"type": kind, "name": kind, "retrieval": {"target": f"{SIMPLE_RAG}:answer", "ingest_target": f"{SIMPLE_RAG}:ingest", "model": GENERATOR}}
     block: dict[str, Any] = {"type": kind, "name": kind, "models": dict(MODELS)}

@@ -161,9 +161,12 @@ def _all_refs(config: ExperimentConfig) -> list[str]:
 
 
 def resolve_run_mode(config: ExperimentConfig, force_mock: bool) -> Literal["mock", "live"]:
-    """`live` when at least one model the run calls can be reached (a key is set for a hosted API, or it is a local/endpoint model)."""
+    """`live` when at least one model the run calls can be reached (a key is set for a hosted API, or it is a local/endpoint model), or
+    when it runs an agent harness (`cli_agent`), which brings its own models and is only replaced by the offline one under `--mock`."""
     if force_mock:
         return "mock"
+    if any(system.type == "cli_agent" for system in config.systems):
+        return "live"
     return "live" if any(provider_reachable(parse_model_ref(ref)[0]) for ref in _all_refs(config)) else "mock"
 
 

@@ -89,6 +89,7 @@ class StepHandle:
         docs = unique_preserve_order(chunk.doc_id for chunk in chunk_list)
         shown = ", ".join(docs[:6]) + (" …" if len(docs) > 6 else "")
         self.set_output(f"{len(chunk_list)} chunks from {len(docs)} docs: {shown}" if chunk_list else "0 chunks")
+        self.metadata["doc_ids"] = docs  # the evidence this step surfaced, for the trajectory metrics
         if cost is not None:
             self.cost = cost
 
