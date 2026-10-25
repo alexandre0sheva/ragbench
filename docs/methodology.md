@@ -307,6 +307,12 @@ Pooled labels judge only the documents some benchmarked system retrieved in its 
 
 Synthetic questions are shaped by the generator: they tend to be answerable from one passage, worded like the document unless paraphrased, and easier than real traffic. Scores on questions still flagged `metadata.needs_review` measure that taste as much as the systems; read the questions and clear the flag before relying on the numbers.
 
+## Held-out splits and the leakage guard
+
+A score is only evidence about a method if the method never saw the questions it is scored on. [`ragbench split`](dataset-format.md#train--dev--test-splits) fixes which questions are **train** (a method may learn from them: read their traces, quote them as examples), **dev** (it may check candidates against them) and **test** (it may not touch them; they are scored once, at the end). Runs record the split they scored, and reports show it, so a number can always be traced back to the questions behind it.
+
+Features that adapt a system (the optimizer and the experience library) follow one rule: *the method never reads the test split*, neither its questions nor the judge's verdicts on them. `ragbench.datasets.leakage.LeakageGuard` enforces it as a tripwire. Built from a dataset and its splits, it scans any text or folder (an evidence directory, a prompt, a harness file, a library entry) and rejects it if it contains a held-out question's id, its question text or its reference answer. Texts are compared ignoring case, punctuation, spacing and JSON `\u` escapes; ids are matched as whole tokens. The error names the file and the question, never the content. Limits, by design: question texts and reference answers shorter than four words and ids shorter than four characters cannot be told from ordinary text and are not searched for (the other fields of the same question still are); the guard finds copies, not paraphrases; and stratification balances category and answerability only, so a split of a small dataset can still differ from the whole in ways it does not look at.
+
 ## Limitations
 
 - **Document-level relevance.** A retrieved chunk counts if its document is relevant, whether or not that chunk holds the evidence. Context precision is therefore generous, and unlabeled but helpful documents count against a system (`qrels_audit.md` surfaces them).
@@ -315,6 +321,7 @@ Synthetic questions are shaped by the generator: they tend to be answerable from
 - **Claim checks are another model's opinion.** The splitter can merge or drop claims and the checker can misjudge one; the rate is only comparable within one run (one claims model).
 - **Deterministic metrics are literal.** `exact_match` and `token_f1` penalize correct paraphrases and reward verbose answers that repeat the reference.
 - **Failure classification is heuristic** and depends on labels you supply (`answer_type`, qrels).
+- **Splits protect only if they are respected.** `dataset.split: test` does not stop anyone from tuning on test by running it again and again; the guard checks what a method is *given*, not how often you look. Score on test once, and treat a number you tuned on as a dev number.
 - **Mock mode** uses hashing embeddings, a scripted LLM and the heuristic judge. It validates that pipelines run and that results are reproducible; it says nothing about real quality, and its banner is on every report.
 - **Small datasets.** With tens of questions, per-category numbers rest on a handful of examples, and most differences between systems will be `no clear difference`. Add questions before trusting a ranking.
 - **A recommendation is only as good as the benchmark.** It rests on your questions, your judge and the constraints you set; a different dataset can crown a different system. Treat it as the answer to "what did this evidence support", and check the ties.

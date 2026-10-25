@@ -11,7 +11,7 @@ from rich.markup import escape
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
 from rich.table import Table
 
-from ragbench.cli.common import confirm_spend, console, fail, load_optional_config, money
+from ragbench.cli.common import confirm_spend, console, fail, json_output, load_optional_config, money, print_json
 from ragbench.cli.run import print_estimate
 from ragbench.config.presets import PRESET_NAMES
 from ragbench.config.schema import ExperimentConfig
@@ -203,6 +203,45 @@ def run_generation(
             cache_runtime.disk.close()
         pricing.clear_pricing_overrides()
     return result, live, saved
+
+
+@commands.command("split")
+def split_command(
+    dataset: Path = typer.Argument(..., help="The questions JSONL file, or the dataset folder holding `questions.jsonl`."),
+    train: float = typer.Option(0.5, "--train", help="Share of the questions for train (what tuning features may learn from)."),
+    dev: float = typer.Option(0.1, "--dev", help="Share for dev (what they may check against). Test gets the rest."),
+    seed: int = typer.Option(42, "--seed", help="Seed of the shuffle; the same seed on the same questions gives the same split."),
+    out: Path | None = typer.Option(None, "--out", help="Where to write the splits file (default: `splits.json` next to the questions)."),
+    as_json: bool = typer.Option(False, "--json", help="Print the result as JSON on stdout."),
+) -> None:
+    """Split a dataset's questions into train / dev / test (stratified by category and answerability) and write `splits.json`. Never overwrites."""
+    from ragbench.datasets.loader import load_questions
+    from ragbench.datasets.splits import SPLITS_NAME, SplitError, make_splits, write_splits
+
+    questions_path = dataset / "questions.jsonl" if dataset.is_dir() else dataset
+    destination = out or questions_path.parent / SPLITS_NAME
+    with json_output(as_json):
+        try:
+            questions = load_questions(questions_path)
+            if destination.exists():
+                raise SplitError(f"{destination} already exists. A split is made once so that no question a method has seen moves into the test set; delete the file to start over.")
+            splits = make_splits(questions, train=train, dev=dev, seed=seed)
+            write_splits(destination, splits)
+        except FileNotFoundError as exc:
+            raise fail(str(exc)) from exc
+        counts = {name: len(getattr(splits, name)) for name in ("train", "dev", "test")}
+        answerable = {question.id: question.is_answerable for question in questions}
+        table = Table(title=f"Splits (seed {seed})")
+        table.add_column("Split")
+        table.add_column("Questions", justify="right")
+        table.add_column("Answerable", justify="right")
+        for name, count in counts.items():
+            table.add_row(name, str(count), str(sum(answerable[question_id] for question_id in getattr(splits, name))))
+        console.print(table)
+        console.print(f"[green]Wrote {destination}[/green]")
+        console.print("Run on one part with `dataset: {split: train|dev|test}` in the config. Tune on train, check on dev, and score on test once.")
+    if as_json:
+        print_json({"path": str(destination), "seed": seed, "counts": counts, "hash": splits.digest})
 
 
 @commands.command("generate-questions")

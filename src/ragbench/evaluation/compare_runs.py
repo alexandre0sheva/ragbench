@@ -105,6 +105,9 @@ def compare_runs(a_dir: Path, b_dir: Path, *, min_drop: float = DEFAULT_MIN_DROP
         comparison.notes.append("Both runs are mock runs: the scores only validate the pipeline.")
     if manifest_a.get("dataset_hash") and manifest_b.get("dataset_hash") and manifest_a["dataset_hash"] != manifest_b["dataset_hash"]:
         comparison.notes.append("The runs used different datasets, so a change mixes the systems' and the data's.")
+    split_a, split_b = (manifest_a.get("split") or {}).get("name", "all"), (manifest_b.get("split") or {}).get("name", "all")
+    if split_a != split_b:
+        comparison.notes.append(f"The runs scored different splits ({split_a} and {split_b}), so they answered different questions and a change mixes the systems' and the data's.")
 
     questions_a, questions_b = _read_jsonl(a_dir / "per_question_results.jsonl"), _read_jsonl(b_dir / "per_question_results.jsonl")
     common = [name for name in by_b if name in by_a]

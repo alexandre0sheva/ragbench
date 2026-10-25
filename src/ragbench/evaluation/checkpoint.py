@@ -31,7 +31,7 @@ NEUTRAL_EVALUATION_KEYS = frozenset(
 )
 
 
-def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest: str, mode: str) -> str:
+def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest: str, mode: str, split: dict[str, str] | None = None) -> str:
     """Hash of everything the system's results depend on. Change any of it and the checkpoint is stale."""
     evaluation = {key: value for key, value in config.evaluation.model_dump(mode="json").items() if key not in NEUTRAL_EVALUATION_KEYS}
     if evaluation.get("trials") == 1:
@@ -52,6 +52,7 @@ def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest:
         "providers": {name: provider.model_dump(mode="json") for name, provider in sorted(config.providers.items())},
         "dataset": dataset_digest,
         "mode": mode,
+        **({"split": split} if split else {}),  # the questions a split keeps; the whole dataset leaves the hash as it was before splits existed
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
 

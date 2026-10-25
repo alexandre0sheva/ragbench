@@ -50,6 +50,7 @@ def write_leaderboard(
     significance_rows: list[dict[str, Any]] | None = None,
     stats_info: dict[str, Any] | None = None,
     pairwise: dict[str, Any] | None = None,
+    split: dict[str, str] | None = None,
 ) -> None:
     columns = leaderboard_columns({key for row in summary_rows for key in row}, primary_k)
     pareto = any("pareto_optimal" in row for row in summary_rows)
@@ -65,6 +66,8 @@ def write_leaderboard(
         cells["Best For"] = _best_for(str(system_type))
         rows.append(cells)
     content = ["# RAGBench Leaderboard", ""]
+    if split:
+        content.extend([f"Split: {split['name']} (splits.json {split['hash'][:12]}): only that part of the dataset's questions was scored.", ""])
     if notices:
         content.extend([*(f"> **Note:** {notice}" for notice in notices), ""])
     content.extend([_markdown_table(headers, rows), ""])

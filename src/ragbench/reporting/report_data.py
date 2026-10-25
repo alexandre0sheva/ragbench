@@ -459,6 +459,7 @@ def build_report(run_dir: Path, max_embedded_mb: float = DEFAULT_MAX_EMBEDDED_MB
         "needs_review": dataset_info.get("needs_review_questions", 0),
         "mock_generated": dataset_info.get("mock_questions", 0),
         "warnings": run_summary.get("dataset_warnings", []),
+        **({"split": dataset_info["split"]} if dataset_info.get("split") else {}),  # only for a run of part of the dataset
     }
     budget = run_summary.get("budget") or {}
     cost = {

@@ -49,6 +49,7 @@ def regenerate_reports(run_dir: Path) -> tuple[list[Path], list[str]]:
         significance_rows=_read_csv(run_dir / "significance.csv"),
         stats_info=stats or None,
         pairwise=run_summary.get("pairwise"),
+        split=(run_summary.get("dataset") or {}).get("split"),
     )
     written.append(run_dir / "leaderboard.md")
     if per_question:

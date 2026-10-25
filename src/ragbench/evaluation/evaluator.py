@@ -20,7 +20,7 @@ from ragbench.cache.trial import trial_scope
 from ragbench.config.loader import load_config, load_config_dict
 from ragbench.config.schema import ExperimentConfig, SystemConfig
 from ragbench.config.sweep import expand_sweeps
-from ragbench.datasets.loader import load_dataset
+from ragbench.datasets.loader import load_configured_dataset
 from ragbench.datasets.schema import Dataset, has_relevance_labels
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import load_dataset_documents
@@ -121,6 +121,7 @@ class BenchmarkEvaluator:
         self.started_utc = utc_now_iso()
         self.dataset_digest = ""
         self.dataset_info: dict[str, Any] = {}
+        self.split_info: dict[str, str] | None = None  # `{name, hash}` of the `dataset.split` this run scores; None for the whole dataset
         self.dataset_warnings: list[str] = []
         self.document_warnings: list[str] = []  # files skipped or decoded with a fallback while loading the corpus
         self.cache_runtime: CacheRuntime | None = None
@@ -200,7 +201,7 @@ class BenchmarkEvaluator:
         EMBEDDING_CACHE.clear()
         EMBEDDING_CACHE.enabled = self.config.evaluation.embedding_cache
         documents = load_dataset_documents(self.config.dataset, warnings=self.document_warnings)
-        dataset = load_dataset(self.config.dataset.questions_path, self.config.dataset.qrels_path)
+        dataset, self.split_info = load_configured_dataset(self.config.dataset)
         self.dataset_warnings = validate_dataset(documents, dataset)
         self.dataset_digest = dataset_hash(documents, self.config.dataset.questions_path, self.config.dataset.qrels_path)
         plan = self.plan = self._plan(dataset)
@@ -222,6 +223,7 @@ class BenchmarkEvaluator:
             "synthetic_questions": sum(bool(q.metadata.get("synthetic")) for q in questions),
             "needs_review_questions": sum(bool(q.metadata.get("needs_review")) for q in questions),
             "mock_questions": sum(bool(q.metadata.get("mock")) for q in questions),
+            **({"split": self.split_info} if self.split_info else {}),
         }
         warm_up_imports(self._modules_to_warm_up())
 
@@ -288,7 +290,7 @@ class BenchmarkEvaluator:
         )
 
     def _context_hash(self, system_config: SystemConfig) -> str:
-        return context_hash(system_config, self.config, self.dataset_digest, self.mode)
+        return context_hash(system_config, self.config, self.dataset_digest, self.mode, self.split_info)
 
     def _checkpoint(self, outcome: SystemOutcome) -> None:
         """Save a system that just finished cleanly (every question answered, none failed); anything else is re-run on resume."""

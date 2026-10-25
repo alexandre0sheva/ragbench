@@ -20,6 +20,7 @@ dataset:
   documents_path: data/demo/docs
   questions_path: data/demo/questions.jsonl
   qrels_path: data/demo/qrels.jsonl
+  # split: all   # or train | dev | test, with a splits.json from `ragbench split` (see Dataset splits)
 
 systems:
   - type: hybrid
@@ -56,6 +57,10 @@ evaluation:
 # report: {max_embedded_mb: 4}  (see Report)
 # max_cost_usd: 25, cost_confirm_threshold_usd: 1.0  (see Estimating cost and capping it)
 ```
+
+## Dataset splits
+
+`dataset.split: train | dev | test | all` (default `all`) runs on one part of a `splits.json` made by `ragbench split` ([dataset-format.md](dataset-format.md#train--dev--test-splits)). The file is read from `dataset.splits_path`, or `splits.json` next to `dataset.questions_path`. `max_questions` then takes the first N questions *of the split*. The split name and the hash of the assignment join the checkpoint context hash and the run manifest, so a run resumed under another split, or against a changed splits file, runs its systems again instead of reusing the old answers. With `all` nothing is recorded and everything is as before splits existed.
 
 ## Chunkers
 

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ragbench.datasets.schema import Dataset, Evidence, Qrel, Question, has_relevance_labels
+from ragbench.datasets.splits import SPLITS_NAME, apply_split, load_splits
 from ragbench.utils.jsonl import read_jsonl
+
+if TYPE_CHECKING:
+    from ragbench.config.schema import DatasetConfig
 
 
 def load_questions(path: Path) -> list[Question]:
@@ -53,3 +58,12 @@ def load_dataset(questions_path: Path, qrels_path: Path | None = None) -> Datase
             for question in questions
         ]
     return dataset
+
+
+def load_configured_dataset(config: DatasetConfig) -> tuple[Dataset, dict[str, str] | None]:
+    """The questions a run uses: `dataset.split` applied to the loaded dataset, and `{"name", "hash"}` of that split (None for `all`)."""
+    dataset = load_dataset(config.questions_path, config.qrels_path)
+    if config.split == "all":
+        return dataset, None
+    splits = load_splits(config.splits_path or config.questions_path.parent / SPLITS_NAME)
+    return apply_split(dataset, splits, config.split), {"name": config.split, "hash": splits.digest}

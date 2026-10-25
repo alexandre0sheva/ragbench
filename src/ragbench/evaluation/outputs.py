@@ -170,6 +170,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
         significance_rows=run_stats.significance_rows,
         stats_info=run_stats.stats,
         pairwise=pairwise,
+        split=run.split_info,
     )
     write_failures(out / "failures.md", per_question_rows)
     qrels_audit_rows = build_qrels_audit(per_question_rows, evaluation.resolved_primary_k)
@@ -237,6 +238,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
         started_utc=run.started_utc,
         finished_utc=utc_now_iso(),
         model_settings=manifest_settings(sorted(run.models_used), run.config.openrouter),
+        split=run.split_info,
     )
     (out / "run_manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     write_recommendation(out, run.config.selection)

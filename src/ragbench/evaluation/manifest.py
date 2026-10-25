@@ -73,8 +73,10 @@ def build_manifest(
     started_utc: str,
     finished_utc: str,
     model_settings: dict[str, dict[str, Any]] | None = None,
+    split: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """`model_settings` holds request settings that change a model's answers (OpenRouter reasoning and provider pinning), per ref."""
+    """`model_settings` holds request settings that change a model's answers (OpenRouter reasoning and provider pinning), per ref.
+    `split` is `{name, hash}` of the `dataset.split` the run scored; it is recorded only when the run used part of the dataset."""
     return {
         "ragbench_version": __version__,
         "python": platform.python_version(),
@@ -83,6 +85,7 @@ def build_manifest(
         **git_info(config_path.resolve()),
         "config_hash": config_hash(raw_config),
         "dataset_hash": dataset_digest,
+        **({"split": split} if split else {}),
         "mode": mode,
         "models_used": models_used,
         **({"model_settings": model_settings} if model_settings else {}),

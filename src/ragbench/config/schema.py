@@ -33,6 +33,11 @@ class DatasetConfig(BaseModel):
     documents_path: Path
     questions_path: Path
     qrels_path: Path | None = None
+    split: Literal["train", "dev", "test", "all"] = Field(
+        default="all",
+        description="Run on one part of the dataset's `splits.json` (made by `ragbench split`): `train`, `dev` or `test`. `all` (default) uses every question and needs no splits file.",
+    )
+    splits_path: Path | None = Field(default=None, description="The splits file `split` reads. Default: `splits.json` next to the questions file.")
     include: list[str] | None = Field(default=None, description="Only load files whose path (relative to `documents_path`) matches one of these globs.")
     exclude: list[str] | None = Field(default=None, description="Skip files matching any of these globs. `.ragbenchignore` in the documents folder adds gitignore-style rules.")
     on_error: Literal["raise", "skip"] = Field(default="raise", description="What to do with a file that cannot be loaded: fail, or skip it and report a warning.")

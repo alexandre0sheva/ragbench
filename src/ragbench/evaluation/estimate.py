@@ -20,7 +20,7 @@ from typing import Literal
 
 from ragbench.cache import activate_cache
 from ragbench.config.schema import EvaluationConfig, ExperimentConfig, SystemConfig
-from ragbench.datasets.loader import load_dataset
+from ragbench.datasets.loader import load_configured_dataset
 from ragbench.documents.loaders import load_dataset_documents
 from ragbench.evaluation.claims import SPLIT_SYSTEM_PROMPT
 from ragbench.evaluation.judge_panel import scoring_judges
@@ -230,7 +230,7 @@ def estimate_run(
     EMBEDDING_CACHE.enabled = False  # the second system must embed the corpus too, or its tokens would not be measured
     try:
         documents = load_dataset_documents(config.dataset, warnings=[])
-        dataset = load_dataset(config.dataset.questions_path, config.dataset.qrels_path)
+        dataset, _ = load_configured_dataset(config.dataset)
         limit = config.evaluation.max_questions
         questions = dataset.questions[:limit] if limit else dataset.questions
         sample = evenly_sample(questions, sample_questions)

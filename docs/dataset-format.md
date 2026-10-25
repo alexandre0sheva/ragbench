@@ -2,7 +2,7 @@
 
 RAGBench evaluates retrieval at the document level. Do not add static `relevant_chunk_ids`; chunks are generated dynamically by each RAG system and may differ by chunker or strategy.
 
-Contents: [Quick start](#quick-start-with-your-own-data) · [Documents](#documents) · [Inspecting a dataset](#inspecting-a-dataset) · [Questions](#questions) · [Optional qrels](#optional-qrels) · [Label-free mode](#label-free-mode) · [Importing existing data](#importing-existing-data) · [Generating questions](#generating-questions) · [Pooled labeling](#pooled-labeling) · [The demo dataset](#the-bundled-demo-dataset)
+Contents: [Quick start](#quick-start-with-your-own-data) · [Documents](#documents) · [Inspecting a dataset](#inspecting-a-dataset) · [Questions](#questions) · [Optional qrels](#optional-qrels) · [Splits](#train--dev--test-splits) · [Label-free mode](#label-free-mode) · [Importing existing data](#importing-existing-data) · [Generating questions](#generating-questions) · [Pooled labeling](#pooled-labeling) · [The demo dataset](#the-bundled-demo-dataset)
 
 ## Quick start with your own data
 
@@ -143,6 +143,20 @@ Document-level labels say which documents answer a question, not which passage. 
 ```
 
 A `quote` is text copied from the document `doc_id`; case and whitespace do not matter, but it has to sit in one passage of the document, because a retrieved chunk only counts when it contains the whole quote. A row of `qrels.jsonl` may carry the same `evidence` list, which is attached to its question. With evidence, retrieval is also scored per chunk (`evidence_recall@k`, [methodology.md](methodology.md#retrieval-metrics)); questions without it are scored as before. A quote that is not in its document, or a document that does not exist, is a dataset warning, because it would be counted as a miss for every system.
+
+## Train / dev / test splits
+
+Anything that adapts a system to your data (a tuned prompt, a harness, a library of lessons) must be checked on questions it never saw. `ragbench split` divides the questions once:
+
+```bash
+ragbench split my_ds/questions.jsonl --train 0.5 --dev 0.1 --seed 42     # test gets the remaining 0.4
+```
+
+It writes `splits.json` next to the questions file (`--out` puts it elsewhere): the question ids of each part and the seed. The division is stratified, so train, dev and test each keep the dataset's mix of `category` and answerable / unanswerable questions (every (category, answerable) group is divided on its own; a group of one goes to train). The same questions and seed always give the same split, whatever the order of the file. **It refuses to overwrite an existing `splits.json`**: a second split could move a question a method has already learned from into the test set, so delete the file yourself if you really want to start over.
+
+Select a part in the config with `dataset.split: train | dev | test` (default `all`, which needs no splits file; `dataset.splits_path` points at a splits file kept elsewhere). The run then loads, scores and estimates only those questions, and records the split and the hash of the assignment in `run_summary.json`, `run_manifest.json` and the reports. A run of a questions file that grew since the split (a question the splits file does not list) stops with a message rather than leave that question in no split. Add questions only by making a new splits file.
+
+Use the parts like this: tune on `train`, compare candidates on `dev`, and score on `test` once at the end. Checkpoints made on one split are never resumed under another, and `ragbench compare-runs` says when two runs scored different splits. [methodology.md](methodology.md#held-out-splits-and-the-leakage-guard) explains the leakage guard that keeps test content away from tuning code.
 
 ## Label-free mode
 

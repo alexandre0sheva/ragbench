@@ -27,6 +27,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `auto`: From a folder of documents to a decision:...
 * `demo`: Create or verify the bundled demo dataset.
 * `inspect-dataset`: Profile a dataset: sizes and balance,...
+* `split`: Split a dataset's questions into train /...
 * `generate-questions`: Write questions for documents that have...
 * `label`: Propose relevance labels for a run by...
 * `init`: Start a benchmark of your own documents:...
@@ -215,6 +216,29 @@ $ ragbench inspect-dataset [OPTIONS]
 * `--exclude <str>`: Skip files matching this glob (repeatable).
 * `--on-error <str>`: `raise` (fail on a file that cannot be loaded) or `skip` (warn and go on).  [default: raise]
 * `--estimate / --no-estimate`: Also project the cost of the `standard` preset (runs each system once on the mock models; a few seconds).  [default: estimate]
+* `--help`: Show this message and exit.
+
+## `ragbench split`
+
+Split a dataset's questions into train / dev / test (stratified by category and answerability) and write `splits.json`. Never overwrites.
+
+**Usage**:
+
+```console
+$ ragbench split [OPTIONS] {dataset}
+```
+
+**Arguments**:
+
+* `dataset`: The questions JSONL file, or the dataset folder holding `questions.jsonl`.  [required]
+
+**Options**:
+
+* `--train <float>`: Share of the questions for train (what tuning features may learn from).  [default: 0.5]
+* `--dev <float>`: Share for dev (what they may check against). Test gets the rest.  [default: 0.1]
+* `--seed <int>`: Seed of the shuffle; the same seed on the same questions gives the same split.  [default: 42]
+* `--out <path>`: Where to write the splits file (default: `splits.json` next to the questions).
+* `--json`: Print the result as JSON on stdout.
 * `--help`: Show this message and exit.
 
 ## `ragbench generate-questions`
