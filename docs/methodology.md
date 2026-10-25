@@ -31,6 +31,8 @@ Retrieval is scored at the **document** level, because every system chunks the c
 
 **What `@k` means.** Retrieval metrics are computed on a ranking of `evaluation.retrieval_depth` chunks (default `max(k_values)`), independent of how many chunks the generator reads. The headline columns are recall at `primary_k` (default 5) and MRR / nDCG at the deepest `k`. The generator is given only the first `context_k` chunks of that ranking (a system's own `top_k` / `final_top_k` wins), so a system can rank the evidence 7th, score well at `@10`, and still never show it to its LLM. [Context metrics](#context-metrics) measure that gap. The keys are described in [configuration.md](configuration.md#retrieval-depth-context-size-and-failures).
 
+**Chunk-level evidence.** Document relevance cannot tell whether the chunk that holds the answer was retrieved. A question that lists `evidence` ([dataset-format.md](dataset-format.md#evidence-optional)) also gets `evidence_recall@k`: the share of its evidence quotes found in the top `k` *chunks* of the ranking, in a chunk of the quote's own document (case and whitespace ignored; a quote split across two chunks counts as missed). It is the mean over the questions that have evidence, a question without evidence has no value (not 0), and a dataset without any evidence has no such column.
+
 Systems that retrieve nothing (`no_retrieval`) have no retrieval metrics at all: their cells are blank, they are never classified as a retrieval miss, and they stay out of the qrels audit. The same holds for an answerable question with no relevance labels (no `relevant_doc_ids`, no positive qrels; see [label-free mode](dataset-format.md#label-free-mode)): its retrieval and context metrics are blank, and if no question is labeled the retrieval columns are blank for every system. Agentic systems are scored on the passages their tool calls returned (one ranking per call, merged with Reciprocal Rank Fusion).
 
 ## Context metrics
@@ -69,6 +71,21 @@ Whether a system says "I could not find the answer" when it should, and only the
 | `false_refusal_rate` | Answerable questions that were refused ÷ all answerable questions | worse |
 
 A rate with an empty denominator (no unanswerable questions in the dataset, no refusals at all) is missing. A system that always answers has `abstain_recall` 0; one that always refuses has `false_refusal_rate` 1. Read the two together.
+
+**How a refusal is recognized.** By default a wording heuristic (the sentence the prompts ask for and its usual paraphrases), which costs nothing and is what mock runs use. `evaluation.refusal_detector: model` asks a decision model instead: it reads the question and the answer and gives the probability that the answer declines to answer, and 0.5 or more is a refusal. That catches a refusal phrased in a way the heuristic does not know ("Sadly, nothing in the files speaks to that"), and it can overrule a heuristic hit on an answer that quotes a refusal phrase but also gives the figure. A reply the model gives no usable probability for falls back to the heuristic for that answer. The model is the judge model, its spend is charged as judge cost, and the same verdict feeds the abstention metrics, the `refused` flag and the failure types. Mock runs and runs without a key for the judge model keep the heuristic.
+
+### Claim-level faithfulness
+
+The judge's `faithfulness` is one number for a whole answer. With `evaluation.claims.enabled`, every answer is also split into **atomic claims** (one self-contained statement each, citations removed) and each claim is checked on its own against the context the generator was given, through the [decision-model interface](extending.md): one yes/no request per claim, answered with a probability, where 0.5 or more is "supported". The checker never sees more than the generator saw, and judges from the passage alone, not from its own knowledge.
+
+| Metric | Definition | Higher is |
+| --- | --- | --- |
+| `claim_support_rate` | Claims supported by the context ÷ claims checked, averaged over the answers that have claims | better |
+| `unsupported_claims` | Mean number of unsupported claims per answer | worse |
+
+Per question, `per_question_results.jsonl` has a `claims` block (every claim with its verdict and probability, the `unsupported` ones, `unreadable`, `split_failed`), and the report's drill-down lists the unsupported claims under the answer. Missing is not zero: an answer that declines to answer asserts nothing, so it has no claims and no rate; a claim the model gave no usable probability for is left out of the rate (`unreadable`); an unreadable split reply (`split_failed`) leaves that answer out. A system that retrieves nothing is checked against an empty context, so its claims count as unsupported, the same yardstick as the judge's faithfulness axis.
+
+Cost is one splitting request plus one request per claim (at most `claims.max_claims`), charged as judge cost, counted by `max_cost_usd` and priced by `ragbench estimate` from an assumed four claims per answer. The model is `evaluation.claims.model`, default the judge model. It is not subject to the judge panel's independence rule, so pick a different family from the generators if self-preference worries you. Mock runs split the answer into sentences and call a claim supported when enough of its content words occur in the context; that exercises the pipeline and flags a claim about something the context never mentions, but it reads no meaning. See [configuration.md](configuration.md#claims-and-refusal-detection).
 
 ## The LLM judge
 
@@ -294,7 +311,8 @@ Synthetic questions are shaped by the generator: they tend to be answerable from
 
 - **Document-level relevance.** A retrieved chunk counts if its document is relevant, whether or not that chunk holds the evidence. Context precision is therefore generous, and unlabeled but helpful documents count against a system (`qrels_audit.md` surfaces them).
 - **LLM-judge noise and bias.** See [Bias and noise](#bias-and-noise). Scores are only comparable within one run (one judge or panel, one prompt version), and a judge's accuracy is unknown until a [human audit](#calibrating-the-judge-against-a-human) measures it.
-- **Heuristic refusal detection.** Abstention metrics rely on recognizing refusals by wording. Models that decline in unusual phrasing are counted as answering.
+- **Heuristic refusal detection.** By default abstention metrics rely on recognizing refusals by wording, so a model that declines in unusual phrasing is counted as answering. `evaluation.refusal_detector: model` fixes that at the price of one more model call per answer and the detector's own mistakes.
+- **Claim checks are another model's opinion.** The splitter can merge or drop claims and the checker can misjudge one; the rate is only comparable within one run (one claims model).
 - **Deterministic metrics are literal.** `exact_match` and `token_f1` penalize correct paraphrases and reward verbose answers that repeat the reference.
 - **Failure classification is heuristic** and depends on labels you supply (`answer_type`, qrels).
 - **Mock mode** uses hashing embeddings, a scripted LLM and the heuristic judge. It validates that pipelines run and that results are reproducible; it says nothing about real quality, and its banner is on every report.

@@ -10,6 +10,7 @@ from typing import Any
 
 from ragbench.config.schema import EvaluationConfig, SystemConfig
 from ragbench.datasets.schema import has_relevance_labels
+from ragbench.evaluation.answer_checks import AnswerChecks
 from ragbench.evaluation.context_metrics import context_precision, context_recall_doc
 from ragbench.evaluation.failure_analysis import classify_failure
 from ragbench.evaluation.judge_panel import JudgePanel
@@ -38,10 +39,11 @@ def evaluate_question(
     qrels: dict[str, int],
     judge: JudgePanel,
     evaluation: EvaluationConfig,
+    checks: AnswerChecks | None = None,
 ) -> dict[str, Any]:
     """The question's rows; a question that raises becomes an error result instead of failing the run."""
     try:
-        return _score_question(system, system_config, question, qrels, judge, evaluation)
+        return _score_question(system, system_config, question, qrels, judge, evaluation, checks or AnswerChecks())
     except Exception as exc:
         logger.warning("Question %s failed for system %s: %s: %s", question.id, system.name, type(exc).__name__, exc)
         return error_result(system, system_config, question, _error_info(exc))
@@ -54,6 +56,7 @@ def _score_question(
     qrels: dict[str, int],
     judge: JudgePanel,
     evaluation: EvaluationConfig,
+    checks: AnswerChecks,
 ) -> dict[str, Any]:
     result = answer(system, question, evaluation)
     # Retrieval is scored on the whole ranking; the judge sees only what the generator was given.
@@ -65,7 +68,7 @@ def _score_question(
     retrieves = spec is None or spec.retrieves
     # ... and so does a question that has an answer but no labels to score the ranking against (label-free mode); an unanswerable one still scores 0.
     scorable = retrieves and (has_relevance_labels(question, qrels) or not question.is_answerable)
-    retrieval_metrics = compute_retrieval_metrics(ranked, question.relevant_doc_ids, qrels=qrels, k_values=evaluation.k_values) if scorable else {}
+    retrieval_metrics = compute_retrieval_metrics(ranked, question.relevant_doc_ids, qrels=qrels, k_values=evaluation.k_values, evidence=question.evidence) if scorable else {}
     context_chunks = [chunk for chunk in ranked if chunk.chunk_id in in_context]
     # Same notion of "relevant" as the retrieval metrics: the question's own list, else the positive qrels.
     relevant = question.relevant_doc_ids or [doc_id for doc_id, grade in qrels.items() if grade > 0]
@@ -74,6 +77,8 @@ def _score_question(
         "context_precision": context_precision(context_chunks, relevant) if retrieves else None,
     }
     judge_result = judge.judge(question, result.answer, context_chunks, generator=system_model_refs(system_config).llm[0])
+    refusal = checks.refusal.detect(question.question, result.answer)
+    claims = checks.claims.check(question.question, result.answer, context_chunks) if checks.claims is not None else None
     failure_type = classify_failure(
         question,
         result.answer,
@@ -81,7 +86,19 @@ def _score_question(
         judge_result,
         primary_k=evaluation.resolved_primary_k,
         context_recall=context_metrics["context_recall"],
+        refused=refusal.refused,
     )
     return build_question_rows(
-        system, system_config, question, result, retrieval_metrics, judge_result, failure_type, in_context, context_metrics, evaluation.k_values
+        system,
+        system_config,
+        question,
+        result,
+        retrieval_metrics,
+        judge_result,
+        failure_type,
+        in_context,
+        context_metrics,
+        evaluation.k_values,
+        refusal=refusal,
+        claims=claims,
     )

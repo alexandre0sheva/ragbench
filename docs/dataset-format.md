@@ -133,6 +133,17 @@ Recommended relevance levels:
 
 If qrels are missing, RAGBench derives binary relevance from `relevant_doc_ids`; if those are missing too, see [label-free mode](#label-free-mode).
 
+## Evidence (optional)
+
+Document-level labels say which documents answer a question, not which passage. A question can also list the passages themselves:
+
+```json
+{"id": "q_001", "question": "How much does HarborShield cost?", "relevant_doc_ids": ["doc_001"],
+ "evidence": [{"doc_id": "doc_001", "quote": "HarborShield costs $200 per month"}]}
+```
+
+A `quote` is text copied from the document `doc_id`; case and whitespace do not matter, but it has to sit in one passage of the document, because a retrieved chunk only counts when it contains the whole quote. A row of `qrels.jsonl` may carry the same `evidence` list, which is attached to its question. With evidence, retrieval is also scored per chunk (`evidence_recall@k`, [methodology.md](methodology.md#retrieval-metrics)); questions without it are scored as before. A quote that is not in its document, or a document that does not exist, is a dataset warning, because it would be counted as a miss for every system.
+
 ## Label-free mode
 
 Most people have documents and questions but no relevance labels. RAGBench runs on those: a question with no `relevant_doc_ids` and no qrels is allowed.

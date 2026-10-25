@@ -31,6 +31,7 @@ def classify_failure(
     judge: AnswerJudgeResult,
     primary_k: int = 5,
     context_recall: float | None = None,
+    refused: bool | None = None,
 ) -> str:
     """Why a question went wrong, from structured signals only (no regexes over the answer text).
 
@@ -38,10 +39,11 @@ def classify_failure(
     describe the whole ranking (an empty dict means the system retrieves nothing, so no hit/miss verdict applies), and the
     judge supplies scores and flags. The wrong value of a wrong answer is typed by `answer_type` (`date` -> `wrong_date`,
     `entity` / `person` / `name` / `organization` -> `wrong_entity`) when its expected keywords are missing from the answer.
+    `refused` is whether the answer declines (default: the wording heuristic decides).
     """
     if not answer.strip():
         return "format_error"
-    refused = is_refusal(answer)
+    refused = is_refusal(answer) if refused is None else refused
     if not question.is_answerable:
         return "no_failure" if refused else "answer_hallucination"
     hit = retrieval_metrics.get(f"hit@{primary_k}", 0.0) if retrieval_metrics else None

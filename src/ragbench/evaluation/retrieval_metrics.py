@@ -3,12 +3,24 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from ragbench.datasets.schema import Evidence
 from ragbench.rag_systems.base import RetrievedChunk
 from ragbench.utils.text import unique_preserve_order
 
 
 def dedup_doc_ranking(retrieved_chunks: list[RetrievedChunk]) -> list[str]:
     return unique_preserve_order(chunk.doc_id for chunk in retrieved_chunks)
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def evidence_recall(retrieved_chunks: list[RetrievedChunk], evidence: list[Evidence], k: int) -> float:
+    """Share of the evidence quotes that sit in one of the top `k` chunks of their own document (case and whitespace ignored)."""
+    top = [(chunk.doc_id, _squash(chunk.text)) for chunk in retrieved_chunks[:k]]
+    found = sum(any(doc_id == item.doc_id and _squash(item.quote) in text for doc_id, text in top) for item in evidence)
+    return found / len(evidence)
 
 
 def _dcg(relevances: list[int]) -> float:
@@ -20,7 +32,9 @@ def compute_retrieval_metrics(
     relevant_doc_ids: list[str],
     qrels: dict[str, int] | None = None,
     k_values: list[int] | None = None,
+    evidence: list[Evidence] | None = None,
 ) -> dict[str, float]:
+    """Document-level metrics at each k, plus `evidence_recall@k` (chunk-level) for a question that has `evidence`."""
     k_values = k_values or [1, 3, 5, 10]
     doc_ranking = dedup_doc_ranking(retrieved_chunks)
     relevant = set(relevant_doc_ids)
@@ -52,6 +66,9 @@ def compute_retrieval_metrics(
         gains = [int(qrels.get(doc_id, 0)) for doc_id in top_docs]
         ideal = sorted([rel for rel in qrels.values() if rel > 0], reverse=True)[:k]
         metrics[f"ndcg@{k}"] = _dcg(gains) / _dcg(ideal) if ideal and _dcg(ideal) else 0.0
+    if evidence:
+        for k in k_values:
+            metrics[f"evidence_recall@{k}"] = evidence_recall(retrieved_chunks, evidence, k)
     return metrics
 
 

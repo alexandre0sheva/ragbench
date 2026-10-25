@@ -40,3 +40,11 @@ def test_missing_values_render_as_a_dash_not_zero():
     assert format_value(column, math.inf) != MISSING
     assert format_value(column, 0.5) == "0.500"
     assert format_value(column, 0.0) == "0.000"  # a real zero is still a zero
+
+
+def test_claim_columns_are_offered_only_for_a_run_that_checked_claims():
+    from ragbench.reporting.columns import extra_columns
+
+    offered = {column.key: column for column in extra_columns(["claim_support_rate", "unsupported_claims", "correctness"], [])}
+    assert offered["claim_support_rate"].higher_is_better is True and offered["unsupported_claims"].higher_is_better is False
+    assert "claim_support_rate" not in {column.key for column in extra_columns(["correctness"], [])}

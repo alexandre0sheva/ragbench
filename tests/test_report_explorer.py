@@ -289,3 +289,33 @@ def test_a_run_without_per_question_rows_has_no_questions_section(run, tmp_path)
     write_report(copy)
     html = (copy / "report.html").read_text(encoding="utf-8")
     assert 'id="questions"' not in html and 'id="questions-data"' not in html
+
+
+# -- claim-level faithfulness ----------------------------------------------------------------------------------------------------------------
+
+
+def _claims(*unsupported: str) -> dict:
+    texts = ["HarborShield costs $200 per month.", *unsupported]
+    return {
+        "total": len(texts),
+        "unsupported": list(unsupported),
+        "unreadable": 0,
+        "support_rate": 1 / len(texts),
+        "split_failed": False,
+        "claims": [{"text": text, "supported": text not in unsupported, "probability": 0.5} for text in texts],
+    }
+
+
+def test_the_drill_down_lists_the_unsupported_claims_of_a_run():
+    rows = [_row("alpha", "q1", claims=_claims("Every subscriber gets free coffee.")), _row("beta", "q1")]
+    runs = _build(rows).embedded["questions"][0]["runs"]
+    assert runs[0]["claims"] == {"total": 2, "rate": 0.5, "unsupported": ["Every subscriber gets free coffee."]}
+    assert "claims" not in runs[1]  # a run that did not check claims shows no claims block
+
+
+def test_a_scores_only_page_leaves_the_claims_out():
+    from ragbench.reporting.explorer_data import _run
+
+    row = _row("alpha", "q1", claims=_claims("Every subscriber gets free coffee."))
+    assert "claims" in _run(row, 0, set(), "reduced")
+    assert "claims" not in _run(row, 0, set(), "scores")

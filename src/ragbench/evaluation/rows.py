@@ -7,6 +7,8 @@ from typing import Any
 
 from ragbench.config.schema import SystemConfig
 from ragbench.evaluation.answer_metrics import answer_metrics, is_refusal
+from ragbench.evaluation.claims import ClaimResult
+from ragbench.evaluation.refusal import RefusalVerdict
 from ragbench.evaluation.retrieval_metrics import unmeasured_retrieval_metrics
 from ragbench.models.cost import CostBreakdown
 from ragbench.rag_systems.base import BaseRAGSystem
@@ -116,10 +118,16 @@ def build_question_rows(
     in_context: set[str],
     context_metrics: dict[str, float | None],
     k_values: list[int],
+    *,
+    refusal: RefusalVerdict | None = None,
+    claims: ClaimResult | None = None,
 ) -> dict[str, Any]:
-    refused = is_refusal(answer.answer)
+    refused = refusal.refused if refusal is not None else is_refusal(answer.answer)
     deterministic = answer_metrics(answer.answer, question.reference_answer, question.expected_keywords, question.is_answerable)
     total_cost = answer.cost.plus(judge_result.cost)
+    for extra in (refusal, claims):  # checks on the answer are charged as judge spend
+        if extra is not None:
+            total_cost = total_cost.plus(extra.cost)
     retrieved_contexts = [
         {
             "rank": chunk.rank,
@@ -172,6 +180,12 @@ def build_question_rows(
         "agent": answer.metadata.get("agent"),  # steps / hops / termination / budget_exhausted / llm_calls; None unless the system is agentic
         "gate": answer.metadata.get("gate"),  # what a `decision_gate` decided (per-chunk probabilities, sufficiency, abstain reason); None for every other system
     }
+    claim_columns: dict[str, Any] = {}
+    if claims is not None:
+        per_question["claims"] = claims.as_dict()
+        claim_columns = {"claim_support_rate": claims.support_rate, "unsupported_claims": len(claims.unsupported)}
+    if refusal is not None and refusal.source == "model":
+        per_question["refusal"] = {"source": refusal.source, "probability": refusal.probability}
     return {
         "per_question": per_question,
         "retrieval_row": {
@@ -192,6 +206,7 @@ def build_question_rows(
             "answer_score": judge_result.answer_score,
             **deterministic,
             **context_metrics,
+            **claim_columns,
             "answerable": question.is_answerable,
             "refused": refused,
             "failure_type": failure_type,

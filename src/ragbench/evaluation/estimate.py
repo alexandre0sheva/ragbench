@@ -19,9 +19,10 @@ from datetime import date
 from typing import Literal
 
 from ragbench.cache import activate_cache
-from ragbench.config.schema import ExperimentConfig, SystemConfig
+from ragbench.config.schema import EvaluationConfig, ExperimentConfig, SystemConfig
 from ragbench.datasets.loader import load_dataset
 from ragbench.documents.loaders import load_dataset_documents
+from ragbench.evaluation.claims import SPLIT_SYSTEM_PROMPT
 from ragbench.evaluation.judge_panel import scoring_judges
 from ragbench.evaluation.judge_prompts import build_messages
 from ragbench.evaluation.pairwise import pairwise_messages
@@ -40,6 +41,10 @@ logger = logging.getLogger(__name__)
 
 SAMPLE_QUESTIONS = 6  # questions each system is actually run on; per-question figures are their mean
 JUDGE_COMPLETION_TOKENS = 120  # a judge verdict (five scores, two flags, a sentence of reasoning)
+CLAIMS_PER_ANSWER = 4  # what `evaluation.claims` is assumed to split an answer into (capped by `max_claims`)
+CLAIM_COMPLETION_TOKENS = 25  # one claim in the splitter's reply
+DECISION_COMPLETION_TOKENS = 16  # a probability reply
+DECISION_PROMPT_TOKENS = 80  # a claim check's instructions and framing around the context
 PAIRWISE_COMPLETION_TOKENS = 40  # a pairwise verdict (the winner and one sentence)
 STALE_PRICES_AFTER_DAYS = 90
 # Rough API latencies for the time projection: a model call, its generation speed, and an embedding request.
@@ -120,6 +125,27 @@ def _usd(usage: UsageRecorder, generator: str, embedding: str | None, decision: 
     return total
 
 
+def _answer_checks(evaluation: EvaluationConfig, question: str, answer: str, context: str) -> tuple[float, float]:
+    """Dollars and seconds of the optional checks on one answer: claim splitting and checking (`evaluation.claims`), model-based refusal detection."""
+    usd = seconds = 0.0
+    call = LLM_CALL_BASE_S + DECISION_COMPLETION_TOKENS / LLM_TOKENS_PER_S
+    if evaluation.claims.enabled:
+        model, claims = evaluation.claims_model, min(evaluation.claims.max_claims, CLAIMS_PER_ANSWER)
+        split_tokens = estimate_tokens(SPLIT_SYSTEM_PROMPT + question + answer, model)
+        usd += pricing.estimate_model_cost(model, split_tokens, claims * CLAIM_COMPLETION_TOKENS)
+        usd += claims * pricing.estimate_model_cost(
+            model, estimate_tokens(context, model) + DECISION_PROMPT_TOKENS, DECISION_COMPLETION_TOKENS
+        )
+        seconds += LLM_CALL_BASE_S + claims * CLAIM_COMPLETION_TOKENS / LLM_TOKENS_PER_S + claims * call
+    if evaluation.refusal_detector == "model":
+        model = evaluation.judge_model
+        usd += pricing.estimate_model_cost(
+            model, estimate_tokens(question + answer, model) + DECISION_PROMPT_TOKENS, DECISION_COMPLETION_TOKENS
+        )
+        seconds += call
+    return usd, seconds
+
+
 def _seconds(usage: UsageRecorder) -> float:
     return usage.llm_calls * LLM_CALL_BASE_S + usage.llm_completion_tokens / LLM_TOKENS_PER_S + usage.embed_calls * EMBED_CALL_S + usage.decision_calls * DECISION_CALL_S
 
@@ -155,9 +181,12 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
             answer_usd += _usd(usage, generator, embedding, decision)
             answer_tokens += estimate_tokens(answer.answer)
             answer_seconds += _seconds(usage)
+            given = answer.metadata.get("context_chunk_ids")
+            chunks = [c for c in answer.retrieval_result.chunks if given is None or c.chunk_id in given]
+            check_usd, check_seconds = _answer_checks(evaluation, question.question, answer.answer, "\n".join(c.text for c in chunks))
+            judge_usd += check_usd  # checks on the answer are charged as judge spend
+            judge_seconds += check_seconds
             if evaluation.judge_enabled:
-                given = answer.metadata.get("context_chunk_ids")
-                chunks = [c for c in answer.retrieval_result.chunks if given is None or c.chunk_id in given]
                 prompt = "\n".join(message["content"] for message in build_messages(question, answer.answer, chunks))
                 calls = evaluation.judge.samples
                 for judge in judges:

@@ -53,6 +53,16 @@ def validate_dataset(documents: list[Document], dataset: Dataset) -> list[str]:
             shown = ", ".join(unlabeled[:5]) + (f" and {len(unlabeled) - 5} more" if len(unlabeled) > 5 else "")
             warnings.append(f"Answerable questions with no relevant_doc_ids or qrels get no retrieval metrics: {shown}")
 
+    texts = {document.doc_id: " ".join(document.text.lower().split()) for document in documents}
+    for question in dataset.questions:
+        for item in question.evidence:
+            if item.doc_id not in texts:
+                warnings.append(f"Question {question.id} has evidence from a missing document: {item.doc_id}")
+            elif " ".join(item.quote.lower().split()) not in texts[item.doc_id]:
+                warnings.append(
+                    f"Question {question.id}: the evidence quote {item.quote[:60]!r} is not in {item.doc_id}, so evidence_recall will count it as missed"
+                )
+
     empty_docs = sorted(document.doc_id for document in documents if not document.text.strip())
     if empty_docs:
         warnings.append(f"Documents with empty text (will produce no chunks): {', '.join(empty_docs)}")

@@ -51,6 +51,7 @@ evaluation:
   # trials: 1  (see Statistics)
   # judge: {...} (see Judge), stats: {n_boot: 2000, seed: 0, baseline: null} (see Statistics)
   # pairwise: {enabled: false, pairs: all} (see Pairwise judging)
+  # claims: {enabled: false}, refusal_detector: heuristic  (see Claims and refusal detection)
 # selection: {profile: balanced, constraints: {...}} (see Selection)
 # report: {max_embedded_mb: 4}  (see Report)
 # max_cost_usd: 25, cost_confirm_threshold_usd: 1.0  (see Estimating cost and capping it)
@@ -155,6 +156,21 @@ evaluation:
 evaluation:
   trials: 3
 ```
+
+## Claims and refusal detection
+
+Two optional checks on every answer, both off by default; a run that leaves them off is unchanged.
+
+```yaml
+evaluation:
+  claims:
+    enabled: true              # split every answer into atomic claims and check each against the context the generator saw
+    model: anthropic:claude-haiku-5-5   # default: the judge model
+    max_claims: 12             # claims checked per answer (the first ones); each is one model request
+  refusal_detector: model      # heuristic (default) | model: how an answer is recognized as a refusal
+```
+
+`claims` adds `claim_support_rate` and `unsupported_claims` to the summary and a `claims` block to each question, and lists unsupported claims in the report's drill-down. `refusal_detector: model` asks a decision model (the judge model) whether an answer declines to answer, for refusals the wording heuristic misses; mock runs always use the heuristic. Both are charged as judge cost, count toward `max_cost_usd`, are priced by `ragbench estimate`, and change the resume checkpoint of every system when turned on. What they measure and how: [methodology.md](methodology.md#claim-level-faithfulness).
 
 ## Pairwise judging
 

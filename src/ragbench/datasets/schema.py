@@ -5,6 +5,13 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 
+class Evidence(BaseModel):
+    """A passage that answers a question: `quote` is text of the document `doc_id`, verbatim up to case and whitespace."""
+
+    doc_id: str
+    quote: str
+
+
 class Question(BaseModel):
     id: str
     question: str
@@ -23,6 +30,9 @@ class Question(BaseModel):
     # Whether the documents can answer the question. None keeps the legacy rule (answerable exactly when `relevant_doc_ids` is non-empty); set it
     # explicitly for a question that has an answer but no relevance labels (label-free mode, see docs/dataset-format.md) or to mark one unanswerable.
     answerable: bool | None = None
+    # Optional span-level labels: passages (in `relevant_doc_ids` documents) that hold the answer. With them, retrieval is also scored per chunk
+    # (`evidence_recall@k`: is the quote itself in the top-k chunks, not just some chunk of its document).
+    evidence: list[Evidence] = Field(default_factory=list)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("requires_tools")
@@ -44,6 +54,7 @@ class Qrel(BaseModel):
     query_id: str
     doc_id: str
     relevance: int = 1
+    evidence: list[Evidence] = Field(default_factory=list)  # attached to the question, like `Question.evidence`
 
 
 def has_relevance_labels(question: Question, qrels: dict[str, int]) -> bool:

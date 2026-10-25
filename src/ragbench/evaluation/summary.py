@@ -21,6 +21,8 @@ from ragbench.registry import SYSTEMS
 from ragbench.runtime import ProbeResult
 from ragbench.utils.text import unique_preserve_order
 
+CLAIM_COLUMNS = ("claim_support_rate", "unsupported_claims")  # `unsupported_claims` is a mean count per answer
+
 
 def errors_by_system(per_question_rows: list[dict[str, Any]]) -> dict[str, int]:
     counts: dict[str, int] = {}
@@ -217,6 +219,10 @@ def build_summary(
         for col in ["exact_match", "token_f1", "keyword_recall", "context_recall", "context_precision"]:
             mean = pd.to_numeric(a[col], errors="coerce").mean() if col in a else float("nan")
             row[col] = None if pd.isna(mean) else float(mean)
+        for col in CLAIM_COLUMNS:  # present only in a run that checked claims; a system whose answers had none gets an empty cell
+            if col in a:
+                mean = pd.to_numeric(a[col], errors="coerce").mean()
+                row[col] = None if pd.isna(mean) else float(mean)
         row["avg_cost_per_question"] = float(c["total_cost"].mean()) if not c.empty else None
         ok_system_rows = [r for r in ok_rows if r["system"] == system_name]
         row.update(refusal_metrics(ok_system_rows))

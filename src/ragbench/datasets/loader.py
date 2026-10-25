@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ragbench.datasets.schema import Dataset, Qrel, Question, has_relevance_labels
+from ragbench.datasets.schema import Dataset, Evidence, Qrel, Question, has_relevance_labels
 from ragbench.utils.jsonl import read_jsonl
 
 
@@ -22,8 +22,22 @@ def load_qrels(path: Path | None, questions: list[Question]) -> dict[str, dict[s
     return {q.id: {doc_id: 1 for doc_id in q.relevant_doc_ids} for q in questions}
 
 
+def load_qrel_evidence(path: Path | None) -> dict[str, list[Evidence]]:
+    """The `evidence` carried by rows of a qrels file, by question id (empty when there is no file or no row has any)."""
+    found: dict[str, list[Evidence]] = {}
+    if path and path.exists():
+        for row in read_jsonl(path):
+            qrel = Qrel.model_validate(row)
+            found.setdefault(qrel.query_id, []).extend(qrel.evidence)
+    return {query_id: evidence for query_id, evidence in found.items() if evidence}
+
+
 def load_dataset(questions_path: Path, qrels_path: Path | None = None) -> Dataset:
     questions = load_questions(questions_path)
+    for query_id, evidence in load_qrel_evidence(qrels_path).items():
+        for question in questions:
+            if question.id == query_id:
+                question.evidence = [*question.evidence, *(item for item in evidence if item not in question.evidence)]
     qrels = load_qrels(qrels_path, questions)
     dataset = Dataset(questions=questions, qrels=qrels)
     if questions and not any(has_relevance_labels(question, qrels.get(question.id, {})) for question in questions):

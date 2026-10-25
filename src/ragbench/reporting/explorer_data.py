@@ -35,6 +35,7 @@ FAILURE_LABELS = {
     "format_error": "Format error",
     "run_error": "Run error",
 }
+MAX_SHOWN_CLAIMS = 10  # unsupported claims listed per answer
 JUDGE_KEYS = ("correctness", "faithfulness", "completeness", "relevance", "citation_quality")
 DETAILS = ("full", "reduced", "scores")
 
@@ -133,6 +134,13 @@ def _run(row: dict[str, Any], index: int, good: set[str], detail: str) -> dict[s
         run["reasoning"] = _text(judge["reasoning"], limits["reasoning"])
     if (judge.get("metadata") or {}).get("judge"):
         run["judge_by"] = judge["metadata"]["judge"]
+    if row.get("claims"):  # claim-level faithfulness: what the answer asserts that its context does not support
+        claims = row["claims"]
+        run["claims"] = {
+            "total": claims.get("total"),
+            "rate": _round(claims.get("support_rate"), 2),
+            "unsupported": [_text(claim, limits["reference"]) for claim in (claims.get("unsupported") or [])[:MAX_SHOWN_CLAIMS]],
+        }
     if row.get("agent"):
         run["agent"] = {k: v for k, v in row["agent"].items() if isinstance(v, str | int | float | bool)}
     run["ctx"] = [_context(chunk, relevant, good if scored else set(), detail) for chunk in row.get("retrieved_contexts") or []]

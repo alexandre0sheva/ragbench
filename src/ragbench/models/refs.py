@@ -118,6 +118,10 @@ def collect_model_refs(config: ExperimentConfig) -> ModelRefs:
     if config.evaluation.judge_enabled:
         for ref in config.evaluation.judge_models:
             _add(refs.llm, ref)
+    if config.evaluation.claims.enabled:
+        _add(refs.llm, config.evaluation.claims_model)
+    if config.evaluation.refusal_detector == "model":
+        _add(refs.llm, config.evaluation.judge_model)
     return refs
 
 

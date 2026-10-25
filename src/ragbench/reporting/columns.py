@@ -109,6 +109,8 @@ _EXTRA_COLUMNS: tuple[tuple[str, str, str, bool], ...] = (
     ("abstain_precision", "Abstain prec", "{:.2f}", True),
     ("abstain_recall", "Abstain recall", "{:.2f}", True),
     ("false_refusal_rate", "False refusals", "{:.2f}", False),
+    ("claim_support_rate", "Claims supported", "{:.2f}", True),
+    ("unsupported_claims", "Unsupported claims", "{:.2f}", False),
     ("judge_fallback_rate", "Judge fallback", "{:.2f}", False),
     ("gate_abstain_rate", "Gate abstains", "{:.2f}", False),
     ("avg_chunks_kept", "Chunks kept", "{:.1f}", False),

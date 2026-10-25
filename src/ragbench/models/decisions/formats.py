@@ -27,6 +27,23 @@ STRICT_SUFFICIENCY_INSTRUCTIONS = (
     "the evidence must give the actual answer to every part of the question."
 )
 
+# `evaluation.refusal_detector: model` puts the answer in the passage slot and asks this about it.
+DECLINES_INSTRUCTIONS = (
+    "The passage is a model's answer to the question. Does it decline to answer, or say that the answer is not available, cannot be found "
+    "or cannot be determined from the documents? Answer no when it gives an answer, even a hedged one."
+)
+
+
+# `evaluation.claims` puts one claim in the question slot and the context the generator saw in the passage slot.
+SUPPORTED_INSTRUCTIONS = (
+    "Is the claim fully supported by the passage? Judge only from the passage, not from what you know. Answer no when any part of the claim "
+    "goes beyond the passage or contradicts it."
+)
+
+
+def claim_input(claim: str, passage: str) -> str:
+    return f"Claim: {claim}\n\nPassage:\n{passage}"
+
 
 def single_input(question: str, passage: str) -> str:
     return f"Question: {question}\n\nPassage:\n{passage}"
@@ -51,7 +68,7 @@ def _one_line(text: str) -> str:
 
 # -- reading the formats back (the mock backend) ----------------------------------------------------------------------
 
-_QUESTION = re.compile(r"Question:\s*(.*?)\n\n", re.S)
+_QUESTION = re.compile(r"(?:Question|Claim):\s*(.*?)\n\n", re.S)
 
 
 def parse_question(text: str) -> str:

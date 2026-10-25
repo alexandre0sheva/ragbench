@@ -249,6 +249,18 @@ class PairwiseConfig(BaseModel):
     )
 
 
+class ClaimsConfig(BaseModel):
+    """`evaluation.claims:` section: claim-level faithfulness (see docs/methodology.md#claim-level-faithfulness)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(
+        default=False, description="Split every answer into atomic claims and check each against the context the generator was given."
+    )
+    model: str | None = Field(default=None, description="Model ref that splits answers and checks claims. Default: the judge model.")
+    max_claims: int = Field(default=12, ge=1, le=50, description="Claims checked per answer (the first ones); each is one model request.")
+
+
 class StatsConfig(BaseModel):
     """`evaluation.stats:` section: how uncertainty and significance are computed (see docs/methodology.md#statistics)."""
 
@@ -278,6 +290,10 @@ class EvaluationConfig(BaseModel):
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
     stats: StatsConfig = Field(default_factory=StatsConfig)
     pairwise: PairwiseConfig = Field(default_factory=PairwiseConfig)
+    claims: ClaimsConfig = Field(default_factory=ClaimsConfig)
+    # How a refusal is recognized (abstention metrics, failure types): the wording heuristic, or a decision model asked with the judge model.
+    # Mock runs always use the heuristic.
+    refusal_detector: Literal["heuristic", "model"] = "heuristic"
     max_questions: int | None = None
     # Hard spending cap in dollars: once the run has been charged this much it starts no more questions, finishes the ones in flight and
     # reports the systems that completed. Counts charged cost (standalone prices), an upper bound of real spend when the cache is warm.
@@ -306,6 +322,11 @@ class EvaluationConfig(BaseModel):
     def judge_model_key(self) -> str:
         """The config key the judge's model was set under, for error messages."""
         return "evaluation.judge.model" if self._judge_model_in_section else "evaluation.judge_model"
+
+    @property
+    def claims_model(self) -> str:
+        """The model that splits answers into claims and checks them."""
+        return self.claims.model or self.judge_model
 
     @property
     def judge_models(self) -> list[str]:
@@ -619,4 +640,9 @@ class ExperimentConfig(BaseModel):
                 validate_model_ref(ref, "llm", self.providers)
             except ValueError as exc:
                 raise ValueError(f"{f'evaluation.judge.panel[{index}]' if panel else self.evaluation.judge_model_key}: {exc}") from None
+        if self.evaluation.claims.model is not None:
+            try:
+                validate_model_ref(self.evaluation.claims.model, "llm", self.providers)
+            except ValueError as exc:
+                raise ValueError(f"evaluation.claims.model: {exc}") from None
         return self

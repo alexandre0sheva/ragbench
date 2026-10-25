@@ -25,6 +25,7 @@ from ragbench.datasets.schema import Dataset, has_relevance_labels
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import load_dataset_documents
 from ragbench.evaluation import outputs, question_runner, rows
+from ragbench.evaluation.answer_checks import AnswerChecks
 from ragbench.evaluation.budget import BudgetExceededError, BudgetGuard
 from ragbench.evaluation.checkpoint import Checkpoint, CheckpointStore, context_hash
 from ragbench.evaluation.judge_panel import JudgePanel
@@ -133,6 +134,7 @@ class BenchmarkEvaluator:
         self.generator_models: dict[str, tuple[str, str]] = {}  # system name -> (provider, model) of its generator, for the self-preference check
         self._qrels: dict[str, dict[str, int]] = {}
         self.judge: JudgePanel | None = None
+        self.checks = AnswerChecks()  # refusal detection and claim checks; built with the judge once the run starts
         self.pairwise: PairwiseResult | None = None  # the head-to-head stage, when `evaluation.pairwise.enabled`
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.run_id = f"{self.config.run.name}_{timestamp}"
@@ -209,6 +211,9 @@ class BenchmarkEvaluator:
             self.models_used.update(judge.model_names())
 
         self._qrels, self.judge = dataset.qrels, judge
+        self.checks = AnswerChecks.from_config(self.config.evaluation, self.force_mock)
+        if self.checks.claims is not None and self.checks.claims.llm is not None:
+            self.models_used.add(self.checks.claims.llm.model_name)
         labeled = sum(has_relevance_labels(question, dataset.qrels.get(question.id, {})) for question in questions)
         self.dataset_info = {
             "questions": len(questions),
@@ -394,7 +399,8 @@ class BenchmarkEvaluator:
         if self.budget.exhausted:  # the cap is reached: nothing new is started (questions already running finish)
             return {"skipped": True}
         with trial_scope(trial):  # every model call of this answer, and of its judging, is keyed to the trial
-            result = question_runner.evaluate_question(system, system_config, question, self._qrels.get(question.id, {}), self.judge, self.config.evaluation)
+            qrels = self._qrels.get(question.id, {})
+            result = question_runner.evaluate_question(system, system_config, question, qrels, self.judge, self.config.evaluation, self.checks)
         self.budget.charge(float(result["per_question"]["cost"]["total_cost"]))
         return self._tagged(result, trial)
 

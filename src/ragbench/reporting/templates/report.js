@@ -314,6 +314,18 @@
       if (run.judge_by) judge.appendChild(el("p", "muted", "judged by: " + run.judge_by));
       card.appendChild(judge);
     }
+    if (run.claims) {
+      var claims = section("Claims (" + (run.claims.rate === null ? "none checked" : num(run.claims.rate * 100, 0) + "% supported") + ")", true);
+      if (run.claims.unsupported.length) {
+        var list = el("ul", "q-claims");
+        run.claims.unsupported.forEach(function (text) { list.appendChild(el("li", "q-unsupported", text)); });
+        claims.appendChild(el("p", "muted", "Not supported by the context the generator was given:"));
+        claims.appendChild(list);
+      } else {
+        claims.appendChild(el("p", "muted", run.claims.total ? "Every checked claim is supported by the context." : "The answer makes no claims to check."));
+      }
+      card.appendChild(claims);
+    }
     if (run.ctx) {
       var ctx = section("Retrieved contexts (" + run.ctx.length + ")", true);
       ctx.appendChild(run.ctx.length ? contextList(run) : el("p", "muted", "This system retrieved nothing."));

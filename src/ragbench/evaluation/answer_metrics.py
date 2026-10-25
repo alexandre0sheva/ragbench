@@ -13,7 +13,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-_CITATION = re.compile(r"\[[^\[\]\n]{1,80}\]")  # [doc_005], [doc_005 | chunk 2]: a citation, not part of the answer
+CITATION = re.compile(r"\[[^\[\]\n]{1,80}\]")  # [doc_005], [doc_005 | chunk 2]: a citation, not part of the answer
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}\b)")
 _PUNCTUATION = re.compile(r"[^\w\s.]")
 _STRAY_PERIOD = re.compile(r"\.(?!\d)|(?<!\d)\.")  # a period that is not a decimal point
@@ -34,7 +34,7 @@ _REFUSAL = re.compile(
 
 def normalize_answer(text: str) -> str:
     """Lowercase, drop citations, punctuation (decimal points stay), digit grouping commas and the articles a/an/the."""
-    text = _THOUSANDS.sub("", _CITATION.sub(" ", text.lower()))
+    text = _THOUSANDS.sub("", CITATION.sub(" ", text.lower()))
     text = _STRAY_PERIOD.sub(" ", _PUNCTUATION.sub(" ", text))
     return " ".join(token for token in text.split() if token not in _ARTICLES)
 
