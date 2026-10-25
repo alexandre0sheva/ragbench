@@ -1,0 +1,93 @@
+[
+ {
+  "id": "gl001",
+  "question": "What temperature kills the virus on surfaces?",
+  "documents": [
+   "Heat above 60 C kills the virus within minutes. It survives longer in the cold.",
+   "Masks reduce droplet spread."
+  ],
+  "response": "Temperatures above 60 C kill it.",
+  "adherence_score": true,
+  "documents_sentences": [
+   [
+    [
+     "0a",
+     "Heat above 60 C kills the virus within minutes"
+    ],
+    [
+     "0b",
+     "It survives longer in the cold."
+    ]
+   ],
+   [
+    [
+     "1a",
+     "Masks reduce droplet spread."
+    ]
+   ]
+  ],
+  "all_relevant_sentence_keys": [
+   "0a",
+   "0b"
+  ],
+  "dataset_name": "covidqa_test",
+  "completeness_score": 0.9
+ },
+ {
+  "id": "gl002",
+  "question": "Who won the 1998 World Cup?",
+  "documents": [
+   "Masks reduce droplet spread. Hand washing helps."
+  ],
+  "response": "The documents do not say.",
+  "adherence_score": true,
+  "documents_sentences": [
+   [
+    [
+     "0a",
+     "Masks reduce droplet spread"
+    ],
+    [
+     "0b",
+     "Hand washing helps."
+    ]
+   ]
+  ],
+  "all_relevant_sentence_keys": [],
+  "dataset_name": "covidqa_test",
+  "completeness_score": 0.9
+ },
+ {
+  "id": "gl003",
+  "question": "How long does the virus survive in the cold?",
+  "documents": [
+   "Heat above 60 C kills the virus within minutes. It survives longer in the cold.",
+   "Masks reduce droplet spread."
+  ],
+  "response": "It survives longer.",
+  "adherence_score": false,
+  "documents_sentences": [
+   [
+    [
+     "0a",
+     "Heat above 60 C kills the virus within minutes"
+    ],
+    [
+     "0b",
+     "It survives longer in the cold."
+    ]
+   ],
+   [
+    [
+     "1a",
+     "Masks reduce droplet spread."
+    ]
+   ]
+  ],
+  "all_relevant_sentence_keys": [
+   "0b"
+  ],
+  "dataset_name": "covidqa_test",
+  "completeness_score": 0.9
+ }
+]

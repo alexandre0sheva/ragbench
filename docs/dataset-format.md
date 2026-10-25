@@ -2,7 +2,7 @@
 
 RAGBench evaluates retrieval at the document level. Do not add static `relevant_chunk_ids`; chunks are generated dynamically by each RAG system and may differ by chunker or strategy.
 
-Contents: [Quick start](#quick-start-with-your-own-data) · [Documents](#documents) · [Inspecting a dataset](#inspecting-a-dataset) · [Questions](#questions) · [Optional qrels](#optional-qrels) · [Splits](#train--dev--test-splits) · [Label-free mode](#label-free-mode) · [Importing existing data](#importing-existing-data) · [Generating questions](#generating-questions) · [Pooled labeling](#pooled-labeling) · [The demo dataset](#the-bundled-demo-dataset)
+Contents: [Quick start](#quick-start-with-your-own-data) · [Documents](#documents) · [Inspecting a dataset](#inspecting-a-dataset) · [Questions](#questions) · [Optional qrels](#optional-qrels) · [Splits](#train--dev--test-splits) · [Label-free mode](#label-free-mode) · [Public benchmarks on demand](#public-benchmarks-on-demand) · [Importing existing data](#importing-existing-data) · [Generating questions](#generating-questions) · [Pooled labeling](#pooled-labeling) · [The demo dataset](#the-bundled-demo-dataset)
 
 ## Quick start with your own data
 
@@ -170,6 +170,41 @@ Most people have documents and questions but no relevance labels. RAGBench runs 
 - A question labeled only through the qrels file (no `relevant_doc_ids`; what `ragbench label --apply` produces) has relevant documents, so it counts as answerable.
 
 Labels can be added later, one question at a time; the questions that have them then get retrieval metrics (the mean covers the labeled questions only, and `run_summary.json` records `dataset: {questions, labeled_questions, label_free}`).
+
+## Public benchmarks on demand
+
+`ragbench datasets list` shows the public benchmarks RAGBench can fetch; `ragbench datasets pull NAME` downloads one, checks it, converts it and writes a dataset folder you can run straight away. Nothing is bundled with RAGBench: each pull downloads from the dataset's own host, after telling you the size and asking (`--yes` answers for you; with no terminal and no `--yes` it refuses).
+
+<!-- hub:start -->
+| Name | What it is | Download | License |
+| --- | --- | --- | --- |
+| `galileo-covidqa` | RAGBench by Galileo: covidqa (test) | 834 KB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-cuad` | RAGBench by Galileo: cuad (test) | 12.2 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-delucionqa` | RAGBench by Galileo: delucionqa (test) | 549 KB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-emanual` | RAGBench by Galileo: emanual (test) | 297 KB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-expertqa` | RAGBench by Galileo: expertqa (test) | 2.7 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-finqa` | RAGBench by Galileo: finqa (test) | 8.5 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-hagrid` | RAGBench by Galileo: hagrid (test) | 3.8 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-hotpotqa` | RAGBench by Galileo: hotpotqa (test) | 1.3 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-msmarco` | RAGBench by Galileo: msmarco (test) | 2.0 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-pubmedqa` | RAGBench by Galileo: pubmedqa (test) | 9.8 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-tatqa` | RAGBench by Galileo: tatqa (test) | 4.5 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `galileo-techqa` | RAGBench by Galileo: techqa (test) | 5.1 MB | [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `hotpotqa` | HotpotQA (distractor, validation) | 26.2 MB | [CC-BY-SA-4.0](https://creativecommons.org/licenses/by-sa/4.0/) |
+| `multihop-rag` | MultiHop-RAG | 11.4 MB | [ODC-By-1.0](https://opendatacommons.org/licenses/by/1-0/) |
+<!-- hub:end -->
+
+```bash
+ragbench datasets pull multihop-rag --subset 300                  # writes data/multihop-rag/{docs,questions.jsonl,qrels.jsonl,SOURCE.md,hub.json}
+ragbench estimate --config configs/multihop_rag.yaml               # what a live run of its three systems would cost
+ragbench run --config configs/multihop_rag.yaml --mock             # a free pipeline check
+```
+
+- **Pinned and verified.** Every file is pinned to a commit of its repository and to a checksum (SHA-256, or the git blob id for small non-LFS files). A file that does not match is deleted and the pull fails; nothing unverified is converted. Files are cached under `~/.cache/ragbench/datasets` (`RAGBENCH_DATASETS_DIR` moves it), so a second pull downloads nothing.
+- **`--subset N`** takes a stratified sample: it keeps every question category and the share of unanswerable questions (at least one question of each, the rest in proportion; the same `--seed` gives the same sample). For a corpus that serves every question (`multihop-rag`) the whole corpus stays, because the other articles are the distractors. For datasets whose questions each bring their own passages (`hotpotqa`, `galileo-*`) only the passages of the kept questions are written. `--output DIR` (default `data/NAME`) chooses where; an earlier pull is only replaced with `--force`.
+- **Terms.** Each folder gets a `SOURCE.md` with the license, the citation and any caveat (share-alike, third-party text, annotator-written references). Read it before you publish results. The Parquet-based datasets need `pip install 'ragbench[hub]'`.
+- **What the conversion decides.** `multihop-rag`: the article's source and date are part of its text (the temporal questions need them), a `null_query` becomes an unanswerable question, and an evidence `fact` is kept as `evidence` only when it appears verbatim in the article. `hotpotqa`: the supporting facts give the relevant documents and sentence-level evidence. `galileo-*`: a passage is relevant when an annotator marked one of its sentences relevant, a question with none is unanswerable, and the reference answer is the model response the annotators judged fully supported (it is flagged `reference_is_model_response`). Anything that could not be mapped is listed as a warning at the end of the pull.
+- **Not included, on purpose.** CRAG is CC-BY-NC-4.0 and ships as multi-gigabyte web pages; FRAMES has questions only and expects you to fetch live Wikipedia, which cannot be pinned or verified. The existing `ragbench import --format beir` covers any BEIR dataset.
 
 ## Importing existing data
 

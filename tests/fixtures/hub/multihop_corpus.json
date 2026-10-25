@@ -1,0 +1,47 @@
+[
+ {
+  "title": "Harbor Bank settles lawsuit",
+  "author": "Dana Reyes",
+  "source": "The Daily Ledger",
+  "category": "business",
+  "published_at": "2023-09-26T19:11:30+00:00",
+  "url": "https://ledger.example/harbor-bank-settles",
+  "body": "Harbor Bank agreed on Tuesday to pay $40 million to settle a class action. Chief executive Maria Chen said the bank admitted no wrongdoing. The settlement ends a three-year dispute."
+ },
+ {
+  "title": "Tech giant unveils AI chip",
+  "author": null,
+  "source": "Wired Sample",
+  "category": "technology",
+  "published_at": "2023-10-02T08:00:00+00:00",
+  "url": "https://wired.example/ai-chip",
+  "body": "Nova Systems unveiled the Aurora chip on Monday. Analysts said the Aurora chip doubles training speed. Nova Systems shares rose five percent."
+ },
+ {
+  "title": "Nova Systems faces antitrust probe",
+  "author": "Lee Park",
+  "source": "The Daily Ledger",
+  "category": "business",
+  "published_at": "2023-11-14T12:30:00+00:00",
+  "url": "https://ledger.example/nova-probe",
+  "body": "Regulators opened an antitrust probe into Nova Systems on Tuesday. The probe follows complaints about the Aurora chip bundle."
+ },
+ {
+  "title": "Marathon record falls in Berlin",
+  "author": "Sam Ortiz",
+  "source": "Sport Sample",
+  "category": "sports",
+  "published_at": "2023-09-24T15:00:00+00:00",
+  "url": "https://sport.example/berlin-record",
+  "body": "Kelvin Rono won the Berlin marathon in 2:01:09, a new world best. Rono led from the 30 kilometre mark."
+ },
+ {
+  "title": "Quiet week for markets",
+  "author": "Dana Reyes",
+  "source": "The Daily Ledger",
+  "category": "business",
+  "published_at": "2023-09-29T21:00:00+00:00",
+  "url": "https://ledger.example/quiet-week",
+  "body": "Markets ended a quiet week little changed. Traders awaited the central bank decision."
+ }
+]

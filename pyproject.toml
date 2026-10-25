@@ -70,6 +70,8 @@ dev = [
 pdf = ["pypdf>=6.21.2"]
 docx = ["python-docx>=1.2"]
 anthropic = ["anthropic>=2.3"]
+# Reading the Parquet files of the hub datasets (`ragbench datasets pull hotpotqa`, `galileo-*`).
+hub = ["pyarrow>=26"]
 # Vector backends (`retrieval.vector_store`); the default, `numpy`, needs none of them.
 chroma = ["chromadb>=1.5.9"]
 faiss = ["faiss-cpu>=1.15.1"]

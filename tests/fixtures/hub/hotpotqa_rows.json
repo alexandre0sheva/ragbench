@@ -1,0 +1,108 @@
+[
+ {
+  "id": "hp001",
+  "question": "Were Ed Wood and Scott Derrickson of the same nationality?",
+  "answer": "yes",
+  "type": "comparison",
+  "level": "easy",
+  "supporting_facts": {
+   "title": [
+    "Ed Wood",
+    "Scott Derrickson"
+   ],
+   "sent_id": [
+    0,
+    0
+   ]
+  },
+  "context": {
+   "title": [
+    "Ed Wood",
+    "Scott Derrickson",
+    "Tyler Bates"
+   ],
+   "sentences": [
+    [
+     "Edward Davis Wood Jr. was an American filmmaker.",
+     "He directed Plan 9."
+    ],
+    [
+     "Scott Derrickson is an American director.",
+     "He directed Sinister."
+    ],
+    [
+     "Tyler Bates is a composer."
+    ]
+   ]
+  }
+ },
+ {
+  "id": "hp002",
+  "question": "Which film did the composer of Sinister's score also work on?",
+  "answer": "Doctor Strange",
+  "type": "bridge",
+  "level": "hard",
+  "supporting_facts": {
+   "title": [
+    "Sinister (film)",
+    "Tyler Bates"
+   ],
+   "sent_id": [
+    1,
+    1
+   ]
+  },
+  "context": {
+   "title": [
+    "Sinister (film)",
+    "Tyler Bates",
+    "Ed Wood"
+   ],
+   "sentences": [
+    [
+     "Sinister is a 2012 horror film.",
+     "Its music was composed by Christopher Young."
+    ],
+    [
+     "Tyler Bates is a composer.",
+     "He scored Doctor Strange."
+    ],
+    [
+     "Edward Davis Wood Jr. was an American filmmaker.",
+     "He directed Plan 9."
+    ]
+   ]
+  }
+ },
+ {
+  "id": "hp003",
+  "question": "Is Tyler Bates a composer?",
+  "answer": "yes",
+  "type": "comparison",
+  "level": "medium",
+  "supporting_facts": {
+   "title": [
+    "Tyler Bates"
+   ],
+   "sent_id": [
+    0
+   ]
+  },
+  "context": {
+   "title": [
+    "Tyler Bates",
+    "Ed Wood"
+   ],
+   "sentences": [
+    [
+     "Tyler Bates is a composer.",
+     "He scored Doctor Strange."
+    ],
+    [
+     "Edward Davis Wood Jr. was an American filmmaker.",
+     "He directed Plan 9."
+    ]
+   ]
+  }
+ }
+]

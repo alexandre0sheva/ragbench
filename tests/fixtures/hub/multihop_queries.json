@@ -1,0 +1,115 @@
+[
+ {
+  "query": "Which company, the subject of an antitrust probe, unveiled the Aurora chip?",
+  "answer": "Nova Systems",
+  "question_type": "inference_query",
+  "evidence_list": [
+   {
+    "title": "Tech giant unveils AI chip",
+    "author": null,
+    "url": "https://wired.example/ai-chip",
+    "source": "Wired Sample",
+    "category": "technology",
+    "published_at": "2023-10-02T08:00:00+00:00",
+    "fact": "Nova Systems unveiled the Aurora chip on Monday."
+   },
+   {
+    "title": "Nova Systems faces antitrust probe",
+    "author": "Lee Park",
+    "url": "https://ledger.example/nova-probe",
+    "source": "The Daily Ledger",
+    "category": "business",
+    "published_at": "2023-11-14T12:30:00+00:00",
+    "fact": "Regulators opened an antitrust probe into Nova Systems on Tuesday."
+   }
+  ]
+ },
+ {
+  "query": "Who is the chief executive of the bank that settled a class action for $40 million?",
+  "answer": "Maria Chen",
+  "question_type": "inference_query",
+  "evidence_list": [
+   {
+    "title": "Harbor Bank settles lawsuit",
+    "author": "Dana Reyes",
+    "url": "https://ledger.example/harbor-bank-settles",
+    "source": "The Daily Ledger",
+    "category": "business",
+    "published_at": "2023-09-26T19:11:30+00:00",
+    "fact": "Chief executive Maria Chen said the bank admitted no wrongdoing."
+   }
+  ]
+ },
+ {
+  "query": "Did The Daily Ledger report on Harbor Bank before it reported on the Nova Systems probe?",
+  "answer": "Yes",
+  "question_type": "temporal_query",
+  "evidence_list": [
+   {
+    "title": "Harbor Bank settles lawsuit",
+    "author": "Dana Reyes",
+    "url": "https://ledger.example/harbor-bank-settles",
+    "source": "The Daily Ledger",
+    "category": "business",
+    "published_at": "2023-09-26T19:11:30+00:00",
+    "fact": "Harbor Bank agreed to pay a settlement (paraphrase not in the article)"
+   },
+   {
+    "title": "Nova Systems faces antitrust probe",
+    "author": "Lee Park",
+    "url": "https://ledger.example/nova-probe?utm=rss",
+    "source": "The Daily Ledger",
+    "category": "business",
+    "published_at": "2023-11-14T12:30:00+00:00",
+    "fact": "Regulators opened an antitrust probe into Nova Systems on Tuesday."
+   }
+  ]
+ },
+ {
+  "query": "Do Wired Sample and Sport Sample both cover record-setting events?",
+  "answer": "No",
+  "question_type": "comparison_query",
+  "evidence_list": [
+   {
+    "title": "Tech giant unveils AI chip",
+    "author": null,
+    "url": "https://wired.example/ai-chip",
+    "source": "Wired Sample",
+    "category": "technology",
+    "published_at": "2023-10-02T08:00:00+00:00",
+    "fact": "Analysts said the Aurora chip doubles training speed."
+   },
+   {
+    "title": "Marathon record falls in Berlin",
+    "author": "Sam Ortiz",
+    "url": "https://sport.example/berlin-record",
+    "source": "Sport Sample",
+    "category": "sports",
+    "published_at": "2023-09-24T15:00:00+00:00",
+    "fact": "Kelvin Rono won the Berlin marathon in 2:01:09, a new world best."
+   }
+  ]
+ },
+ {
+  "query": "Does the article about the quiet week for markets name the central bank governor?",
+  "answer": "Insufficient information.",
+  "question_type": "null_query",
+  "evidence_list": []
+ },
+ {
+  "query": "Which article mentions a source that is missing from the corpus?",
+  "answer": "Unknown",
+  "question_type": "comparison_query",
+  "evidence_list": [
+   {
+    "title": "Not in the corpus",
+    "author": null,
+    "url": "https://nowhere.example/x",
+    "source": "Ghost",
+    "category": "business",
+    "published_at": "2023-01-01T00:00:00+00:00",
+    "fact": "Missing."
+   }
+  ]
+ }
+]

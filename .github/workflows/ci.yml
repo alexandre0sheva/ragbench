@@ -26,7 +26,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,anthropic,pdf,docx]"
+          python -m pip install -e ".[dev,anthropic,pdf,docx,hub]"
       - name: Ruff
         run: ruff check .
       - name: Mypy
@@ -69,7 +69,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           # The SDK and loader extras are installed so the real-SDK provider tests and the PDF / Word loader tests run instead of skipping.
-          python -m pip install -e ".[dev,anthropic,pdf,docx]"
+          python -m pip install -e ".[dev,anthropic,pdf,docx,hub]"
       - name: Fast tests (everything not marked `slow`, in parallel)
         if: matrix.python-version != '3.13'
         run: pytest -m "not slow" -n auto
@@ -96,7 +96,7 @@ jobs:
       - name: Install with the vector backends, loaders and the Anthropic SDK
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,anthropic,pdf,docx,chroma,faiss,qdrant]"
+          python -m pip install -e ".[dev,anthropic,pdf,docx,hub,chroma,faiss,qdrant]"
       - name: Full test suite (backend tests and the live path run against real Chroma / FAISS / Qdrant)
         run: pytest -n auto
 

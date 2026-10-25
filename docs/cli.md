@@ -42,6 +42,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `doctor`: Check Python, packages, optional extras,...
 * `runs`: List, inspect, remove and index the runs...
 * `models`: List the models RAGBench has prices for,...
+* `datasets`: Public benchmarks on demand: list them,...
 
 ## `ragbench run`
 
@@ -704,4 +705,61 @@ $ ragbench models sync [OPTIONS]
 
 * `--from-file <path>`: Read a saved `GET /api/v1/models` response instead of downloading it.
 * `-o, --output <path>`: Where to write the catalog. Default: $RAGBENCH_OPENROUTER_CATALOG, else ~/.cache/ragbench/.
+* `--help`: Show this message and exit.
+
+## `ragbench datasets`
+
+Public benchmarks on demand: list them, pull one (checksum-verified, converted, optionally a stratified subset).
+
+**Usage**:
+
+```console
+$ ragbench datasets [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `list`: The datasets `pull` can fetch, with...
+* `pull`: Download a public benchmark, verify its...
+
+### `ragbench datasets list`
+
+The datasets `pull` can fetch, with download size, license and kind of corpus.
+
+**Usage**:
+
+```console
+$ ragbench datasets list [OPTIONS]
+```
+
+**Options**:
+
+* `--json`: Print the datasets as JSON on stdout.
+* `--help`: Show this message and exit.
+
+### `ragbench datasets pull`
+
+Download a public benchmark, verify its checksum, convert it to RAGBench files and write `docs/`, `questions.jsonl`, `qrels.jsonl` and `SOURCE.md`.
+
+**Usage**:
+
+```console
+$ ragbench datasets pull [OPTIONS] {name}
+```
+
+**Arguments**:
+
+* `name`: A dataset from `ragbench datasets list`.  [required]
+
+**Options**:
+
+* `-o, --output <path>`: Where to write the dataset folder (default: data/NAME).
+* `--subset <int range>`: Keep a stratified sample of N questions: every category and the unanswerable share are kept.  [x>=1]
+* `--seed <int>`: Seed of the subset sample.  [default: 42]
+* `--force`: Replace an earlier pull in the output folder.
+* `-y, --yes`: Download without asking first.
 * `--help`: Show this message and exit.
