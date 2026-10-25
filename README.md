@@ -72,6 +72,8 @@ Ten of the 24 systems are shown; [the full example run](docs/example-run.md) has
 | `rerank` | Vector retrieval followed by a reranking pass | Higher precision context selection |
 | `sentence_window` | Search single sentences, then hand the generator each matched sentence with the sentences around it | Precise matching with enough surrounding text to answer from |
 | `vector` | Embedding search with cosine similarity over a pluggable vector backend (exact NumPy by default) | Semantic baseline |
+| `external_http` | Your own RAG service: each question is sent to an HTTP endpoint and the JSON reply (answer, passages, usage, cost) is mapped with JSONPath | Benchmarking a RAG you already run (any stack) against the built-in systems |
+| `python_callable` | Your own pipeline, called in-process: a function `(question, top_k)` returning a dict (answer, passages, usage, cost) or an `AnswerResult` | Benchmarking your own code or a framework pipeline against the built-in systems without deploying it |
 | `decompose` | The LLM splits a complex question into sub-questions; each is searched (optionally in sequence, feeding earlier answers forward), then one answer is synthesized from all the evidence | Multi-part, comparison and multi-hop questions |
 | `hyde` | Hypothetical Document Embeddings: the LLM writes a hypothetical answer used as the search probe | Short or vaguely-worded questions |
 | `rag_fusion` | The LLM writes alternative queries; each is searched (hybrid or vector) and the rankings are merged with Reciprocal Rank Fusion | Questions worded differently from the documents |
@@ -95,6 +97,7 @@ Every system implements the same interface and runs on any dataset. Options and 
 - [Configuration](docs/configuration.md): config sections, presets, sweeps, budgets, caching, concurrency, model providers
 - [Models and providers](docs/models.md): which generator, judge and embedding to use, prices, OpenRouter and open-weight models
 - [Dataset format](docs/dataset-format.md): documents, questions, qrels, importers, generating questions and labels
+- [Benchmarking external systems](docs/benchmarking-external-systems.md): your deployed RAG (any HTTP endpoint) or your own Python function next to the built-in systems, in 3 steps
 - [Methodology](docs/methodology.md): metrics, the judge, statistics, cost accounting, how to read the report, limitations
 - [System wiki](docs/system-wiki.md): how every system, chunker, reranker and agent works, with diagrams
 - [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*

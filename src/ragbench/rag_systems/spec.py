@@ -25,6 +25,8 @@ class SystemSpec:
     itself calls an LLM (beyond generating the answer); `agentic` means the system runs a multi-step loop.
     `retrieves` is False for systems that fetch nothing (the `no_retrieval` floor baseline): their retrieval metrics are
     reported as missing, never as 0. `supports_tools` systems accept a `tools:` list (see `docs/tools.md`). `chunker=None` means the system has no `chunker:` section.
+    `external` systems run outside RAGBench (an HTTP endpoint, a function of your own): RAGBench calls none of their models, and
+    their answer is one `external` step.
     """
 
     type: str
@@ -40,3 +42,4 @@ class SystemSpec:
     llm_features: SectionModel | None = None
     retrieves: bool = True
     supports_tools: bool = False  # the system takes a `tools:` list (agentic systems that call tools)
+    external: bool = False

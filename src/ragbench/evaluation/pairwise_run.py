@@ -112,7 +112,7 @@ def run_pairwise(
     systems: list[str],
     *,
     judges: dict[str, PairwiseJudge],
-    generators: dict[str, str],
+    generators: dict[str, str | None],
     settings: PairwiseConfig,
     independent: bool,
     baseline: str | None,

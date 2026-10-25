@@ -134,7 +134,7 @@ Arguments the model passes:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
-| `allow` | `list` | *required* | Tools with side effects (network, filesystem) that may be used; a tool with side effects that is not listed here is refused when the config loads. |
+| `allow` | `list` | empty | Tools with side effects (network, filesystem) that may be used; a tool with side effects that is not listed here is refused when the config loads. |
 | `allow_network` | `bool` | `false` | Permit tools that declare `side_effects: network` (they must also be listed in `allow`). No network tool is built in. |
 | `timeout_s` | `float` | `10.0` | A tool call that takes longer returns an error result instead of hanging the question. |
 | `max_output_chars` | `int` | `4000` | Tool output longer than this is cut and flagged `truncated`, so one call cannot flood the model's context. |

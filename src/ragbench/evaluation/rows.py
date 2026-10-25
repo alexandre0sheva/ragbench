@@ -186,6 +186,8 @@ def build_question_rows(
         claim_columns = {"claim_support_rate": claims.support_rate, "unsupported_claims": len(claims.unsupported)}
     if refusal is not None and refusal.source == "model":
         per_question["refusal"] = {"source": refusal.source, "probability": refusal.probability}
+    if answer.metadata.get("external") is not None:  # an external system: passage ids it could not map, whether its cost is known
+        per_question["external"] = answer.metadata["external"]
     return {
         "per_question": per_question,
         "retrieval_row": {
@@ -221,3 +223,4 @@ def build_question_rows(
             **{f"stage_{key}_cost": value for key, value in stage_costs(answer.steps).items()},
         },
     }
+

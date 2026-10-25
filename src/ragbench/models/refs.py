@@ -97,13 +97,33 @@ def _uses_embeddings(system_type: str, chunker: dict[str, Any] | None = None) ->
     return chunker_name in CHUNKERS and bool(getattr(CHUNKERS.get(chunker_name), "needs_embedder", False))
 
 
+def is_external(system_type: str) -> bool:
+    """Whether systems of this type run outside RAGBench (`SystemSpec.external`)."""
+    import ragbench.rag_systems  # noqa: F401
+    from ragbench.registry import SYSTEMS
+
+    return bool(getattr(getattr(SYSTEMS.mapping.get(system_type), "spec", None), "external", False))
+
+
 def system_model_refs(system: SystemConfig) -> ModelRefs:
-    """The models one system calls: its generator, and its embedder when it embeds. (A route of an `adaptive` system is a system of its own.)"""
+    """The models one system calls: its generator, and its embedder when it embeds. (A route of an `adaptive` system is a system of its own.)
+    An external system calls none through RAGBench."""
     refs = ModelRefs()
+    if is_external(system.type):
+        return refs
     _add(refs.llm, str(system.models.get("generator", DEFAULT_GENERATOR_MODEL)))
     if "embedding" in system.models or _uses_embeddings(system.type, system.chunker):
         _add(refs.embedding, str(system.models.get("embedding", DEFAULT_EMBEDDING_MODEL)))
     return refs
+
+
+def answering_model(system: SystemConfig) -> str | None:
+    """The model that writes the system's answers, for judge independence and pricing: its generator, or for an external system the
+    model it declares (`retrieval.model`), None when it declares none."""
+    if is_external(system.type):
+        declared = system.retrieval.get("model")
+        return str(declared) if declared else None
+    return system_model_refs(system).llm[0]
 
 
 def collect_model_refs(config: ExperimentConfig) -> ModelRefs:

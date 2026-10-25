@@ -110,7 +110,7 @@ def judge_fallback_rate(judge: JudgePanel | None, rows: list[dict[str, Any]]) ->
     return sum(1 for row in rows if row["answer_judge"]["metadata"].get("fallback")) / len(rows)
 
 
-def judge_notices(judge: JudgePanel | None, generators: dict[str, str], summary_rows: list[dict[str, Any]], agreement: dict[str, float | None]) -> dict[str, Any]:
+def judge_notices(judge: JudgePanel | None, generators: dict[str, str | None], summary_rows: list[dict[str, Any]], agreement: dict[str, float | None]) -> dict[str, Any]:
     """Facts about the judges that `build_notices` turns into report warnings: self-preference, heuristic fallbacks, a panel that disagrees.
 
     `generators` maps each system to its generator's model ref. A system is at risk of self-preference when, with `independent`, every
@@ -238,3 +238,32 @@ def build_summary(
             row["system_wall_time_ms"] = float(runtime["system_wall_time_ms"].iloc[0]) if not runtime.empty else 0.0
         rows.append(row)
     return rows
+
+
+def external_facts(per_question_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """What the report must say about external systems: whose passages named no corpus document (with examples), whose passages it did not
+    show at all, and whose cost is unknown. Empty when every external system mapped and priced everything (or there is none)."""
+    unmapped: dict[str, dict[str, Any]] = {}
+    hidden: list[str] = []
+    unknown_cost: list[str] = []
+    for row in per_question_rows:
+        external = row.get("external")
+        if not external:
+            continue
+        name = row["system"]
+        if external.get("unmapped_doc_ids"):
+            entry = unmapped.setdefault(name, {"questions": 0, "examples": []})
+            entry["questions"] += 1
+            entry["examples"] = list(dict.fromkeys([*entry["examples"], *external["unmapped_doc_ids"]]))[:5]
+        if external.get("no_contexts") and name not in hidden:
+            hidden.append(name)
+        if not external.get("cost_known", True) and name not in unknown_cost:
+            unknown_cost.append(name)
+    facts: dict[str, Any] = {}
+    if unmapped:
+        facts["unmapped_doc_ids"] = unmapped
+    if hidden:
+        facts["no_contexts"] = hidden
+    if unknown_cost:
+        facts["unknown_cost"] = unknown_cost
+    return facts

@@ -1,0 +1,58 @@
+# Benchmark a RAG you already run next to a built-in baseline (docs/benchmarking-external-systems.md).
+#   1. In another terminal, start the stand-in for "your deployed RAG":  python examples/fake_rag_server.py --docs data/demo/docs
+#   2. ragbench run --config configs/external_example.yaml --mock
+# `--mock` only replaces RAGBench's own models (the baseline's generator and the judge); the external systems are always called.
+run:
+  name: external_example
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: bm25
+    name: bm25_default
+    chunker:
+      type: word
+      chunk_size: 450
+      chunk_overlap: 70
+    retrieval:
+      top_k: 5
+    models:
+      generator: gpt-6-luna
+
+  # A service behind HTTP. The mapping below is the default, written out to show where each part of the reply is read from.
+  - type: external_http
+    name: my_deployed_rag
+    retrieval:
+      url: http://127.0.0.1:8765/ask
+      method: POST
+      # headers: {Authorization: "Bearer ${MY_RAG_TOKEN}"}   # filled in from the environment per request, never logged
+      request: '{"question": {{ question | tojson }}, "top_k": {{ top_k }}}'
+      response:
+        answer: $.answer
+        contexts: $.contexts[*]
+        text: $.text
+        doc_id: $.doc_id
+        prompt_tokens: $.usage.prompt_tokens
+        completion_tokens: $.usage.completion_tokens
+        cost_usd: $.cost_usd
+      timeout_s: 30
+      retries: 2
+
+  # A function of your own, called in-process; it reports token usage, priced at the model it says it uses.
+  - type: python_callable
+    name: my_inprocess_rag
+    retrieval:
+      target: examples/simple_rag.py:answer
+      ingest_target: examples/simple_rag.py:ingest
+      model: gpt-6-luna
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: anthropic:claude-haiku-5-5   # another model family than the generators (self-preference); live: ANTHROPIC_API_KEY + ragbench[anthropic]
+  max_questions: null
+  max_workers: 4

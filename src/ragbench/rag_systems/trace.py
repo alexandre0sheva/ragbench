@@ -20,10 +20,11 @@ from ragbench.models.cost import CostBreakdown
 from ragbench.models.llms import LLMResult
 from ragbench.utils.text import truncate, unique_preserve_order
 
-StepKind = Literal["retrieve", "rerank", "llm", "tool", "embed", "route", "grade", "generate"]
+# `external`: the whole answer of a system that runs outside RAGBench (`external_http`, `python_callable`), which RAGBench cannot see inside.
+StepKind = Literal["retrieve", "rerank", "llm", "tool", "embed", "route", "grade", "generate", "external"]
 UNTRACKED = "untracked"
 # Columns of the per-stage rollups: every step kind, plus the residual bucket for cost no step accounts for.
-STAGE_KEYS: tuple[str, ...] = ("retrieve", "rerank", "llm", "tool", "embed", "route", "grade", "generate", UNTRACKED)
+STAGE_KEYS: tuple[str, ...] = ("retrieve", "rerank", "llm", "tool", "embed", "route", "grade", "generate", "external", UNTRACKED)
 PREVIEW_CHARS = 300
 _EPSILON = 1e-12
 

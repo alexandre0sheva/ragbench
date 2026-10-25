@@ -49,3 +49,14 @@ def scripted_llm():
     from scripted_llm import ScriptedLLM
 
     return ScriptedLLM
+
+
+@pytest.fixture(scope="session")
+def rag_server():
+    """examples/fake_rag_server.py serving in a thread: `(base_url, state)`; `state.requests` records what it was sent. Load a corpus
+    with `state.load({...})` or through `POST /documents`."""
+    from external_support import start_fake_rag
+
+    server, rag = start_fake_rag()
+    yield f"http://127.0.0.1:{server.server_address[1]}", rag
+    server.shutdown()

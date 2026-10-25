@@ -287,7 +287,7 @@ evaluation:
 
 ## System options
 
-Each system's `retrieval:`, `chunker:` and (for `llm_heavy`) `llm_features:` options, with types, defaults and descriptions, are listed in [systems.md](systems.md). Unknown options, unknown system types, unknown chunker or reranker names, and duplicate system names are rejected when the config is loaded, with a suggestion when a name is close to a valid one.
+Each system's `retrieval:`, `chunker:` and (for `llm_heavy`) `llm_features:` options, with types, defaults and descriptions, are listed in [systems.md](systems.md). A RAG that runs outside RAGBench (an HTTP endpoint or a Python function) is configured the same way, as an `external_http` or `python_callable` system: see [benchmarking external systems](benchmarking-external-systems.md). Unknown options, unknown system types, unknown chunker or reranker names, and duplicate system names are rejected when the config is loaded, with a suggestion when a name is close to a valid one.
 
 ## Caching
 
@@ -324,7 +324,7 @@ A cache file that is corrupted or cannot be opened is ignored with a warning rat
 
 ## Mock Mode
 
-RAGBench runs in mock mode (deterministic hashing embeddings, mock LLM, heuristic judge) when none of the models a config uses can be reached: no `OPENAI_API_KEY` for OpenAI refs, no `ANTHROPIC_API_KEY` for Claude refs, and no `providers:` endpoint or `local:` model in the config. You can force mock mode even when keys are set:
+RAGBench runs in mock mode (deterministic hashing embeddings, mock LLM, heuristic judge) when none of the models a config uses can be reached: no `OPENAI_API_KEY` for OpenAI refs, no `ANTHROPIC_API_KEY` for Claude refs, and no `providers:` endpoint or `local:` model in the config. External systems are not mocked: `--mock` replaces RAGBench's own models, and an `external_http` or `python_callable` system is still called ([why](benchmarking-external-systems.md#mock-runs-estimates-and-caching)). You can force mock mode even when keys are set:
 
 ```bash
 ragbench compare --config configs/all.yaml --mock

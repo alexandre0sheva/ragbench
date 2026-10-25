@@ -48,12 +48,16 @@ def _type_label(annotation: Any) -> str:
 def _default_label(field: Any) -> str:
     default = field.default
     if default is PydanticUndefined:
-        return "*required*"
+        if field.default_factory is None:
+            return "*required*"
+        default = field.default_factory()
+        if not default:
+            return "empty"
     if default is None:
         return "unset"
     if isinstance(default, bool):
         return f"`{str(default).lower()}`"
-    return f"`{default}`"
+    return "`" + str(default).replace("|", "\\|") + "`"  # a bare pipe would end the table cell
 
 
 def _option_rows(model: type[BaseModel], prefix: str = "") -> list[str]:

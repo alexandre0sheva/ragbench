@@ -227,7 +227,8 @@ def _system(system_type: str):
 
 
 def test_every_builtin_system_is_covered_by_the_trace_tests():
-    assert set(SYSTEM_CONFIGS) == set(SYSTEMS.names())
+    # An external system's answer is one `external` step by design (tests/test_external_systems.py pins it), so the shapes below do not apply.
+    assert set(SYSTEM_CONFIGS) == {name for name in SYSTEMS.names() if not SYSTEMS.get(name).spec.external}
 
 
 @pytest.mark.parametrize("system_type", sorted(SYSTEM_CONFIGS))

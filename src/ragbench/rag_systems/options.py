@@ -481,3 +481,128 @@ class AdaptiveOptions(BaseOptions):
         if stray:
             raise ValueError(f"route_descriptions names routes that do not exist: {', '.join(stray)}")
         return self
+
+
+def _check_jsonpath(path: str | None) -> str | None:
+    from ragbench.utils.jsonpath import parse
+
+    if path is not None:
+        parse(path)  # raises JsonPathError (a ValueError) naming the path
+    return path
+
+
+JsonPath = Annotated[str, AfterValidator(_check_jsonpath)]
+OptionalJsonPath = Annotated[str | None, AfterValidator(_check_jsonpath)]
+
+
+class ResponseMapping(BaseModel):
+    """`retrieval.response:` of `external_http`: where each part of the answer is in the endpoint's JSON reply (JSONPath: `$.a.b`, `$.a[0]`, `$.a[*]`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answer: JsonPath = Field(default="$.answer", description="The answer text. A reply without it fails the question.")
+    contexts: OptionalJsonPath = Field(
+        default="$.contexts[*]",
+        description="The passages the answer was written from, one value per passage. Unset when the endpoint returns none: its retrieval metrics are then blank.",
+    )
+    text: JsonPath = Field(default="$.text", description="A passage's text, read from one passage (`$` when the passages are plain strings).")
+    doc_id: OptionalJsonPath = Field(
+        default="$.doc_id",
+        description=(
+            "A passage's document id, read from one passage. It must name a corpus document (its id, path, file name or file stem); a question whose "
+            "passages do not all map gets blank retrieval metrics, never zeros."
+        ),
+    )
+    score: OptionalJsonPath = Field(default="$.score", description="A passage's retrieval score, read from one passage (optional).")
+    prompt_tokens: OptionalJsonPath = Field(default="$.usage.prompt_tokens", description="Prompt tokens the endpoint's model used (optional).")
+    completion_tokens: OptionalJsonPath = Field(default="$.usage.completion_tokens", description="Completion tokens the endpoint's model used (optional).")
+    cost_usd: OptionalJsonPath = Field(
+        default="$.cost_usd", description="What the request cost in USD (optional). Without it, cost is priced from the tokens at `model`'s rate, else reported as unknown."
+    )
+
+
+class ExternalOptions(BaseOptions):
+    """What `external_http` and `python_callable` share. They take no `top_k`: the request asks for the run's retrieval depth, and the
+    system itself decides how many passages its generator reads."""
+
+    default_top_k: ClassVar[int] = 10
+
+    def resolve_top_k(self, override: int | None) -> int:
+        """The retrieval depth the evaluator passes, else 10."""
+        return override or self.default_top_k
+
+    model: str | None = Field(
+        default=None,
+        description=(
+            "The model your system generates with (a model ref, e.g. `gpt-6-luna`). RAGBench never calls it: it prices reported token usage and keeps "
+            "the judge independent of it. Unset: a judge of any family scores the answers."
+        ),
+    )
+
+
+class EndpointLimits(BaseModel):
+    """`retrieval.limits:` of `external_http`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_concurrent_requests: int | None = Field(default=None, ge=1, description="Requests in flight at once, across all questions.")
+    requests_per_minute: int | None = Field(default=None, ge=1, description="Requests started per rolling minute.")
+
+    @property
+    def is_set(self) -> bool:
+        return self.max_concurrent_requests is not None or self.requests_per_minute is not None
+
+
+DEFAULT_REQUEST = '{"question": {{ question | tojson }}, "top_k": {{ top_k }}}'
+
+
+class ExternalHttpOptions(ExternalOptions):
+    url: str = Field(description="The endpoint that answers one question. `${VAR}` is replaced by the environment variable when the request is sent.")
+    method: Literal["POST", "GET"] = Field(default="POST", description="`POST` sends the rendered request as a JSON body, `GET` as query parameters.")
+    headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="HTTP headers. Put secrets in environment variables (`Authorization: Bearer ${MY_RAG_TOKEN}`): they are filled in per request and never logged or saved.",
+    )
+    request: str = Field(
+        default=DEFAULT_REQUEST,
+        description="Jinja template of the request, rendering a JSON object; it sees `question` and `top_k` (the retrieval depth). Use `| tojson` for strings.",
+    )
+    response: ResponseMapping = Field(default_factory=ResponseMapping, description="Where the answer, passages, usage and cost are in the reply; see its fields.")
+    timeout_s: float = Field(default=60.0, gt=0, description="Seconds to wait for one reply.")
+    retries: int = Field(default=2, ge=0, description="Extra attempts after a timeout, a connection error, HTTP 429 or a 5xx reply, with exponential backoff.")
+    limits: EndpointLimits = Field(default_factory=EndpointLimits, description="Throttles for this endpoint; see its fields.")
+    post_documents_to: str | None = Field(
+        default=None,
+        description="Unset: the endpoint already has the documents. Set to a URL to POST them there once before the questions (`{\"documents\": [{doc_id, path, title, text}]}`, 100 per request).",
+    )
+
+    @field_validator("request")
+    @classmethod
+    def _template_compiles(cls, template: str) -> str:
+        from jinja2 import TemplateSyntaxError
+        from jinja2.sandbox import SandboxedEnvironment
+
+        try:
+            SandboxedEnvironment().from_string(template)
+        except TemplateSyntaxError as exc:
+            raise ValueError(f"request template does not compile: {exc}") from None
+        return template
+
+
+class PythonCallableOptions(ExternalOptions):
+    target: str = Field(
+        description=(
+            "The function that answers one question, as `package.module:function` or `path/to/file.py:function` (relative to the working directory). "
+            "It is called as `function(question, top_k)` and returns a dict (`answer`, and optionally `contexts`, `usage`, `cost_usd`) or an `AnswerResult`."
+        )
+    )
+    ingest_target: str | None = Field(default=None, description="A function called once with the list of documents before the questions (same notation).")
+
+    @field_validator("target", "ingest_target")
+    @classmethod
+    def _looks_like_a_target(cls, value: str | None) -> str | None:
+        if value is not None:
+            where, _, name = value.rpartition(":")
+            if not where or not name.isidentifier():
+                raise ValueError(f"{value!r} must look like module:function or path/to/file.py:function")
+        return value

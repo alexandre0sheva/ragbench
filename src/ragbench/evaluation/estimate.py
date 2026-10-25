@@ -69,6 +69,7 @@ class SystemEstimate:
     trials: int = 1  # `evaluation.trials`: every question is answered and judged this many times
     probe_calls: int = 0  # latency-probe answers a live run adds (`evaluation.latency_probe_questions`; `auto` counts its cap)
     answer_tokens: float = 0.0  # mean length of the sampled answers, for pricing pairwise verdicts
+    external: bool = False  # runs outside RAGBench: never called by the estimate, so its numbers are zero (its own cost is what it reports at run time)
 
     @property
     def query_usd(self) -> float:
@@ -164,6 +165,9 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
     agentic = bool(spec is not None and spec.agentic)
     empty = SystemEstimate(name, system_config.type, agentic, 0.0, 0.0, 0.0, 0.0, 0.0, n_questions, trials=config.evaluation.trials)
     evaluation = config.evaluation
+    if spec is not None and spec.external:
+        empty.external = True
+        return empty
     try:
         refs = system_model_refs(system_config)
         generator = refs.llm[0]
@@ -317,6 +321,12 @@ def _warnings(systems: list[SystemEstimate], unpriced: list[str], today: date) -
         warnings.append(
             f"The agentic systems ({', '.join(agents)}) loop until they have an answer. The estimate uses the steps a scripted model takes, so real runs usually cost more; "
             "their `max_cost_usd`, `max_steps` and `evaluation.max_cost_usd` cap the real spend."
+        )
+    external = [s.system for s in systems if s.external]
+    if external:
+        warnings.append(
+            f"{', '.join(external)} {'runs' if len(external) == 1 else 'run'} outside RAGBench and {'is' if len(external) == 1 else 'are'} not called by the estimate: "
+            "their own cost and the judge's cost on their answers are not included."
         )
     for system in systems:
         if system.error is not None:

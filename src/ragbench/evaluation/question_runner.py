@@ -16,8 +16,9 @@ from ragbench.evaluation.failure_analysis import classify_failure
 from ragbench.evaluation.judge_panel import JudgePanel
 from ragbench.evaluation.retrieval_metrics import compute_retrieval_metrics
 from ragbench.evaluation.rows import build_question_rows, error_result
-from ragbench.models.refs import system_model_refs
+from ragbench.models.refs import answering_model
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
+from ragbench.rag_systems.external_rag import unscored_retrieval
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +65,9 @@ def _score_question(
     ranked = result.retrieval_result.chunks
     in_context = {chunk.chunk_id for chunk in ranked} if context_ids is None else set(context_ids)
     spec = system.spec
-    # A system that retrieves nothing has no retrieval metrics (an empty dict); its rows get blanks, never zeros.
-    retrieves = spec is None or spec.retrieves
+    # A system that retrieves nothing has no retrieval metrics (an empty dict); its rows get blanks, never zeros. So does an external system's answer
+    # whose passages it did not show, or whose passages name no corpus document.
+    retrieves = (spec is None or spec.retrieves) and not unscored_retrieval(result.metadata)
     # ... and so does a question that has an answer but no labels to score the ranking against (label-free mode); an unanswerable one still scores 0.
     scorable = retrieves and (has_relevance_labels(question, qrels) or not question.is_answerable)
     retrieval_metrics = compute_retrieval_metrics(ranked, question.relevant_doc_ids, qrels=qrels, k_values=evaluation.k_values, evidence=question.evidence) if scorable else {}
@@ -76,7 +78,7 @@ def _score_question(
         "context_recall": context_recall_doc(context_chunks, relevant) if retrieves else None,
         "context_precision": context_precision(context_chunks, relevant) if retrieves else None,
     }
-    judge_result = judge.judge(question, result.answer, context_chunks, generator=system_model_refs(system_config).llm[0])
+    judge_result = judge.judge(question, result.answer, context_chunks, generator=answering_model(system_config))
     refusal = checks.refusal.detect(question.question, result.answer)
     claims = checks.claims.check(question.question, result.answer, context_chunks) if checks.claims is not None else None
     failure_type = classify_failure(

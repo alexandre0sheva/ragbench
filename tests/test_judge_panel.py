@@ -279,11 +279,11 @@ def test_a_run_with_one_judge_has_no_panel_block(tmp_path):
 @pytest.mark.parametrize("path", sorted((ROOT / "configs").glob("*.yaml")), ids=lambda p: p.name)
 def test_shipped_configs_judge_every_system_with_another_model_family(path):
     from ragbench.models.family import model_family
-    from ragbench.models.refs import system_model_refs
+    from ragbench.models.refs import answering_model
 
     config = load_config(path)
     for system in config.systems:
-        generator = system_model_refs(system).llm[0]
+        generator = answering_model(system)
         judges = scoring_judges(config.evaluation.judge_models, generator, independent=config.evaluation.judge.independent)
         assert all(model_family(judge) != model_family(generator) for judge in judges), f"{system.resolved_name}: {generator} judged by {judges}"
 

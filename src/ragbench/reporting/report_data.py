@@ -27,8 +27,8 @@ SCHEMA_VERSION = 1
 REPO_TEXT = "github.com/alexandre0sheva/ragbench"  # shown as text: the report makes no outgoing links and loads nothing from the network
 
 # Fixed color slots (not rank-based): a stage or failure type keeps its color in every run. Segments are drawn in slot order, the order the palette was validated in.
-STAGE_SLOTS = {"retrieve": "s1", "rerank": "s2", "llm": "s3", "tool": "s4", "embed": "s5", "route": "s6", "grade": "s7", "generate": "s8", UNTRACKED: "sgray"}
-STAGE_NAMES = {"retrieve": "Retrieve", "rerank": "Rerank", "llm": "LLM calls", "tool": "Tools", "embed": "Embed", "route": "Route", "grade": "Grade", "generate": "Generate", UNTRACKED: "Untracked"}
+STAGE_SLOTS = {"retrieve": "s1", "rerank": "s2", "llm": "s3", "tool": "s4", "embed": "s5", "route": "s6", "grade": "s7", "generate": "s8", "external": "s9", UNTRACKED: "sgray"}
+STAGE_NAMES = {"retrieve": "Retrieve", "rerank": "Rerank", "llm": "LLM calls", "tool": "Tools", "embed": "Embed", "route": "Route", "grade": "Grade", "generate": "Generate", "external": "External system", UNTRACKED: "Untracked"}
 FAILURE_SLOTS = {
     "retrieval_miss": "s1",
     "bad_reranking": "s2",

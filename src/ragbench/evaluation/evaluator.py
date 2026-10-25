@@ -40,7 +40,7 @@ from ragbench.evaluation.warm_up import modules_to_warm_up
 from ragbench.models import cost as pricing
 from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.errors import ModelInitError
-from ragbench.models.refs import missing_credentials, resolve_run_mode, system_model_refs
+from ragbench.models.refs import answering_model, missing_credentials, resolve_run_mode
 from ragbench.rag_systems import create_rag_system
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
 from ragbench.runtime import (
@@ -280,7 +280,7 @@ class BenchmarkEvaluator:
             questions,
             names,
             judges={ref: PairwiseJudge.from_answer_judge(judge) for ref, judge in self.judge.judges.items()},
-            generators={cfg.resolved_name: system_model_refs(cfg).llm[0] for cfg in systems},
+            generators={cfg.resolved_name: answering_model(cfg) for cfg in systems},
             settings=evaluation.pairwise,
             independent=evaluation.judge.independent,
             baseline=evaluation.stats.baseline or cheapest_system(priced),  # the same default baseline as `significance.csv`
@@ -418,6 +418,8 @@ class BenchmarkEvaluator:
 
 
 def _model_names(system: BaseRAGSystem) -> set[str]:
+    if system.spec is not None and system.spec.external:
+        return set()  # RAGBench called none of its models
     names = {system.llm.model_name}
     embedding_model = getattr(system, "embedding_model", None)
     if embedding_model is not None:

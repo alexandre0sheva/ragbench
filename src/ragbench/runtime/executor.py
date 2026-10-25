@@ -18,6 +18,7 @@ from ragbench.cache import activate_cache
 from ragbench.config.schema import SystemConfig
 from ragbench.evaluation.plan import EvaluationPlan
 from ragbench.evaluation.stats import QUANTILE_MIN_N, quantile_ci
+from ragbench.evaluation.unscored import blank_unscorable_retrieval
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
 from ragbench.runtime.parallel import evenly_sample, ordered_parallel_map
 from ragbench.runtime.progress import ProgressListener
@@ -179,6 +180,7 @@ class SystemRunner:
                 on_done=lambda done, count: self.progress.question_finished(system.name, done, count),
                 thread_name_prefix=f"ragbench-{system.name}",
             )
+            results = blank_unscorable_retrieval(results)
         question_wall_time_ms = (perf_counter() - question_start) * 1000
         system_wall_time_ms = (perf_counter() - system_start) * 1000
         self.progress.system_finished(system.name, system_wall_time_ms)

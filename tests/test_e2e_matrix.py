@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 import yaml
 from dataset_support import DOCUMENTS
+from external_support import SIMPLE_RAG
 from paid_fakes import EMBEDDING, GENERATOR, JUDGE, PRICING
 from paid_fakes import install as install_paid_fakes
 
@@ -46,8 +47,12 @@ SPECS = {spec.type: spec for spec in all_specs()}
 ALWAYS_PRESENT = ("system", "system_type", "n_ok", "n_error", "answer_score", "faithfulness", "avg_cost_per_question", "avg_latency_ms")
 
 
-def system_block(kind: str) -> dict[str, Any]:
-    """A minimal valid config block for any registered system type."""
+def system_block(kind: str, rag_url: str = "") -> dict[str, Any]:
+    """A minimal valid config block for any registered system type (`rag_url`: the fake RAG service the external ones call)."""
+    if kind == "external_http":
+        return {"type": kind, "name": kind, "retrieval": {"url": f"{rag_url}/ask", "post_documents_to": f"{rag_url}/documents"}}
+    if kind == "python_callable":  # the example reports token usage only, priced at the declared model
+        return {"type": kind, "name": kind, "retrieval": {"target": f"{SIMPLE_RAG}:answer", "ingest_target": f"{SIMPLE_RAG}:ingest", "model": GENERATOR}}
     block: dict[str, Any] = {"type": kind, "name": kind, "models": dict(MODELS)}
     spec = SPECS.get(kind)
     if spec is not None and spec.chunker is not None and kind != "parent_doc":
@@ -84,10 +89,10 @@ def _is_missing(value: Any) -> bool:
 
 
 @pytest.mark.parametrize("kind", sorted(SYSTEMS.names()))
-def test_every_registered_system_runs_end_to_end_and_is_reproducible(kind, tmp_path, tiny_dataset, monkeypatch):
+def test_every_registered_system_runs_end_to_end_and_is_reproducible(kind, tmp_path, tiny_dataset, monkeypatch, rag_server):
     install_paid_fakes(monkeypatch)
-    first = run_once(tmp_path, [system_block(kind)], tiny_dataset, "a")
-    second = run_once(tmp_path, [system_block(kind)], tiny_dataset, "b")
+    first = run_once(tmp_path, [system_block(kind, rag_server[0])], tiny_dataset, "a")
+    second = run_once(tmp_path, [system_block(kind, rag_server[0])], tiny_dataset, "b")
 
     for name in OUTPUTS:
         assert (first / name).exists(), f"{kind}: {name} was not written"

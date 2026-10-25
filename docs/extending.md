@@ -1,6 +1,6 @@
 # Extending RAGBench
 
-Systems are discovered through a registry and describe themselves, so adding one is: write the class, declare its options, register it, and regenerate the docs.
+Systems are discovered through a registry and describe themselves, so adding one is: write the class, declare its options, register it, and regenerate the docs. To benchmark a pipeline you already have (a service, or a function written with any framework) without making it a RAGBench system, use `external_http` or `python_callable` instead: see [benchmarking external systems](benchmarking-external-systems.md).
 
 ## 1. Declare the options
 

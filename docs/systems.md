@@ -18,6 +18,8 @@ Profiles are relative: **cost** `low` = one generation call plus embeddings, `me
 | [`rerank`](#rerank) | Vector + rerank | low | fast | no | no | Higher precision context selection |
 | [`sentence_window`](#sentence_window) | Sentence window | low | fast | no | no | Precise matching with enough surrounding text to answer from |
 | [`vector`](#vector) | Vector | low | fast | no | no | Semantic baseline |
+| [`external_http`](#external_http) | External HTTP endpoint | low | medium | no | no | Benchmarking a RAG you already run (any stack) against the built-in systems |
+| [`python_callable`](#python_callable) | Python callable | low | medium | no | no | Benchmarking your own code or a framework pipeline against the built-in systems without deploying it |
 | [`decompose`](#decompose) | Question decomposition | medium | medium | yes | no | Multi-part, comparison and multi-hop questions |
 | [`hyde`](#hyde) | HyDE | medium | medium | yes | no | Short or vaguely-worded questions |
 | [`rag_fusion`](#rag_fusion) | RAG-Fusion | medium | medium | yes | no | Questions worded differently from the documents |
@@ -34,7 +36,7 @@ Profiles are relative: **cost** `low` = one generation call plus embeddings, `me
 
 ## Chunker options
 
-All systems except `no_retrieval`, `parent_doc`, `sentence_window`, `adaptive`, `full_context`, `grep_agent` use this `chunker:` section:
+All systems except `no_retrieval`, `parent_doc`, `sentence_window`, `external_http`, `python_callable`, `adaptive`, `full_context`, `grep_agent` use this `chunker:` section:
 
 | Option | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -202,6 +204,55 @@ Best for: Semantic baseline. Cost: low; latency: fast.
 | `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
 | `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
 
+## `external_http`
+
+**External HTTP endpoint.** Your own RAG service: each question is sent to an HTTP endpoint and the JSON reply (answer, passages, usage, cost) is mapped with JSONPath.
+
+Best for: Benchmarking a RAG you already run (any stack) against the built-in systems. Cost: low; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `model` | `str` | unset | The model your system generates with (a model ref, e.g. `gpt-6-luna`). RAGBench never calls it: it prices reported token usage and keeps the judge independent of it. Unset: a judge of any family scores the answers. |
+| `url` | `str` | *required* | The endpoint that answers one question. `${VAR}` is replaced by the environment variable when the request is sent. |
+| `method` | `POST` \| `GET` | `POST` | `POST` sends the rendered request as a JSON body, `GET` as query parameters. |
+| `headers` | `dict` | empty | HTTP headers. Put secrets in environment variables (`Authorization: Bearer ${MY_RAG_TOKEN}`): they are filled in per request and never logged or saved. |
+| `request` | `str` | `{"question": {{ question \| tojson }}, "top_k": {{ top_k }}}` | Jinja template of the request, rendering a JSON object; it sees `question` and `top_k` (the retrieval depth). Use `\| tojson` for strings. |
+| `response` | block | its fields below | Where the answer, passages, usage and cost are in the reply; see its fields. |
+| `response.answer` | `str` | `$.answer` | The answer text. A reply without it fails the question. |
+| `response.contexts` | `str` | `$.contexts[*]` | The passages the answer was written from, one value per passage. Unset when the endpoint returns none: its retrieval metrics are then blank. |
+| `response.text` | `str` | `$.text` | A passage's text, read from one passage (`$` when the passages are plain strings). |
+| `response.doc_id` | `str` | `$.doc_id` | A passage's document id, read from one passage. It must name a corpus document (its id, path, file name or file stem); a question whose passages do not all map gets blank retrieval metrics, never zeros. |
+| `response.score` | `str` | `$.score` | A passage's retrieval score, read from one passage (optional). |
+| `response.prompt_tokens` | `str` | `$.usage.prompt_tokens` | Prompt tokens the endpoint's model used (optional). |
+| `response.completion_tokens` | `str` | `$.usage.completion_tokens` | Completion tokens the endpoint's model used (optional). |
+| `response.cost_usd` | `str` | `$.cost_usd` | What the request cost in USD (optional). Without it, cost is priced from the tokens at `model`'s rate, else reported as unknown. |
+| `timeout_s` | `float` | `60.0` | Seconds to wait for one reply. |
+| `retries` | `int` | `2` | Extra attempts after a timeout, a connection error, HTTP 429 or a 5xx reply, with exponential backoff. |
+| `limits` | block | its fields below | Throttles for this endpoint; see its fields. |
+| `limits.max_concurrent_requests` | `int` | unset | Requests in flight at once, across all questions. |
+| `limits.requests_per_minute` | `int` | unset | Requests started per rolling minute. |
+| `post_documents_to` | `str` | unset | Unset: the endpoint already has the documents. Set to a URL to POST them there once before the questions (`{"documents": [{doc_id, path, title, text}]}`, 100 per request). |
+
+This system takes no `chunker:` section.
+
+## `python_callable`
+
+**Python callable.** Your own pipeline, called in-process: a function `(question, top_k)` returning a dict (answer, passages, usage, cost) or an `AnswerResult`.
+
+Best for: Benchmarking your own code or a framework pipeline against the built-in systems without deploying it. Cost: low; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `model` | `str` | unset | The model your system generates with (a model ref, e.g. `gpt-6-luna`). RAGBench never calls it: it prices reported token usage and keeps the judge independent of it. Unset: a judge of any family scores the answers. |
+| `target` | `str` | *required* | The function that answers one question, as `package.module:function` or `path/to/file.py:function` (relative to the working directory). It is called as `function(question, top_k)` and returns a dict (`answer`, and optionally `contexts`, `usage`, `cost_usd`) or an `AnswerResult`. |
+| `ingest_target` | `str` | unset | A function called once with the list of documents before the questions (same notation). |
+
+This system takes no `chunker:` section.
+
 ## `decompose`
 
 **Question decomposition.** The LLM splits a complex question into sub-questions; each is searched (optionally in sequence, feeding earlier answers forward), then one answer is synthesized from all the evidence.
@@ -315,7 +366,7 @@ Best for: Mixed workloads where no single architecture is best for every questio
 | --- | --- | --- | --- |
 | `router` | `heuristic` \| `llm` | `heuristic` | `heuristic` routes with fixed rules and costs nothing: exact identifiers go to `lexical`, arithmetic, percentages and date calculations to `computation`, comparisons and questions with several linked parts to `multi_hop`, everything else to `default`. `llm` asks the system's generator model to choose among the routes (one short call per question), which also allows route names of your own. |
 | `routes` | `dict` | *required* | The pipelines a question can be sent to, by route name; each is a full system config (`type`, `chunker`, `retrieval`, `tools`, ...). `default` is required. With `router: heuristic` the other names must be `lexical`, `computation` or `multi_hop`; a role you leave out falls back to `default`. Routes inherit the adaptive system's `models` unless they set their own. |
-| `route_descriptions` | `dict` | *required* | `router: llm` only: what each route is for, shown to the model. Known role names have a built-in description. |
+| `route_descriptions` | `dict` | empty | `router: llm` only: what each route is for, shown to the model. Known role names have a built-in description. |
 
 This system takes no `chunker:` section.
 

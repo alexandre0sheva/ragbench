@@ -26,9 +26,14 @@ _NAME_FAMILIES: tuple[tuple[str, str], ...] = (
 _VENDOR_FAMILIES = {"meta-llama": "meta", "mistralai": "mistral", "moonshotai": "moonshot", "z-ai": "zhipu", "x-ai": "xai"}
 
 
-def model_family(ref: str) -> str:
+UNKNOWN_FAMILY = "unknown"
+
+
+def model_family(ref: str | None) -> str:
     """`gpt-6-luna` -> `openai`, `openrouter:anthropic/claude-haiku-5.5` -> `anthropic`; an unrecognised model is a family of its own
-    (its OpenRouter vendor, else its name)."""
+    (its OpenRouter vendor, else its name). None (an external system that does not say what it generates with) is `unknown`, a family no judge belongs to."""
+    if ref is None:
+        return UNKNOWN_FAMILY
     provider, model = parse_model_ref(ref)
     vendor, _, name = model.rpartition("/")
     lowered = name.lower()

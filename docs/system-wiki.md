@@ -668,6 +668,27 @@ flowchart TD
 
 **Watch out:** adaptive is only as good as its routes and its router. It costs the *sum* of its routes' ingestion; a heuristic misroute sends a question to a pipeline that cannot answer it. Options: [systems.md](systems.md#adaptive).
 
+### External systems
+
+#### `external_http`, `python_callable`
+
+**Idea.** Benchmark a RAG that RAGBench did not build, next to the ones it did. `external_http` sends each question to your service and maps its JSON reply; `python_callable` calls a function of yours in-process. Either way RAGBench sees only what comes back: an answer, the passages it was written from, and what it cost.
+
+```mermaid
+flowchart LR
+    Q["Question + retrieval depth"] --> X{{"Your system<br/>(endpoint or function)"}}
+    X --> A["answer"]
+    X --> P["passages + document ids"]
+    X --> C["usage / cost"]
+    P --> M{"ids name corpus documents?"}
+    M -->|"all of them"| R["retrieval scored like any system"]
+    M -->|"missing or unmapped"| B["retrieval blank for the system, with a notice"]
+```
+
+**Details.** The whole answer is one `external` step, unless a `python_callable` records its own steps (retrieve, generate, ...), which then replace it; there is no chunker and no index on RAGBench's side (with `post_documents_to` or `ingest_target` the corpus is handed to your system once). The judge reads the passages your system reports. Setup, id matching, cost and secrets: [benchmarking external systems](benchmarking-external-systems.md); options: [systems.md](systems.md#external_http).
+
+**Watch out:** latency includes the network between RAGBench and your service, and an endpoint that keeps state between questions (a conversation memory, a cache) is not answering each question fresh.
+
 ## Where the LLM is called
 
 A side-by-side view of what each system pays for and when. "Ingestion" calls happen once per run (and are disk-cached); "per question" calls happen for every question. Generation is the answer call every system makes except where noted. Cost and latency labels per system live in [systems.md](systems.md#overview).
@@ -695,5 +716,6 @@ A side-by-side view of what each system pays for and when. "Ingestion" calls hap
 | [agent_search](#agent_search) | embeddings | one per agent turn | `agent_turn`, one `tool` step per call |
 | [grep_agent](#grep_agent) | none | one per agent turn | `agent_turn`, `tool` steps |
 | [adaptive](#adaptive) | the sum of its routes | one for the router if `llm` | `route_question` plus the chosen route's steps |
+| [external_http, python_callable](#external_http-python_callable) | none by RAGBench (yours are your own) | none by RAGBench | one `external` step, or a callable's own steps |
 
 The cheap rows are not the weak ones: on the bundled demo most systems were statistically tied on answer quality, and the recommendation fell to cost and latency (see [methodology.md](methodology.md) for how ties are decided, and [choosing-an-architecture.md](choosing-an-architecture.md) for which of these to put in your own comparison).

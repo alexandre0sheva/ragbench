@@ -50,6 +50,9 @@ def print_estimate(estimate: Estimate) -> None:
         if row.error is not None:
             table.add_row(row.system, "[red]could not be estimated[/red]", "", "", "")
             continue
+        if row.external:
+            table.add_row(row.system, "[dim]external: not called[/dim]", "", "", "")
+            continue
         table.add_row(row.system + (" ~" if row.agentic else ""), money(row.ingestion_usd), money(row.query_usd), money(row.judge_usd), money(row.total_usd))
     if estimate.pairwise_calls:
         table.add_section()
@@ -247,6 +250,11 @@ def print_run_summary(output_dir: Path) -> None:
             console.print(
                 f"[yellow]No price registered for {', '.join(unknown_priced)}: reported cost is understated. Add it under `pricing:` in the config.[/yellow]"
             )
+        if run_summary.get("external"):  # external systems whose retrieval could not be scored or whose cost is unknown
+            from ragbench.reporting.notices import build_notices
+
+            for notice in build_notices(None, external=run_summary["external"]):
+                console.print(f"[yellow]{escape(notice)}[/yellow]")
         warnings = run_summary.get("dataset_warnings", [])
         if warnings:
             console.print(f"[yellow]Dataset issues detected ({len(warnings)}). Run `ragbench inspect-dataset` for details:[/yellow]")

@@ -1,6 +1,6 @@
 """SVG charts for the HTML report: pure functions from numbers to an SVG string, no I/O, no external references.
 
-Colors are never written into the SVG. Marks carry classes (`s1`..`s8` categorical slots, `sgray`, `c0`..`c6` sequential steps, `mk-*` roles) and the
+Colors are never written into the SVG. Marks carry classes (`s1`..`s9` categorical slots, `sgray`, `c0`..`c6` sequential steps, `mk-*` roles) and the
 report's stylesheet maps them to the light and dark palettes, so one SVG serves both themes. Every interactive mark is a `<g class="mark" tabindex="0"
 data-tip="...">`: the report's script shows `data-tip` as a tooltip on hover and keyboard focus (and every value is also in the table view next to the
 chart, so a tooltip never gates a number). Text from the data (system and category names) is escaped; nothing is interpolated unescaped.
@@ -284,7 +284,7 @@ def stacked_bars_svg(
 ) -> str:
     """One horizontal bar per row, split into `keys` (in that order) with a 2px surface gap; the bar total is written at its tip.
 
-    `slots` maps each key to a color class (`s1`..`s8`, `sgray`). Segments too narrow to see are still hoverable. All-zero rows draw an empty track.
+    `slots` maps each key to a color class (`s1`..`s9`, `sgray`). Segments too narrow to see are still hoverable. All-zero rows draw an empty track.
     """
     names = key_names or {}
     label_w = min(200, max(100, max((len(r) for r, _ in rows), default=8) * CHAR_W + 14))

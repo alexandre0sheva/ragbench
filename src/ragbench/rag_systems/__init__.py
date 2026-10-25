@@ -9,6 +9,7 @@ from ragbench.rag_systems.contextual_rag import ContextualRAG
 from ragbench.rag_systems.corrective_rag import CorrectiveRAG
 from ragbench.rag_systems.decision_gate_rag import DecisionGateRAG
 from ragbench.rag_systems.decompose_rag import DecomposeRAG
+from ragbench.rag_systems.external_http_rag import ExternalHttpRAG
 from ragbench.rag_systems.full_context_rag import FullContextRAG
 from ragbench.rag_systems.grep_agent_rag import GrepAgentRAG
 from ragbench.rag_systems.hierarchical_rag import HierarchicalRAG
@@ -19,6 +20,7 @@ from ragbench.rag_systems.iterative_rag import IterativeRAG
 from ragbench.rag_systems.llm_heavy_rag import LLMHeavyRAG
 from ragbench.rag_systems.no_retrieval_rag import NoRetrievalRAG
 from ragbench.rag_systems.parent_doc_rag import ParentDocumentRAG
+from ragbench.rag_systems.python_callable_rag import PythonCallableRAG
 from ragbench.rag_systems.rag_fusion_rag import RagFusionRAG
 from ragbench.rag_systems.rerank_rag import RerankRAG
 from ragbench.rag_systems.sentence_window_rag import SentenceWindowRAG
@@ -58,6 +60,7 @@ __all__ = [
     "CorrectiveRAG",
     "DecisionGateRAG",
     "DecomposeRAG",
+    "ExternalHttpRAG",
     "FullContextRAG",
     "GrepAgentRAG",
     "HierarchicalRAG",
@@ -68,6 +71,7 @@ __all__ = [
     "LLMHeavyRAG",
     "NoRetrievalRAG",
     "ParentDocumentRAG",
+    "PythonCallableRAG",
     "RagFusionRAG",
     "RerankRAG",
     "SentenceWindowRAG",

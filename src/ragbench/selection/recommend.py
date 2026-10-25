@@ -215,11 +215,11 @@ def _is_local(ref: str, providers: dict[str, Any]) -> bool:
 def _locality(config: Any, system_name: str) -> tuple[list[str] | None, list[str] | None]:
     """(models that do not run on this machine, tools that reach the network) for one system and its routes; None = unknown."""
     from ragbench.config.schema import _route_configs
-    from ragbench.models.refs import system_model_refs
+    from ragbench.models.refs import is_external, system_model_refs
     from ragbench.tools.registry import resolve_tools
 
     system = next((s for s in config.systems if s.resolved_name == system_name), None)
-    if system is None:
+    if system is None or is_external(system.type):  # an external system's models and network use are out of RAGBench's sight
         return None, None
     non_local: list[str] = []
     network: list[str] = []

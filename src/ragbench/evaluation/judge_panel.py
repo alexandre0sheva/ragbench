@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 AGREEMENT_AXES = (*SCORE_AXES, "answer_score")
 
 
-def scoring_judges(judges: list[str], generator: str, *, independent: bool) -> list[str]:
+def scoring_judges(judges: list[str], generator: str | None, *, independent: bool) -> list[str]:
     """The judges that score answers from `generator`: all of them, minus its family's when `independent`. When every judge is of
     the generator's family nobody else could score those answers, so all of them do (and the report says so)."""
     if not independent:
@@ -73,7 +73,7 @@ class JudgePanel:
         """The model names the judges call (the mock's when a judge is the mock)."""
         return [judge.llm.model_name for judge in self.judges.values()]
 
-    def judge(self, question: Question, answer: str, contexts: list[RetrievedChunk], *, generator: str) -> AnswerJudgeResult:
+    def judge(self, question: Question, answer: str, contexts: list[RetrievedChunk], *, generator: str | None) -> AnswerJudgeResult:
         """The panel's verdict on an answer written by `generator` (a model ref), from the judges `scoring_judges` picks.
 
         Each judge scores independently; a judge whose verdict was unusable (it fell back to the heuristic) is left out of the

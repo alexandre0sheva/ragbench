@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 AGREEMENT_FLOOR = 0.667  # Krippendorff's alpha below which agreement does not support even tentative conclusions
 POSITION_BIAS_NOTICE = 0.25  # share of pairwise comparisons whose verdict followed the answers' position
 MOCK_NOTICE = "Mock run: scores validate the pipeline only (hashing embeddings, scripted LLM, heuristic judge). They say nothing about real-world quality."
@@ -15,6 +17,7 @@ def build_notices(
     judge_fallbacks: dict[str, float] | None = None,
     judge_agreement: float | None = None,
     pairwise_flip_rate: float | None = None,
+    external: dict[str, Any] | None = None,
 ) -> list[str]:
     """Run-level caveats shown prominently at the top of every report."""
     notices: list[str] = []
@@ -23,6 +26,23 @@ def build_notices(
     if unknown_priced_models:
         models = ", ".join(sorted(unknown_priced_models))
         notices.append(f"Cost under-reported: no price is registered for {models}. Add it under `pricing:` in the config.")
+    external = external or {}
+    if external.get("unmapped_doc_ids"):
+        systems = "; ".join(f"{name} (e.g. {', '.join(entry['examples'][:3])})" for name, entry in external["unmapped_doc_ids"].items())
+        notices.append(
+            f"Retrieval not scored for {systems}: the passages they returned carry document ids that match no corpus document (by id, path, file name "
+            "or stem), so their retrieval metrics are blank, not zero. Map `retrieval.response.doc_id` to your document ids (see docs/benchmarking-external-systems.md)."
+        )
+    if external.get("no_contexts"):
+        notices.append(
+            f"Retrieval not scored for {', '.join(external['no_contexts'])}: they return no passages (`retrieval.response.contexts` is unset), so their retrieval "
+            "metrics are blank and the judge scores faithfulness against nothing."
+        )
+    if external.get("unknown_cost"):
+        notices.append(
+            f"Cost unknown for {', '.join(external['unknown_cost'])}: they report neither a cost nor token usage with a priced `retrieval.model`, so they show "
+            "$0 per question. Return `cost_usd` (or token usage and declare the model) to compare cost."
+        )
     if concurrent_latency:
         notices.append(
             "Latency was measured while questions ran concurrently, so it includes queueing behind other requests. "
