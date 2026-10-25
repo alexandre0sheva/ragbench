@@ -77,6 +77,8 @@ langchain = ["langchain-core>=1.7", "langchain-text-splitters>=1.1.3", "langchai
 # Not llama-index-llms-openai: every release requires openai<3 (0.8.3, 2026-10-12); the reference pipeline reaches OpenAI through RAGBench's client.
 llamaindex = ["llama-index-core>=0.14.25"]
 haystack = ["haystack-ai>=3.3"]
+# MCP tools (`tools: [{type: mcp, ...}]`); 2.x is the Client API the integration uses.
+mcp = ["mcp>=2.3"]
 # Vector backends (`retrieval.vector_store`); the default, `numpy`, needs none of them.
 chroma = ["chromadb>=1.5.9"]
 faiss = ["faiss-cpu>=1.15.1"]

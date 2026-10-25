@@ -152,7 +152,8 @@ def _validate_section(label: str, section: str, model: type[BaseModel] | None, v
         raise ValueError(_format_section_errors(label, section, model, exc)) from None
 
 
-# A tool in a system's `tools:` list: a built-in's name, or `{name: ..., <tool options>}`; a mapping with `path: "pkg.module:function"` is a custom tool.
+# A tool in a system's `tools:` list: a built-in's name, or `{name: ..., <tool options>}`; a mapping with `path: "pkg.module:function"` is a custom tool,
+# and `{type: mcp, server: {command|url}, allow: [...]}` offers the listed tools of an MCP server.
 ToolRef = str | dict[str, Any]
 
 
@@ -207,8 +208,8 @@ class SystemConfig(BaseModel):
     @model_validator(mode="after")
     def _validate_tool_refs_are_well_formed(self) -> SystemConfig:
         for index, ref in enumerate(self.tools):
-            if isinstance(ref, dict) and not isinstance(ref.get("name"), str):
-                raise ValueError(f"System '{self.resolved_name}': tools[{index}] must be a tool name or a mapping with a `name`")
+            if isinstance(ref, dict) and ref.get("type") != "mcp" and not isinstance(ref.get("name"), str):
+                raise ValueError(f"System '{self.resolved_name}': tools[{index}] must be a tool name or a mapping with a `name` (or `type: mcp`)")
         return self
 
 

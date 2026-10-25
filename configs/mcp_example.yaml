@@ -1,0 +1,44 @@
+# An agent that calls the tools of an MCP server (docs/tools.md#mcp-tools), next to the same agent with only its search tool.
+#   pip install 'ragbench[mcp]'
+#   ragbench run --config configs/mcp_example.yaml --mock
+# --mock never starts the server: its tools answer with a placeholder. Without --mock, ragbench starts examples/mcp_server.py, reads its tool
+# list, offers the two tools under `allow` (the third, reset_counters, stays out of reach) and records each call in tool_usage.csv.
+run:
+  name: mcp_example
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: agent_search
+    name: agent_search_only
+    retrieval:
+      top_k: 5
+      retriever: vector
+    models:
+      generator: gpt-6-luna
+
+  - type: agent_search
+    name: agent_with_mcp
+    retrieval:
+      top_k: 5
+      retriever: vector
+    models:
+      generator: gpt-6-luna
+    tools:
+      - type: mcp
+        server:
+          command: [python, examples/mcp_server.py]
+        allow: [convert_units, days_between]
+        cost_usd: 0            # MCP reports no cost; set a price per call (or per tool: {days_between: 0.001}) for a metered server
+        timeout_s: 10
+
+evaluation:
+  k_values: [1, 3, 5]
+  judge_enabled: true
+  judge_model: anthropic:claude-haiku-5-5   # another model family than the generator (self-preference)
+  max_questions: 10
+  max_workers: 2

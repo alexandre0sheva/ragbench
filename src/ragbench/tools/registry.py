@@ -14,6 +14,7 @@ from ragbench.models.cost import CostBreakdown
 from ragbench.registry import TOOLS
 from ragbench.tools.base import Tool, ToolContext, ToolResult
 from ragbench.tools.custom import load_custom_tool
+from ragbench.tools.mcp import build_mcp_tools, is_mcp_ref, mcp_tool_names
 
 if TYPE_CHECKING:
     from ragbench.rag_systems.trace import Tracer
@@ -29,13 +30,30 @@ def tool_ref_options(ref: ToolRef) -> dict[str, Any]:
     return {} if isinstance(ref, str) else {key: value for key, value in ref.items() if key != "name"}
 
 
-def resolve_tools(refs: Sequence[ToolRef], settings: ToolsConfig | None = None) -> list[Tool]:
+def tool_ref_names(ref: ToolRef) -> list[str]:
+    """The names the agent sees for one entry of a `tools:` list: its own name, or (an `mcp` entry) each allowed tool's."""
+    return mcp_tool_names(ref) if is_mcp_ref(ref) else [tool_ref_name(ref)]  # type: ignore[arg-type]
+
+
+def resolve_tools(refs: Sequence[ToolRef], settings: ToolsConfig | None = None, *, discover: bool = False, mock: bool = False) -> list[Tool]:
     """Instantiate the tools a `tools:` list names. Raises `ValueError` for an unknown name, bad options, a duplicate, or a tool with
-    side effects that `tools.allow` (and, for network tools, `tools.allow_network`) does not permit."""
+    side effects that `tools.allow` (and, for network tools, `tools.allow_network`) does not permit.
+
+    `mcp` entries only name their tools until `discover` is set (the config check, which must not start a server); `discover` starts
+    the servers and reads the real descriptions, and `mock` keeps them from being started at all."""
     settings = settings or ToolsConfig()
     tools: list[Tool] = []
     seen: set[str] = set()
     for ref in refs:
+        if is_mcp_ref(ref):
+            for remote in build_mcp_tools(ref, discover=discover, mock=mock, timeout_s=settings.timeout_s):  # type: ignore[arg-type]
+                if remote.spec.name in seen:
+                    raise ValueError(f"tool '{remote.spec.name}' is listed twice")
+                seen.add(remote.spec.name)
+                if remote.side_effects == "network" and not settings.allow_network:  # `allow` on the ref already names what may be called
+                    raise ValueError(f"tool '{remote.spec.name}' uses the network; set `tools.allow_network: true` to use it")
+                tools.append(remote)
+            continue
         name = tool_ref_name(ref)
         options = tool_ref_options(ref)
         if name in seen:
@@ -73,8 +91,9 @@ class ToolBox:
         self.tools: dict[str, Tool] = {tool.spec.name: tool for tool in tools}
 
     @classmethod
-    def from_refs(cls, refs: Sequence[ToolRef], settings: ToolsConfig | None = None) -> ToolBox:
-        return cls(resolve_tools(refs, settings), settings)
+    def from_refs(cls, refs: Sequence[ToolRef], settings: ToolsConfig | None = None, *, mock: bool = False) -> ToolBox:
+        """The tools to run with: `mcp` servers are started here (unless `mock`) and shared by every box that names them."""
+        return cls(resolve_tools(refs, settings, discover=True, mock=mock), settings)
 
     @property
     def names(self) -> list[str]:

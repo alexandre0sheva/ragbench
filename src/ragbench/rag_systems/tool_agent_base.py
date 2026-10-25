@@ -16,6 +16,7 @@ from ragbench.runtime.context import current_runtime
 from ragbench.stores.hybrid_store import reciprocal_rank_fusion
 from ragbench.tools import CorpusView, ToolBox, ToolContext
 from ragbench.tools.base import Retriever
+from ragbench.tools.registry import tool_ref_names
 from ragbench.utils.timing import timer
 
 
@@ -31,7 +32,7 @@ class ToolAgentRAG(BaseRAGSystem):
 
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
-        self.box = ToolBox.from_refs(self.tool_refs(config), current_runtime().tools)
+        self.box = ToolBox.from_refs(self.tool_refs(config), current_runtime().tools, mock=force_mock)
         self.corpus = CorpusView([])
 
     @classmethod
@@ -41,7 +42,7 @@ class ToolAgentRAG(BaseRAGSystem):
 
     @classmethod
     def offered_tools(cls, config: SystemConfig) -> list[str]:
-        return [ref if isinstance(ref, str) else str(ref["name"]) for ref in cls.tool_refs(config)]
+        return [name for ref in cls.tool_refs(config) for name in tool_ref_names(ref)]
 
     def _retrievers(self) -> dict[str, Retriever]:
         return {}

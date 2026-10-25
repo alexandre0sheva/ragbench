@@ -15,8 +15,12 @@ priced at its model (or at `model`, when it reports none or one without a price)
 
 from __future__ import annotations
 
+import importlib.util
+import os
 import threading
+from collections.abc import Mapping
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from ragbench.adapters._common import Call, Target, current_recorder, first_int, passage, recording, reply, source_ref
@@ -24,6 +28,61 @@ from ragbench.utils.extras import require_extra
 
 _registered = False
 _lock = threading.Lock()
+
+
+def _private(path: Path) -> bool:
+    """NLTK's own test for data it will trust: owned by us (or root) and not writable by group or others."""
+    info = path.stat()
+    return info.st_uid in (os.geteuid(), 0) and not info.st_mode & 0o022
+
+
+def _default_nltk_dir() -> Path:
+    """Where LlamaIndex keeps NLTK data when `NLTK_DATA` is unset: its bundled cache if that has files, else a folder in the user cache."""
+    spec = importlib.util.find_spec("llama_index.core")
+    bundled = Path(spec.origin).parent / "_static" / "nltk_cache" if spec and spec.origin else None
+    if bundled is not None and bundled.is_dir() and any(bundled.iterdir()):
+        return bundled
+    from platformdirs import user_cache_dir
+
+    return Path(user_cache_dir("llama_index")) / "_static" / "nltk_cache"
+
+
+def private_nltk_dir(default: Path, env: Mapping[str, str], cache_root: Path, umask: int | None = None) -> Path | None:
+    """A private directory for NLTK data, when `default` (where LlamaIndex would put it) is one NLTK refuses to use; else None.
+
+    LlamaIndex keeps its sentence-splitter data in site-packages. NLTK reads and downloads only into directories no other account can write,
+    and a shared Python install (a CI runner whose umask is 002 creates it group-writable) fails that, so every question dies with a
+    LookupError. A directory that does not exist yet is judged by the umask it will be created under; an existing one by its mode and entries.
+    """
+    if "NLTK_DATA" in env:
+        return None  # the user's own choice
+    if default.exists():
+        if _private(default) and all(_private(Path(top, name)) for top, dirs, files in os.walk(default) for name in [*dirs, *files]):
+            return None
+    else:
+        if umask is None:
+            umask = os.umask(0)
+            os.umask(umask)
+        if umask & 0o022 == 0o022:
+            return None
+    chosen = cache_root / "nltk_data"
+    chosen.mkdir(parents=True, mode=0o700, exist_ok=True)
+    chosen.chmod(0o700)
+    return chosen
+
+
+def _keep_nltk_data_private() -> None:
+    try:
+        from platformdirs import user_cache_dir
+
+        chosen = private_nltk_dir(_default_nltk_dir(), os.environ, Path(user_cache_dir("ragbench")))
+    except (ImportError, OSError):
+        return  # LlamaIndex or the cache folder is not usable: leave NLTK alone, the pipeline reports what it needs
+    if chosen is not None:
+        os.environ["NLTK_DATA"] = str(chosen)
+
+
+_keep_nltk_data_private()
 
 
 def _require() -> None:

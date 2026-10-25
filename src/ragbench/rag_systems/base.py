@@ -15,6 +15,7 @@ from ragbench.models.llms import LLM, create_llm
 from ragbench.rag_systems.options import BaseOptions, PermissiveOptions
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.rag_systems.trace import Step, Tracer, activate, current_tracer, reconcile_steps
+from ragbench.tools.registry import tool_ref_names
 from ragbench.utils.timing import timer
 
 
@@ -127,7 +128,7 @@ class BaseRAGSystem(ABC):
     @classmethod
     def offered_tools(cls, config: SystemConfig) -> list[str]:
         """Names of the tools this system may call under `config` (the `tools:` list; systems with built-in tools add theirs)."""
-        return [ref if isinstance(ref, str) else str(ref["name"]) for ref in config.tools]
+        return [name for ref in config.tools for name in tool_ref_names(ref)]
 
     def configured_context_k(self) -> int | None:
         """How many chunks this system hands the generator when the caller does not say.

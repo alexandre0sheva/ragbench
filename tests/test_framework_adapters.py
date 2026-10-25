@@ -345,3 +345,42 @@ def test_the_shipped_framework_config_runs_all_three_pipelines_with_no_key(tmp_p
     assert list(metrics.index) == ["bm25_default", "langchain_default", "llamaindex_default", "haystack_default"] and (metrics["n_error"] == 0).all()
     assert (metrics["retrieval_recall@5"] > 0).all()
     assert (metrics.loc[["langchain_default", "llamaindex_default", "haystack_default"], "avg_cost_per_question"] > 0).all()
+
+
+# -- NLTK data -------------------------------------------------------------------------------------------------------------------------------
+
+
+def test_llamaindex_keeps_its_nltk_data_private_when_the_default_location_is_shared(tmp_path):
+    """LlamaIndex stores NLTK data inside site-packages; on a runner whose umask makes that group-writable NLTK refuses to read or download
+    there, and the sentence splitter fails for every question. The adapter then points NLTK at a private directory of its own."""
+    pytest.importorskip("llama_index.core")
+    import os
+    import stat
+
+    from ragbench.adapters.llamaindex import private_nltk_dir
+
+    cache = tmp_path / "cache"
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    shared.chmod(0o775)
+    chosen = private_nltk_dir(shared, {}, cache)
+    assert chosen is not None and chosen.is_relative_to(cache) and stat.S_IMODE(chosen.stat().st_mode) == 0o700 and chosen.stat().st_uid == os.getuid()
+
+    inner = tmp_path / "inner"  # private itself, but a file in it is group-writable
+    (inner / "corpora").mkdir(parents=True)
+    inner.chmod(0o700)
+    (inner / "corpora").chmod(0o700)
+    (inner / "corpora" / "stopwords.zip").write_bytes(b"x")
+    (inner / "corpora" / "stopwords.zip").chmod(0o664)
+    assert private_nltk_dir(inner, {}, cache) == chosen
+
+    private = tmp_path / "private"
+    (private / "corpora").mkdir(parents=True)
+    private.chmod(0o700)
+    (private / "corpora").chmod(0o700)
+    assert private_nltk_dir(private, {}, cache) is None  # a private default is left alone, with whatever data it holds
+
+    missing = tmp_path / "not_yet_created"  # judged by the umask it will be created under
+    assert private_nltk_dir(missing, {}, cache, umask=0o002) == chosen
+    assert private_nltk_dir(missing, {}, cache, umask=0o022) is None
+    assert private_nltk_dir(shared, {"NLTK_DATA": "/somewhere/the/user/chose"}, cache) is None  # the user's own choice always wins

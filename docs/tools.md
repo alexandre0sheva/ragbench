@@ -178,6 +178,32 @@ def lookup_price(product: str, quantity: int = 1) -> str:
 - Options for a custom tool: `description` (overrides the docstring), `side_effects` (`none` default, `network`, `filesystem`), `timeout_s`.
 - A custom tool cannot reuse a built-in's name. Packages can also contribute tools to the registry (see [extending.md](extending.md#plugins-from-other-packages)), which makes them valid in `requires_tools` too.
 
+## MCP tools
+
+The tools of any [Model Context Protocol](https://modelcontextprotocol.io) server can be offered to an agent, so a benchmark can ask whether your agent does better with the tools you run in production. Install the SDK (`pip install 'ragbench[mcp]'`) and list the server and the tools the agent may call:
+
+```yaml
+systems:
+  - type: agent_search
+    name: agent_with_mcp
+    tools:
+      - type: mcp
+        server: {command: [python, examples/mcp_server.py]}   # started on stdio; or {url: "https://mcp.example.com/mcp"} for a running server
+        allow: [convert_units, days_between]                   # required: only these are offered, by the server's own names
+        prefix: shop_                                          # optional: the agent sees shop_convert_units
+        cost_usd: {days_between: 0.001}                        # optional price per call, for every tool (a number) or per tool; MCP reports none
+        timeout_s: 10                                          # optional per-call timeout (default `tools.timeout_s`)
+```
+
+- **The server's own description and argument schema** are what the agent is told, read when the first system that lists the server is built. A name under `allow` that the server does not offer fails the run before any question, with a did-you-mean hint. The config check itself never starts a server.
+- **One connection per server per run**, shared by every question, system and route that names it, and closed when the process exits. Keep the server read-only and stateless: questions run concurrently, and a tool that changes state makes the comparison unfair.
+- **Servers are `command` (stdio) or `url` (Streamable HTTP).** `env` (command) and `headers` (url) accept `${VAR}`, filled from the environment when the server is started, so a secret is never written to a config or a run directory; errors name the server without them.
+- **Permissions.** `allow` on the ref is the explicit list of callable tools, so they need not also appear under `tools.allow`. A `command` server runs a process on this machine (reported as a `filesystem` side effect); a `url` server is a network tool and needs `tools.allow_network: true`; the recommendation also lists it among the system's network tools.
+- **Reporting.** Every call is a `tool` step like any other (arguments, output, latency, `tool_cost`), and `tool_usage.csv` has one row per allowed tool with its calls, errors, average latency and total cost; a tool offered and never called still gets a row. A tool whose structured result (or JSON text) is a list of objects with `doc_id` is also credited to the trajectory metrics (`avg_steps_to_evidence`, `redundant_search_rate`). Retrieval scores are computed only from the built-in `search`, `corpus_grep` and `read_document` calls.
+- **`--mock` never starts a server.** Each allowed tool is still offered, with a free-form argument schema, and answers `[mock mcp] tool(args)` at the configured price, so a config with MCP tools runs offline in CI. Measure the real server without `--mock` (set `evaluation.max_cost_usd`).
+
+`configs/mcp_example.yaml` runs the agent with and without the example server `examples/mcp_server.py`.
+
 ## Safety model
 
 Tool arguments come from a language model, so a tool must be safe against whatever it sends.
@@ -187,7 +213,7 @@ Tool arguments come from a language model, so a tool must be safe against whatev
 - **Timeouts.** A call that exceeds `tools.timeout_s` (default 10 s) returns an error result; the question carries on. The abandoned thread is a daemon and cannot keep the process alive.
 - **Exceptions never propagate.** An exception, a malformed return value, an unknown tool name or bad arguments all become a `ToolResult` with `error` set, which the model sees as an observation and can recover from.
 - **Bounded output.** Output over `tools.max_output_chars` (default 4000) is cut and flagged `truncated`, so one call cannot flood the model's context.
-- **Permissions.** Built-in tools only read the corpus given to them. A tool with side effects must declare `side_effects` and be listed under `tools.allow`; a network tool also needs `tools.allow_network: true`. Otherwise the config does not load.
+- **Permissions.** Built-in tools only read the corpus given to them. A tool with side effects must declare `side_effects` and be listed under `tools.allow`; a network tool also needs `tools.allow_network: true`. Otherwise the config does not load. (An [MCP](#mcp-tools) tool is allowed by the `allow:` list of its own entry.)
 - **Determinism.** "Today" is `evaluation.tools_now`, fixed for the run, so date answers do not depend on when the benchmark runs. Each question gets its own `ToolContext`, so concurrent questions never share state.
 
 ## Network tools

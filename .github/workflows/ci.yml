@@ -116,6 +116,22 @@ jobs:
       - name: The adapters and the reference pipelines, against the real frameworks (they skip everywhere else)
         run: pytest tests/test_framework_adapters.py -n auto
 
+  mcp:
+    name: MCP tools (real SDK, example server over stdio)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install with the mcp extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,mcp]"
+      - name: The MCP tools against the real SDK (they skip everywhere else)
+        run: pytest tests/test_mcp_sdk.py tests/test_mcp_tools.py -n auto
+
   smoke:
     name: CLI smoke test (mock mode)
     runs-on: ubuntu-latest

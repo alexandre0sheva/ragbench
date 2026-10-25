@@ -26,13 +26,13 @@ _ENV_VAR = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 INGEST_BATCH = 100
 
 
-def fill_env(text: str) -> str:
+def fill_env(text: str, where: str = "an external_http system") -> str:
     """Replace every `${VAR}` with the environment variable; a variable that is not set fails, naming it (never a value)."""
 
     def value(match: re.Match[str]) -> str:
         name = match.group(1)
         if name not in os.environ:
-            raise ValueError(f"environment variable {name} is not set (used as ${{{name}}} in an external_http system)")
+            raise ValueError(f"environment variable {name} is not set (used as ${{{name}}} in {where})")
         return os.environ[name]
 
     return _ENV_VAR.sub(value, text)

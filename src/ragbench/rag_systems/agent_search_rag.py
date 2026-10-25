@@ -10,7 +10,7 @@ from ragbench.rag_systems.tool_agent_base import ToolAgentRAG
 from ragbench.registry import SYSTEMS
 from ragbench.tools import CorpusView
 from ragbench.tools.base import Retriever
-from ragbench.tools.registry import tool_ref_name
+from ragbench.tools.registry import tool_ref_names
 
 
 @SYSTEMS.register("agent_search")
@@ -38,7 +38,7 @@ class AgentSearchRAG(ToolAgentRAG, LLMQueryRAG):
     @classmethod
     def tool_refs(cls, config: SystemConfig) -> list[ToolRef]:
         refs: list[ToolRef] = list(config.tools)
-        return refs if "search" in {tool_ref_name(ref) for ref in refs} else ["search", *refs]
+        return refs if "search" in {name for ref in refs for name in tool_ref_names(ref)} else ["search", *refs]
 
     def ingest(self, documents: list[Document]) -> IngestionResult:
         self.corpus = CorpusView(documents)

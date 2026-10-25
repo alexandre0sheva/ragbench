@@ -12,6 +12,7 @@ cd ragbench
 uv venv --python 3.12 && source .venv/bin/activate      # or: python -m venv .venv && source .venv/bin/activate
 uv pip install -e ".[dev,anthropic,pdf,docx,hub]"           # the extras CI installs, so the SDK and loader tests run instead of skipping
 uv pip install -e ".[langchain,llamaindex,haystack]"         # optional: the framework adapter tests (`tests/test_framework_adapters.py`) skip without them; the `frameworks` CI job runs them
+uv pip install -e ".[mcp]"                                   # optional: the MCP SDK tests (`tests/test_mcp_sdk.py`) skip without it; the `mcp` CI job runs them
 ragbench demo
 pytest -m "not slow" -n auto                      # the fast loop (under a minute on a laptop); plain `pytest` runs everything
 ```
