@@ -2,7 +2,7 @@
 
 RAGBench can score a RAG it did not build: a service you already run behind HTTP (`external_http`), or a Python function of your own (`python_callable`). It asks your system the same questions as the built-in ones, judges the answers with the same judge, scores retrieval against the same labels, and puts everything on one leaderboard, so the question "is my production RAG better than a tuned BM25?" gets a number with a confidence interval.
 
-Contents: [Your deployed RAG in 3 steps](#your-deployed-rag-in-3-steps) · [A function of your own](#a-function-of-your-own) · [Mapping the reply](#mapping-the-reply) · [Document ids and retrieval metrics](#document-ids-and-retrieval-metrics) · [Cost](#cost) · [Secrets](#secrets) · [Mock runs, estimates and caching](#mock-runs-estimates-and-caching) · [What is measured](#what-is-measured)
+Contents: [Your deployed RAG in 3 steps](#your-deployed-rag-in-3-steps) · [A function of your own](#a-function-of-your-own) · [Framework pipelines](#framework-pipelines) · [Mapping the reply](#mapping-the-reply) · [Document ids and retrieval metrics](#document-ids-and-retrieval-metrics) · [Cost](#cost) · [Secrets](#secrets) · [Mock runs, estimates and caching](#mock-runs-estimates-and-caching) · [What is measured](#what-is-measured)
 
 Every option, with its type and default, is listed under [`external_http`](systems.md#external_http) and [`python_callable`](systems.md#python_callable) in the generated systems reference.
 
@@ -67,6 +67,35 @@ def answer(question, top_k):
 ```
 
 Or return them: an `AnswerResult` keeps its `steps`, and a dict may carry `steps` as plain dicts (`{"kind": "generate", "name": "llm", "latency_ms": 820, "prompt_tokens": 1200, "completion_tokens": 90, "cost": {"llm_cost": 0.0002}}`). Steps recorded on the tracer win over returned ones. When the answer reports no `cost_usd` (and no `AnswerResult` cost), its cost is the sum of its steps' costs; any difference between the steps and the cost appears as an `untracked` step, as for the built-in systems.
+
+## Framework pipelines
+
+For a pipeline written with LangChain, LlamaIndex or Haystack, `ragbench.adapters` turns the pipeline object into the `answer(question, top_k)` function above, and splits what it did into `retrieve` and `generate` steps with the tokens each model call reported. Install the extra for your framework (`pip install 'ragbench[langchain]'`, `'ragbench[llamaindex]'` or `'ragbench[haystack]'`); without it the adapter fails with that one-line command.
+
+```python
+# my_rag.py
+from ragbench.adapters.langchain import from_chain, from_retriever
+answer = from_retriever(retriever, generate, model="gpt-6-luna")   # a retriever, and a runnable taking {"question", "context": [Document]}
+answer = from_chain(retrieval_chain, model="gpt-6-luna")           # or one runnable that retrieves and answers
+
+from ragbench.adapters.llamaindex import from_query_engine
+answer = from_query_engine(index.as_query_engine(similarity_top_k=10), model="gpt-6-luna")
+
+from ragbench.adapters.haystack import from_pipeline
+answer = from_pipeline(pipeline, inputs=lambda question, top_k: {...}, retriever="retriever", generator="llm", model="gpt-6-luna")
+```
+
+Point `target` at `my_rag.py:answer` and declare the same `model`. What the adapters read:
+
+| Framework | Steps come from | Passages and their file | Tokens and model |
+| --- | --- | --- | --- |
+| LangChain | a callback handler passed to the runnable | the documents the chain returns under `context` (else what its retrievers returned); `metadata["source"]`, `file_path`, ... | `llm_output["token_usage"]`, or the message's `usage_metadata` |
+| LlamaIndex | instrumentation events (registered once, filed under the question being answered) | the response's `source_nodes`; node `metadata["file_path"]`, `file_name`, ... | the provider's raw `usage` |
+| Haystack | the retriever and generator components, wrapped in place to time them | the retriever's `documents`; `meta["file_path"]`, `source_id`, ... | the generator's `meta["usage"]` |
+
+Three things to know. The framework decides how many passages it retrieves, so set `k` on your retriever or engine (Haystack's `inputs` receives RAGBench's `top_k`); to score all systems at one depth, pass the run's `top_k` through yourself, as the reference pipelines do. A document whose metadata names no corpus file leaves its question's retrieval blank ([ids](#document-ids-and-retrieval-metrics)). Query-embedding calls made inside the framework are not seen, so their (small) cost is not counted; the generator's is, priced at the model the framework reports, or at your declared `model` when it reports none or one without a price.
+
+**The three frameworks, out of the box.** [`examples/langchain_default.py`](../examples/langchain_default.py), [`examples/llamaindex_default.py`](../examples/llamaindex_default.py) and [`examples/haystack_default.py`](../examples/haystack_default.py) build the pipeline each framework's own tutorial recommends (its default splitter, an in-memory vector store, one retrieval, a plain question-answering prompt), with the built-in systems' generator and embedding model, and [`configs/frameworks_example.yaml`](../configs/frameworks_example.yaml) runs them next to `bm25`. They call OpenAI only when you set `RAGBENCH_REFERENCE_LIVE=1` (and `OPENAI_API_KEY`), because `--mock` does not stub an external system; otherwise they use RAGBench's mock models, so the configuration and the trace can be checked with no key and no cost. They are also the starting point for your own: copy one and replace the pieces.
 
 ## Mapping the reply
 

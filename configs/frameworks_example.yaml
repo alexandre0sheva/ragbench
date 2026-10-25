@@ -1,0 +1,53 @@
+# LangChain, LlamaIndex and Haystack, each as its own tutorial builds it, next to a built-in baseline (docs/benchmarking-external-systems.md#framework-pipelines).
+#   pip install 'ragbench[langchain,llamaindex,haystack]'
+#   ragbench run --config configs/frameworks_example.yaml --mock
+# Without RAGBENCH_REFERENCE_LIVE=1 the three pipelines run on RAGBench's mock models, so this costs nothing and needs no key. To measure them for real:
+#   RAGBENCH_REFERENCE_LIVE=1 ragbench run --config configs/frameworks_example.yaml     (OPENAI_API_KEY; set evaluation.max_cost_usd first)
+run:
+  name: frameworks_example
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+systems:
+  - type: bm25
+    name: bm25_default
+    chunker:
+      type: word
+      chunk_size: 450
+      chunk_overlap: 70
+    retrieval:
+      top_k: 5
+    models:
+      generator: gpt-6-luna
+
+  - type: python_callable
+    name: langchain_default
+    retrieval:
+      target: examples/langchain_default.py:answer
+      ingest_target: examples/langchain_default.py:ingest
+      model: gpt-6-luna
+
+  - type: python_callable
+    name: llamaindex_default
+    retrieval:
+      target: examples/llamaindex_default.py:answer
+      ingest_target: examples/llamaindex_default.py:ingest
+      model: gpt-6-luna
+
+  - type: python_callable
+    name: haystack_default
+    retrieval:
+      target: examples/haystack_default.py:answer
+      ingest_target: examples/haystack_default.py:ingest
+      model: gpt-6-luna
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: anthropic:claude-haiku-5-5   # another model family than the generators (self-preference)
+  max_questions: null
+  max_workers: 4

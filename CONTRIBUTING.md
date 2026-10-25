@@ -11,6 +11,7 @@ git clone https://github.com/alexandre0sheva/ragbench.git
 cd ragbench
 uv venv --python 3.12 && source .venv/bin/activate      # or: python -m venv .venv && source .venv/bin/activate
 uv pip install -e ".[dev,anthropic,pdf,docx,hub]"           # the extras CI installs, so the SDK and loader tests run instead of skipping
+uv pip install -e ".[langchain,llamaindex,haystack]"         # optional: the framework adapter tests (`tests/test_framework_adapters.py`) skip without them; the `frameworks` CI job runs them
 ragbench demo
 pytest -m "not slow" -n auto                      # the fast loop (under a minute on a laptop); plain `pytest` runs everything
 ```
