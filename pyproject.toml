@@ -110,7 +110,7 @@ exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedE
 [tool.ruff]
 line-length = 140
 target-version = "py311"
-extend-exclude = ["results", "data/demo"]
+extend-exclude = ["results", "data/demo", "data/hard"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

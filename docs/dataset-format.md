@@ -2,7 +2,7 @@
 
 RAGBench evaluates retrieval at the document level. Do not add static `relevant_chunk_ids`; chunks are generated dynamically by each RAG system and may differ by chunker or strategy.
 
-Contents: [Quick start](#quick-start-with-your-own-data) · [Documents](#documents) · [Inspecting a dataset](#inspecting-a-dataset) · [Questions](#questions) · [Optional qrels](#optional-qrels) · [Splits](#train--dev--test-splits) · [Label-free mode](#label-free-mode) · [Public benchmarks on demand](#public-benchmarks-on-demand) · [Importing existing data](#importing-existing-data) · [Generating questions](#generating-questions) · [Pooled labeling](#pooled-labeling) · [The demo dataset](#the-bundled-demo-dataset)
+Contents: [Quick start](#quick-start-with-your-own-data) · [Documents](#documents) · [Inspecting a dataset](#inspecting-a-dataset) · [Questions](#questions) · [Optional qrels](#optional-qrels) · [Splits](#train--dev--test-splits) · [Label-free mode](#label-free-mode) · [Public benchmarks on demand](#public-benchmarks-on-demand) · [Importing existing data](#importing-existing-data) · [Generating questions](#generating-questions) · [Pooled labeling](#pooled-labeling) · [The demo dataset](#the-bundled-demo-dataset) · [The hard suite](#the-bundled-hard-suite)
 
 ## Quick start with your own data
 
@@ -277,3 +277,21 @@ It is built to tell retrieval strategies apart. The corpus mixes very short FAQ 
 | `unanswerable` | plausible, but the corpus never says; 15% of the questions | |
 
 Key-evidence documents carry relevance 3 in the qrels, supporting documents 2, and later documents that merely restate an answer from the first 50 questions 1 (credit for nDCG only; recall uses `relevant_doc_ids`).
+
+## The bundled hard suite
+
+On the demo, most systems that retrieve at all score alike. The hard suite is built so they do not: `ragbench demo --suite hard` writes it to `data/hard` (162 documents, about 52k tokens, 156 questions, graded qrels and evidence quotes for every answerable question), and [`configs/hard.yaml`](../configs/hard.yaml) runs eight representative systems on it, from the no-retrieval floor to two agents. Everything in it is fictional (companies, people and ports of a made-up "Meridian Coast") and free to publish.
+
+Unlike the demo it is generated: [`scripts/generate_hard_suite.py`](../scripts/generate_hard_suite.py) builds a small world (company histories, products and their suppliers, acquisitions, quarterly shipments, harbour tariffs, annual reports) from one seed, writes the documents from it, and derives each question, its answer, qrels and evidence from the same facts, so every answer is right by construction. Change the data by editing the script and running it; `python scripts/generate_hard_suite.py --check` (and a test) fails when `data/hard` is not exactly its output.
+
+| Category | Tests | `requires_tools` |
+| --- | --- | --- |
+| `version_conflict` | three revisions of a spec sheet, or a company profile against a later head-office move; only the latest document is right | |
+| `temporal` | who led a company, or which tariff edition applied, on a given date: two dated documents bracket the answer | |
+| `multi_hop` | chains of two or three documents (product, maker or supplier, acquirer, founder) whose bridge entities the question never names (`metadata.hops`, `metadata.bridges`) | |
+| `aggregation` | totals and differences over quarterly reports, two to eight documents per question | `calculator` |
+| `distractor` | near-name companies (`Ironvale Sensors` and `Ironvale Sensing`) and product codes (`TX-40`, `TX-40S`) whose facts differ (`metadata.decoy`) | |
+| `long_context` | a fact deep inside a 3,400-word annual report whose paragraphs rarely name the company, next to the same company's report for the year before | |
+| `unanswerable` | a quarter of the questions, each a near miss (`metadata.trap`): an attribute a sheet does not list, a period with no document, a false premise, an entity that does not exist, or a fact the corpus never states | |
+
+The corpus is past a small full-context budget on purpose, and single-shot retrieval usually finds the first document of a chain but not the last (a test pins that with BM25), which is where query decomposition and agents should pull ahead.

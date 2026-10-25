@@ -44,7 +44,7 @@ ragbench compare --config configs/all.yaml --mock --max-workers 4
 - Keep changes modular and dataset-agnostic; match the style of the code around you (`from __future__ import annotations`, Pydantic v2, line length 140).
 - Do not add required external services for default runs, and preserve mock mode.
 - Add or update tests for behavior changes (tests first for logic such as metrics, parsing, routing, caching and statistics).
-- Keep demo data fictional and safe to publish.
+- Keep demo data fictional and safe to publish. `data/hard` is generated: change `scripts/generate_hard_suite.py` and run it, never the files.
 - Do not commit `results/`, `.env`, caches or local vector-store state.
 - Every change adds a bullet under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
 

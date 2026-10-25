@@ -15,7 +15,7 @@ from ragbench.cli.common import confirm_spend, console, fail, json_output, load_
 from ragbench.cli.run import print_estimate
 from ragbench.config.presets import PRESET_NAMES
 from ragbench.config.schema import ExperimentConfig
-from ragbench.datasets.demo_generator import write_demo_dataset
+from ragbench.datasets.demo_generator import SUITES, write_demo_dataset
 from ragbench.datasets.loader import load_dataset
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import DocumentLoadError, load_documents
@@ -28,12 +28,16 @@ commands = typer.Typer()
 
 @commands.command()
 def demo(
-    output: Path = typer.Option(Path("data/demo"), "--output", "-o", help="Directory where the demo dataset is written."),
-    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite demo files that differ from the bundled copy (by default they are kept and reported)."),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Directory where the dataset is written (default: data/<suite>)."),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite files that differ from the bundled copy (by default they are kept and reported)."),
+    suite: str = typer.Option("demo", "--suite", help=f"Which bundled dataset: {' or '.join(SUITES)} (generated to separate systems; run it with configs/hard.yaml)."),
 ) -> None:
-    """Create or verify the bundled demo dataset."""
-    stats = write_demo_dataset(output, overwrite=overwrite)
-    console.print(f"[green]Demo dataset ready at {output}[/green]")
+    """Create or verify a bundled dataset: the demo, or the hard suite with --suite hard."""
+    if suite not in SUITES:
+        fail(f"Unknown suite {suite!r}; choose one of: {', '.join(SUITES)}")
+    output = output or Path("data") / suite
+    stats = write_demo_dataset(output, overwrite=overwrite, suite=suite)
+    console.print(f"[green]{'Demo dataset' if suite == 'demo' else 'Hard suite'} ready at {output}[/green]")
     console.print(f"Documents: {stats['documents']} | Questions: {stats['questions']} | Qrels: {stats['qrels']}")
     if stats["modified"]:
         console.print(f"[yellow]{stats['modified']} file(s) differ from the bundled copy and were kept; use --overwrite to restore them.[/yellow]")

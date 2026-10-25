@@ -6,10 +6,11 @@
 FROM python:3.13-slim AS build
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
 WORKDIR /src
-# Only what the package build reads (setup.py copies data/demo into the wheel), so a docs or test edit does not rebuild this layer.
+# Only what the package build reads (setup.py copies data/demo and data/hard into the wheel), so a docs or test edit does not rebuild this layer.
 COPY pyproject.toml setup.py MANIFEST.in README.md LICENSE CHANGELOG.md CITATION.cff ./
 COPY src ./src
 COPY data/demo ./data/demo
+COPY data/hard ./data/hard
 RUN python -m venv /opt/venv && /opt/venv/bin/pip install .
 
 FROM python:3.13-slim

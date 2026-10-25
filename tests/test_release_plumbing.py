@@ -103,7 +103,7 @@ def test_the_package_checks_are_one_reusable_workflow_that_ci_and_the_release_bo
     package = _workflow("package.yml")
     assert "workflow_call" in package["on"]
     commands = "\n".join(step.get("run", "") for step in package["jobs"]["package"]["steps"])
-    for needed in ("python -m build", "twine check --strict", "ragbench/_data/demo/questions.jsonl", "/tmp/clean/bin/pip install dist/*.whl", "ragbench demo"):
+    for needed in ("python -m build", "twine check --strict", "ragbench/_data/demo/questions.jsonl", "ragbench/_data/hard/questions.jsonl", "/tmp/clean/bin/pip install dist/*.whl", "ragbench demo"):
         assert needed in commands, f"the package checks do not run `{needed}`"
     uploads = [step for step in package["jobs"]["package"]["steps"] if step.get("uses", "").startswith("actions/upload-artifact@")]
     assert uploads and uploads[0]["with"]["name"] == "dist", "the release publishes the files that passed the checks, so they must be uploaded"

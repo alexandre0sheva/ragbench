@@ -21,7 +21,7 @@ ragbench auto --docs ./my_docs --mock     # drop --mock for a real run: it estim
 
 From a clone, `pip install -e .` installs the same thing; without Python, `docker run --rm ragbench demo` uses the image built from the [Dockerfile](Dockerfile) (`docker build -t ragbench .`; mount your working directory with `-v "$PWD":/work` and pass keys with `-e OPENAI_API_KEY`).
 
-`auto` profiles your documents, writes questions from them if you have none (flagged `needs_review`; bring your own with `--questions`), runs a preset of systems, and prints the recommended one with the paths of `winner.yaml`, `report.html` and `recommendation.md`. If it stops, `ragbench auto --resume RUN_DIR` continues without paying again. Prefer to write the config yourself? `ragbench init my_ds --docs ./my_docs` scaffolds one; `ragbench demo` and `ragbench run --config configs/all.yaml --mock` run the bundled demo.
+`auto` profiles your documents, writes questions from them if you have none (flagged `needs_review`; bring your own with `--questions`), runs a preset of systems, and prints the recommended one with the paths of `winner.yaml`, `report.html` and `recommendation.md`. If it stops, `ragbench auto --resume RUN_DIR` continues without paying again. Prefer to write the config yourself? `ragbench init my_ds --docs ./my_docs` scaffolds one; `ragbench demo` and `ragbench run --config configs/all.yaml --mock` run the bundled demo. `ragbench demo --suite hard` and `configs/hard.yaml` are a harder bundled suite built to separate systems.
 
 Not sure which architecture to try first, or what to look at in the report? Start with [Choosing an architecture](docs/choosing-an-architecture.md).
 

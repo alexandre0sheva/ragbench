@@ -5,6 +5,7 @@ include CITATION.cff
 include .env.example
 recursive-include configs *.yaml
 recursive-include data/demo *.md *.jsonl
+recursive-include data/hard *.md *.jsonl
 recursive-include docs *.md
 recursive-include tests *.py *.json
 recursive-include scripts *.py

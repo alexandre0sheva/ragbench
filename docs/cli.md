@@ -25,7 +25,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `estimate`: Project what a run would cost and how long...
 * `recommend`: Which system to deploy, from a finished...
 * `auto`: From a folder of documents to a decision:...
-* `demo`: Create or verify the bundled demo dataset.
+* `demo`: Create or verify a bundled dataset: the...
 * `inspect-dataset`: Profile a dataset: sizes and balance,...
 * `split`: Split a dataset's questions into train /...
 * `generate-questions`: Write questions for documents that have...
@@ -184,7 +184,7 @@ $ ragbench auto [OPTIONS]
 
 ## `ragbench demo`
 
-Create or verify the bundled demo dataset.
+Create or verify a bundled dataset: the demo, or the hard suite with --suite hard.
 
 **Usage**:
 
@@ -194,8 +194,9 @@ $ ragbench demo [OPTIONS]
 
 **Options**:
 
-* `-o, --output <path>`: Directory where the demo dataset is written.  [default: data/demo]
-* `--overwrite`: Overwrite demo files that differ from the bundled copy (by default they are kept and reported).
+* `-o, --output <path>`: Directory where the dataset is written (default: data/<suite>).
+* `--overwrite`: Overwrite files that differ from the bundled copy (by default they are kept and reported).
+* `--suite <str>`: Which bundled dataset: demo or hard (generated to separate systems; run it with configs/hard.yaml).  [default: demo]
 * `--help`: Show this message and exit.
 
 ## `ragbench inspect-dataset`
