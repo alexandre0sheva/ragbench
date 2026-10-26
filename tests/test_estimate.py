@@ -85,6 +85,28 @@ def test_the_estimate_is_within_tolerance_of_a_mock_run_priced_as_live(tmp_path,
     assert by_name["agent"].question_seconds > by_name["bm25"].question_seconds  # the loop makes more model calls
 
 
+def test_graph_rag_extraction_and_community_reports_are_measured_as_ingestion(tmp_path, monkeypatch):
+    install_paid_fakes(monkeypatch)
+    models = {"generator": GENERATOR, "embedding": EMBEDDING}
+    path = _config(
+        tmp_path,
+        [
+            {"type": "vector", "name": "vector", "models": models, "retrieval": {"vector_store": "numpy"}},
+            {"type": "graph_rag", "name": "graph_local", "models": models},
+            {"type": "graph_rag", "name": "graph_global", "models": models, "retrieval": {"mode": "global"}},
+        ],
+    )
+    estimate = estimate_run(load_config(path))
+    actual = _charged(run_benchmark(path, max_workers=1))
+
+    by_name = {s.system: s for s in estimate.systems}
+    assert all(s.error is None for s in estimate.systems)
+    assert by_name["graph_local"].ingestion_usd > 10 * by_name["vector"].ingestion_usd, "one LLM call per chunk and per community"
+    assert by_name["graph_global"].answer_usd_per_question > by_name["graph_local"].answer_usd_per_question, "the map step is priced"
+    for name in ("graph_local", "graph_global"):
+        assert by_name[name].total_usd == pytest.approx(actual[name], rel=TOLERANCE), f"{name}: {by_name[name].total_usd} vs {actual[name]}"
+
+
 def test_without_a_judge_the_estimate_has_no_judge_line(tmp_path, monkeypatch):
     install_paid_fakes(monkeypatch)
     path = _config(tmp_path, judge_enabled=False)

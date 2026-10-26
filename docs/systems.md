@@ -28,6 +28,7 @@ Profiles are relative: **cost** `low` = one generation call plus embeddings, `me
 | [`adaptive`](#adaptive) | Adaptive router | high | medium | yes | no | Mixed workloads where no single architecture is best for every question |
 | [`decision_gate`](#decision_gate) | Decision-gated RAG | high | medium | yes | no | Corpora where many questions have no answer in the documents, and a confident wrong answer costs more than a refusal |
 | [`full_context`](#full_context) | Full context | high | medium | no | no | Small corpora, and measuring how much a retrieval pipeline loses against reading everything |
+| [`graph_rag`](#graph_rag) | GraphRAG (knowledge graph) | high | medium | no | no | Questions that connect entities across documents (`local`) and corpus-wide questions about themes and groups (`global`) |
 | [`agent_search`](#agent_search) | Tool-using agent (search) | high | slow | yes | yes | Questions that need computation, exact lookups, or several searches |
 | [`cli_agent`](#cli_agent) | CLI agent harness | high | slow | no | yes | Measuring a coding-agent harness as a RAG system: how well, how fast and at what cost it finds the answer in your documents |
 | [`corrective`](#corrective) | Corrective RAG | high | slow | yes | yes | Corpora where the first search often misses and a bad context should be noticed rather than answered from |
@@ -418,6 +419,27 @@ Best for: Small corpora, and measuring how much a retrieval pipeline loses again
 | `context_token_budget` | `int` | `100000` | Most tokens of document text put in the prompt (counted with the chunking tokenizer; the small `[doc_id]` headers are not counted). Documents are ordered by BM25 relevance to the question; when they do not all fit, the first one that does not is cut at a token boundary and the rest are dropped (`truncated: true` in the retrieval metadata). You pay for every token you put in. |
 
 This system takes no `chunker:` section.
+
+## `graph_rag`
+
+**GraphRAG (knowledge graph).** An LLM extracts entities and relations from every chunk at ingestion and writes a report per graph community; `local` follows the question's entities to their chunks, `global` answers by map-reduce over the community reports.
+
+Best for: Questions that connect entities across documents (`local`) and corpus-wide questions about themes and groups (`global`). Cost: high; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `mode` | `local` \| `global` | `local` | `local`: match the question to entities, follow their relations, and return the chunks they came from, with the entities and relations as notes for the generator. `global`: rank the community reports and answer by map-reduce over them (one extra LLM call per report the generator reads); `top_k` then counts reports. |
+| `entities_k` | `int` | `10` | Entities matched to the question in `local` mode (BM25 and embedding similarity over each entity's name and description). |
+| `neighbours_per_entity` | `int` | `10` | Related entities followed from each matched entity in `local` mode, strongest relation first (a hub entity would otherwise pull in everything). |
+| `max_relations` | `int` | `20` | Relations around the matched entities shown to the generator in `local` mode, strongest first. |
+| `notes_max_chars` | `int` | `4000` | Characters of graph notes (entities, relations, the main community report) the generator reads in `local` mode. |
+| `max_entities_per_chunk` | `int` | `15` | Most entities the LLM may extract from one chunk at ingestion. |
+| `min_community_size` | `int` | `2` | Entities a community needs to get a report; smaller ones (a lone entity) get none. |
+| `community_max_entities` | `int` | `40` | Entities shown to the LLM when it writes a community's report: the best connected ones of a larger community. |
 
 ## `agent_search`
 

@@ -12,6 +12,7 @@ from ragbench.rag_systems.decision_gate_rag import DecisionGateRAG
 from ragbench.rag_systems.decompose_rag import DecomposeRAG
 from ragbench.rag_systems.external_http_rag import ExternalHttpRAG
 from ragbench.rag_systems.full_context_rag import FullContextRAG
+from ragbench.rag_systems.graph_rag import GraphRAG
 from ragbench.rag_systems.grep_agent_rag import GrepAgentRAG
 from ragbench.rag_systems.hierarchical_rag import HierarchicalRAG
 from ragbench.rag_systems.hybrid_rag import HybridRAG
@@ -64,6 +65,7 @@ __all__ = [
     "DecomposeRAG",
     "ExternalHttpRAG",
     "FullContextRAG",
+    "GraphRAG",
     "GrepAgentRAG",
     "HierarchicalRAG",
     "HyDERAG",

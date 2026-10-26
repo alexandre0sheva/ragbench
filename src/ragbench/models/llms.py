@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from ragbench.models import mock_agent, mock_synthesis
+from ragbench.models import mock_agent, mock_graph, mock_synthesis
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.defaults import DEFAULT_GENERATOR_MODEL
 from ragbench.models.errors import ModelInitError
@@ -342,6 +342,7 @@ for _name, _predicate, _respond in (
 ):
     MockLLM.register_responder(_predicate, _respond, name=_name)
 mock_synthesis.register(MockLLM)
+mock_graph.register(MockLLM)
 
 
 def create_llm(

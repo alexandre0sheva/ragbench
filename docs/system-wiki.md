@@ -468,6 +468,36 @@ flowchart TD
 
 **Strengths:** big corpora (the chunk search covers `docs_k × chunks_per_doc` candidates instead of everything), and questions about *which* document. **Watch out:** if routing misses the right document, nothing downstream can recover it; summaries that omit the detail you ask about make that likelier. Options: [systems.md](systems.md#hierarchical).
 
+#### `graph_rag`
+
+**Idea (GraphRAG, lite).** Some questions are about how things connect ("which city hosts the lab Alice founded?"), and some about the whole collection ("what are the main groups of suppliers?"). Neither is answered well by the chunks that look most like the question. Build a knowledge graph of the corpus at ingestion, then search the graph.
+
+```mermaid
+flowchart TD
+    subgraph Ingestion
+        C["Each chunk"] --> EX{{"LLM names its entities (type, description)<br/>and the relations between them (JSON)"}}
+        EX --> KG[("Graph: entities merged by name,<br/>relations weighted by how often they were found")]
+        KG --> LV["Louvain communities"]
+        LV --> CR{{"LLM writes a report per community<br/>of min_community_size or more entities"}}
+    end
+    subgraph "Question, mode: local"
+        Q["Question"] --> ES("entity_search: BM25 + cosine over entities, RRF,<br/>keep entities_k")
+        ES --> GX("graph_expand: the chunks those entities and their<br/>neighbours_per_entity strongest neighbours came from,<br/>RRF with a dense ranking")
+        GX --> GL{{"Generator reads the chunks, plus notes:<br/>entities, relations, the main community report"}}
+    end
+    subgraph "Question, mode: global"
+        Q2["Question"] --> CS("community_search: BM25 + cosine over reports, RRF")
+        CS --> MP{{"map_communities: one LLM call per report read,<br/>all at once, scored points (0-100)"}}
+        MP --> RD{{"reduce: the answer from the points above 0"}}
+    end
+```
+
+**Details.** Extraction is one temperature-0 call per chunk (at most `max_entities_per_chunk` entities) and one per community, run `ingest_workers` at a time and cached on disk, so the second mode and a re-run cost nothing. A failed extraction, or a reply that is not JSON (one cut off at the token limit), leaves that chunk out of the graph and is counted; when none is usable the run stops. A failed report is replaced by the community's own entity and relation lines. Entities are merged by name (case, spacing and a leading "the" do not count); their descriptions are concatenated rather than summarised again, there is one level of communities rather than a hierarchy, and there is no second "gleaning" pass, which is what makes it lite. Search is exact NumPy, so there is no `vector_store` option.
+
+In `local` mode the generator reads document chunks, so the retrieval metrics and the judge work as for any system; the entities and relations are labelled as notes, not evidence. In `global` mode the generator reads community reports: each counts as its most mentioned document for the retrieval metrics (all its documents are in the chunk's `metadata.doc_ids`), the judge reads the same reports, and `top_k` is the number of reports mapped, one extra LLM call each per question.
+
+**Strengths:** `local` for questions that bridge entities across documents; `global` for corpus-wide questions about themes and groups. **Costs:** ingestion is the most expensive of any system (an extraction call per chunk carries the chunk and asks for a long JSON reply; `ragbench estimate` prices it from measured calls), and `global` adds `top_k` calls per question (made at once, so they add one call's latency). **Watch out:** `global` is weak on fact lookup, since a report keeps the gist of a community, not its details. Options: [systems.md](systems.md#graph_rag).
+
 #### `llm_heavy`
 
 **Idea.** Three independent LLM features around a vector index: enrich chunks at ingestion, rewrite the question into several queries, rerank with an LLM. Each is a switch under `llm_features`, so this one system lets you measure each feature's marginal value.
@@ -735,6 +765,7 @@ A side-by-side view of what each system pays for and when. "Ingestion" calls hap
 | [decompose](#decompose) | embeddings | one plan, plus one per sub-question when sequential | `plan_subquestions`, `subquestion_search` per part, `sub_answer` |
 | [contextual](#contextual) | one per chunk | none | like `hybrid` |
 | [hierarchical](#hierarchical) | one per document | none | `doc_search`, `chunk_search` |
+| [graph_rag](#graph_rag) | one per chunk, one per community | none (`local`); one per report read (`global`) | `entity_search`, `graph_expand` (`local`); `community_search`, `map_communities`, `reduce` (`global`) |
 | [llm_heavy](#llm_heavy) | one per chunk if enabled | one rewrite; one rerank if enabled | `query_rewrite`, `vector_search` per query, `rerank` |
 | [corrective](#corrective) | embeddings | one grade per round, one rewrite per retry, optional self-check | `round_search`, `grade_chunks`, `rewrite_query`, `groundedness` |
 | [iterative](#iterative) | embeddings | one `next_hop` per round | `hop_search`, `next_hop` per round |

@@ -204,6 +204,7 @@ SYSTEM_CONFIGS = {
     "sentence_window": {"retrieval": {"vector_store": "in_memory"}},
     "contextual": {"retrieval": {"vector_store": "in_memory"}},
     "hierarchical": {},
+    "graph_rag": {},
     "rag_fusion": {"retrieval": {"vector_store": "in_memory"}},
     "decompose": {"retrieval": {"vector_store": "in_memory", "sequential": True}},
     "corrective": {"retrieval": {"vector_store": "in_memory"}},
@@ -265,6 +266,20 @@ def test_step_shapes_of_systems_with_extra_stages():
     kinds = [s.kind for s in heavy.steps]
     assert kinds[0] == "llm" and "rerank" in kinds and kinds[-1] == "generate"
     assert next(s for s in heavy.steps if s.kind == "rerank").cost.total_cost > 0
+
+
+def test_graph_rag_global_search_books_its_map_calls_on_steps_of_the_answer():
+    config = SystemConfig(type="graph_rag", name="graph_global_trace", chunker={"type": "token", "chunk_size": 50, "chunk_overlap": 0}, retrieval={"mode": "global", "min_community_size": 1})
+    system = create_rag_system(config, force_mock=True)
+    _make_paid(system)
+    system.ingest(_docs())
+
+    result = system.answer_question("Which product reviews marine cargo submissions?", context_k=2)
+
+    assert [(s.kind, s.name) for s in result.steps] == [("retrieve", "community_search"), ("generate", "map_communities"), ("generate", "reduce")]
+    assert sum_costs(s.cost for s in result.steps).total_cost == pytest.approx(result.cost.total_cost, rel=1e-9)
+    assert all(s.cost.llm_cost > 0 for s in result.steps[1:])
+    assert result.retrieval_result.steps == result.steps[:1]
 
 
 def test_uninstrumented_custom_systems_get_a_coarse_trace_without_losing_cost(monkeypatch):

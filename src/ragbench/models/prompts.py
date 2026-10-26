@@ -6,6 +6,12 @@ from __future__ import annotations
 SITUATE_CHUNK_MARKER = "situate this chunk within the overall document"
 SUMMARIZE_DOCUMENT_MARKER = "Write a short summary of this document so it can be found later."
 
+# `graph_rag`: entity/relation extraction and community reports at ingestion (the first JSON, the second plain text), and the
+# map step of its `global` search (JSON).
+EXTRACT_GRAPH_MARKER = "Extract the named entities in the text below and the relations between them"
+SUMMARIZE_COMMUNITY_MARKER = "Write a report on the community of related entities below"
+MAP_COMMUNITY_MARKER = "List the points of the community report below that help answer the question"
+
 # Query-time planning prompts of `rag_fusion` and `decompose` (JSON answers).
 GENERATE_QUERY_VARIANTS_MARKER = "Write alternative search queries for the question below"
 PLAN_SUBQUESTIONS_MARKER = "Break the question below into the ordered sub-questions needed to answer it"

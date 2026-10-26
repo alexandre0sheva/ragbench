@@ -1,0 +1,60 @@
+run:
+  name: graph_rag_demo
+  output_dir: results
+
+dataset:
+  documents_path: data/demo/docs
+  questions_path: data/demo/questions.jsonl
+  qrels_path: data/demo/qrels.jsonl
+
+# GraphRAG-lite in both search modes, next to the hybrid search it has to beat. Ingestion makes one LLM call per chunk (entities and
+# relations) and one per community (its report); both are temperature 0, so the disk cache makes the second mode and re-runs free.
+# `ragbench estimate --config configs/graph_rag.yaml` prices the ingestion before you spend anything.
+systems:
+  - type: hybrid
+    name: hybrid_reference
+    chunker:
+      type: word
+      chunk_size: 300
+      chunk_overlap: 40
+    retrieval:
+      vector_store: numpy
+      final_top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: graph_rag
+    name: graph_rag_local
+    chunker:
+      type: word
+      chunk_size: 300
+      chunk_overlap: 40
+    retrieval:
+      mode: local
+      top_k: 5
+      entities_k: 10
+      max_relations: 20
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: graph_rag
+    name: graph_rag_global
+    chunker:
+      type: word
+      chunk_size: 300
+      chunk_overlap: 40
+    retrieval:
+      mode: global
+      top_k: 5   # community reports the map step reads: one extra LLM call each per question
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  judge_model: anthropic:claude-haiku-5-5   # another model family than the generators (self-preference); live: ANTHROPIC_API_KEY + ragbench[anthropic]
+  max_questions: null
+  max_workers: 4

@@ -14,12 +14,15 @@ T = TypeVar("T")
 R = TypeVar("R")
 
 
-def map_llm_calls(fn: Callable[[T], R], items: Iterable[T], *, workers: int, what: str, thread_name_prefix: str) -> tuple[list[R | None], int]:
+def map_llm_calls(
+    fn: Callable[[T], R], items: Iterable[T], *, workers: int, what: str, thread_name_prefix: str, raise_when_all_fail: bool = True
+) -> tuple[list[R | None], int]:
     """`fn` over `items` (in parallel, order kept) with one slot per item: its result, or None when its call raised.
 
     Returns the slots and the number of failures. The caller degrades the failed items (no context, a lead-text summary), because one
     flaky call should not lose a run. But when *every* call failed, nothing worked (typically a bad key or model name), so the first
-    error is raised instead of quietly producing a run that is not the system it claims to be.
+    error is raised instead of quietly producing a run that is not the system it claims to be. Pass `raise_when_all_fail=False` when
+    an earlier stage already proved the model works and every item has a fallback.
     """
 
     def guarded(item: T) -> tuple[R | None, Exception | None]:
@@ -31,6 +34,6 @@ def map_llm_calls(fn: Callable[[T], R], items: Iterable[T], *, workers: int, wha
 
     outcomes = ordered_parallel_map(guarded, items, workers=workers, thread_name_prefix=thread_name_prefix)
     errors = [error for _, error in outcomes if error is not None]
-    if errors and len(errors) == len(outcomes):
+    if raise_when_all_fail and errors and len(errors) == len(outcomes):
         raise errors[0]
     return [result for result, _ in outcomes], len(errors)

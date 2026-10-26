@@ -350,6 +350,28 @@ class HierarchicalOptions(TopKOptions, FusionOptions):
     summary_max_chars: int = Field(default=6000, ge=200, description="Characters of each document shown to the LLM when it writes the summary.")
 
 
+class GraphRAGOptions(TopKOptions, FusionOptions):
+    mode: Literal["local", "global"] = Field(
+        default="local",
+        description=(
+            "`local`: match the question to entities, follow their relations, and return the chunks they came from, with the entities and "
+            "relations as notes for the generator. `global`: rank the community reports and answer by map-reduce over them (one extra LLM "
+            "call per report the generator reads); `top_k` then counts reports."
+        ),
+    )
+    entities_k: int = Field(default=10, ge=1, description="Entities matched to the question in `local` mode (BM25 and embedding similarity over each entity's name and description).")
+    neighbours_per_entity: int = Field(
+        default=10, ge=0, description="Related entities followed from each matched entity in `local` mode, strongest relation first (a hub entity would otherwise pull in everything)."
+    )
+    max_relations: int = Field(default=20, ge=0, description="Relations around the matched entities shown to the generator in `local` mode, strongest first.")
+    notes_max_chars: int = Field(default=4000, ge=0, description="Characters of graph notes (entities, relations, the main community report) the generator reads in `local` mode.")
+    max_entities_per_chunk: int = Field(default=15, ge=1, le=100, description="Most entities the LLM may extract from one chunk at ingestion.")
+    min_community_size: int = Field(default=2, ge=1, description="Entities a community needs to get a report; smaller ones (a lone entity) get none.")
+    community_max_entities: int = Field(
+        default=40, ge=2, description="Entities shown to the LLM when it writes a community's report: the best connected ones of a larger community."
+    )
+
+
 class LLMQueryOptions(VectorOptions, FinalTopKOptions, FusionOptions):
     """Shared by the systems that search several LLM-planned queries and merge the rankings with RRF."""
 
