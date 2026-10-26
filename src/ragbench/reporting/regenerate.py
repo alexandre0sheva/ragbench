@@ -6,14 +6,16 @@ the CSV, JSON and JSONL files the run wrote. `ragbench report RUN` calls this, s
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from ragbench.evaluation.contrast import read_summaries
 from ragbench.reporting.explorer_data import DEFAULT_MAX_EMBEDDED_MB
 from ragbench.reporting.html_report import write_report
-from ragbench.reporting.markdown_report import stage_summary, write_failures, write_leaderboard, write_qrels_audit
+from ragbench.reporting.markdown_report import STAGES_FILE, stage_summary, write_failures, write_leaderboard, write_qrels_audit
 from ragbench.reporting.report_data import ReportError, _read_csv, _read_json, _read_jsonl
 
 
@@ -25,6 +27,26 @@ def _max_embedded_mb(run_dir: Path) -> float:
         return float(value) if value else DEFAULT_MAX_EMBEDDED_MB
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError):
         return DEFAULT_MAX_EMBEDDED_MB
+
+
+def _stage_rows(run_dir: Path, per_question: list[dict[str, Any]], systems: list[str], notes: list[str]) -> list[dict[str, Any]]:
+    """The stage tables: from the per-question rows, else from the `stages.json` the run wrote (a published run folder keeps no
+    per-question rows, and rebuilding its leaderboard must not drop the tables)."""
+    if per_question:
+        return stage_summary(per_question, systems)
+    saved = _read_json_list(run_dir / STAGES_FILE)
+    if saved is None:
+        notes.append(f"stage tables left out of leaderboard.md: the run has neither per_question_results.jsonl nor {STAGES_FILE}")
+        return []
+    return [row for row in saved if isinstance(row, dict) and row.get("system") in systems]
+
+
+def _read_json_list(path: Path) -> list[Any] | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else None
+    except ValueError:
+        return None
+    return value if isinstance(value, list) else None
 
 
 def regenerate_reports(run_dir: Path) -> tuple[list[Path], list[str]]:
@@ -46,7 +68,7 @@ def regenerate_reports(run_dir: Path) -> tuple[list[Path], list[str]]:
         summary,
         notices=run_summary.get("notices") or None,
         primary_k=primary_k,
-        stage_rows=stage_summary(per_question, [str(row["system"]) for row in summary]),
+        stage_rows=_stage_rows(run_dir, per_question, [str(row["system"]) for row in summary], notes),
         significance_rows=_read_csv(run_dir / "significance.csv"),
         stats_info=stats or None,
         pairwise=run_summary.get("pairwise"),

@@ -12,7 +12,9 @@ Needs `pip install 'ragbench[haystack]'`. The tutorial's defaults: a `DocumentSp
 `InMemoryDocumentStore`, and a query pipeline of text embedder, `InMemoryEmbeddingRetriever`, `PromptBuilder` and `OpenAIGenerator`. The model and the
 embeddings are the built-in systems' (`gpt-6-luna`, `text-embedding-3-small`); the retrieval depth is RAGBench's `top_k`, so the systems are compared at the same depth.
 
-With no key, or without `RAGBENCH_REFERENCE_LIVE=1`, it runs on RAGBench's mock models (see `ragbench.adapters.offline`).
+With no key, or without `RAGBENCH_REFERENCE_LIVE=1`, it runs on RAGBench's mock models (see `ragbench.adapters.offline`). Live, the generator is Haystack's own
+`OpenAIGenerator`; the embedders call RAGBench's client (the same `text-embedding-3-small` vectors), so indexing a large corpus honours the run's
+`limits.tokens_per_minute`, retries and embedding cache.
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ from haystack.document_stores.in_memory import InMemoryDocumentStore
 from ragbench.adapters import offline
 from ragbench.adapters.haystack import from_pipeline
 from ragbench.models.defaults import DEFAULT_EMBEDDING_MODEL, DEFAULT_GENERATOR_MODEL
+from ragbench.models.embeddings import create_embedding_model
 
 TEMPLATE = """Given the following information, answer the question.
 
@@ -55,6 +58,26 @@ class OfflineDocumentEmbedder:
 
 
 @component
+class RagbenchTextEmbedder:
+    @component.output_types(embedding=list[float])
+    def run(self, text: str) -> dict[str, Any]:
+        return {"embedding": _ragbench_embed([text])[0]}
+
+
+@component
+class RagbenchDocumentEmbedder:
+    @component.output_types(documents=list[Document])
+    def run(self, documents: list[Document]) -> dict[str, Any]:
+        vectors = _ragbench_embed([document.content or "" for document in documents])
+        return {"documents": [replace(document, embedding=vector) for document, vector in zip(documents, vectors, strict=True)]}
+
+
+def _ragbench_embed(texts: list[str]) -> list[list[float]]:
+    """`text-embedding-3-small` through RAGBench's client (throttled, retried and cached like the built-in systems' embeddings)."""
+    return [[float(x) for x in row] for row in create_embedding_model(DEFAULT_EMBEDDING_MODEL).embed_texts(texts).vectors]
+
+
+@component
 class OfflineGenerator:
     @component.output_types(replies=list[str], meta=list[dict[str, Any]])
     def run(self, prompt: str) -> dict[str, Any]:
@@ -68,11 +91,10 @@ _pipeline: Pipeline | None = None
 def ingest(documents: list[Any]) -> None:
     global _pipeline
     if offline.live():
-        from haystack.components.embedders import OpenAIDocumentEmbedder, OpenAITextEmbedder
         from haystack.components.generators import OpenAIGenerator
 
-        document_embedder: Any = OpenAIDocumentEmbedder(model=DEFAULT_EMBEDDING_MODEL)
-        text_embedder: Any = OpenAITextEmbedder(model=DEFAULT_EMBEDDING_MODEL)
+        document_embedder: Any = RagbenchDocumentEmbedder()
+        text_embedder: Any = RagbenchTextEmbedder()
         generator: Any = OpenAIGenerator(model=DEFAULT_GENERATOR_MODEL, generation_kwargs={"temperature": 0})
     else:
         document_embedder, text_embedder, generator = OfflineDocumentEmbedder(), OfflineTextEmbedder(), OfflineGenerator()

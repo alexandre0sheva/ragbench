@@ -224,6 +224,14 @@ def parse_row(document: Document) -> dict[str, str]:
     return row
 
 
+def _cell(row: dict[str, str], column: str) -> str:
+    """A column's value, matched ignoring case and surrounding spaces as `where` is (`Product` finds `product`)."""
+    if column in row:
+        return row[column]
+    wanted = column.strip().lower()
+    return next((value for name, value in row.items() if name.lower() == wanted), "")
+
+
 class LookupTableArgs(BaseModel):
     where: dict[str, str] = Field(description='Column values the row must have, e.g. {"product": "HarborShield"}. Compared ignoring case and surrounding spaces.')
     select: list[str] | None = Field(default=None, description="Columns to return (default: all of them).")
@@ -256,7 +264,7 @@ class LookupTableTool(BaseTool):
         if not found:
             columns = sorted({column for _, row in rows for column in row})[:20]
             return ToolResult.ok(f"No row matches {json.dumps(args.where)}. Columns: {', '.join(columns)}.", data=[])
-        selected = [{c: r.get(c, "") for c in (args.select or list(r))} for _, r in found[: args.limit]]
+        selected = [{c: _cell(r, c) for c in (args.select or list(r))} for _, r in found[: args.limit]]
         lines = [f"{d.doc_id}: " + "; ".join(f"{c}={v}" for c, v in s.items()) for (d, _), s in zip(found, selected, strict=False)]
         footer = f"\n({len(found) - args.limit} more rows match)" if len(found) > args.limit else ""
         return ToolResult.ok("\n".join(lines) + footer, data=selected)

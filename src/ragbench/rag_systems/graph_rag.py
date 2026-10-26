@@ -424,8 +424,10 @@ def _points(text: str) -> list[tuple[int, str]]:
         if not isinstance(item, dict) or not isinstance(item.get("text"), str) or not item["text"].strip():
             continue
         try:
-            score = int(float(item.get("score") or 0))
+            value = float(item.get("score") or 0)
         except (TypeError, ValueError):
-            score = 0
-        points.append((max(0, min(100, score)), " ".join(item["text"].split())))
+            value = 0.0
+        # Clamped as a float, so `Infinity` or `1e999` is 100 rather than an OverflowError, and NaN counts as missing.
+        score = 0 if value != value else int(max(0.0, min(100.0, value)))
+        points.append((score, " ".join(item["text"].split())))
     return points

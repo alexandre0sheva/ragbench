@@ -73,10 +73,24 @@ class PythonCallableRAG(ExternalRAG):
 
     def _ingest_external(self, documents: list[Document]) -> None:
         if self._ingest is not None:
-            self._ingest(documents)
+            self._offline_guard(self._ingest, documents)
+
+    def _offline_guard(self, function: Callable[..., Any], *args: Any) -> Any:
+        """Call the user's function; in a live run, refuse a result made with RAGBench's offline mock models (the reference pipelines fall
+        back to them without `RAGBENCH_REFERENCE_LIVE=1`), which would otherwise be scored and priced as the real pipeline's."""
+        from ragbench.adapters import offline
+
+        before = offline.calls()
+        result = function(*args)
+        if not self.force_mock and offline.calls() != before:
+            raise RuntimeError(
+                f"{self.name}: {self.options.target} used RAGBench's offline mock models in a live run. "
+                "Set RAGBENCH_REFERENCE_LIVE=1 (and OPENAI_API_KEY) to run it for real, or run with --mock."
+            )
+        return result
 
     def _call(self, question: str, top_k: int) -> ExternalReply:
-        result = self._answer(question, top_k)
+        result = self._offline_guard(self._answer, question, top_k)
         if isinstance(result, AnswerResult):
             chunks = result.retrieval_result.chunks
             return ExternalReply(

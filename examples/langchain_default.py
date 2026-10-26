@@ -12,7 +12,9 @@ Needs `pip install 'ragbench[langchain]'`. The tutorial's defaults: `RecursiveCh
 vector store, one retrieval, a "use the context" prompt, a chat model at temperature 0. The model and the embeddings are the built-in systems'
 (`gpt-6-luna`, `text-embedding-3-small`); the retrieval depth is RAGBench's `top_k`, so the systems are compared at the same depth.
 
-With no key, or without `RAGBENCH_REFERENCE_LIVE=1`, it runs on RAGBench's mock models (see `ragbench.adapters.offline`).
+With no key, or without `RAGBENCH_REFERENCE_LIVE=1`, it runs on RAGBench's mock models (see `ragbench.adapters.offline`). Live, the chat model is LangChain's own
+`ChatOpenAI`; the embeddings go through RAGBench's client (the same `text-embedding-3-small` vectors), so indexing a large corpus honours the run's
+`limits.tokens_per_minute`, retries and embedding cache instead of tripping OpenAI's rate limit with LangChain's 1000-text batches.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from ragbench.adapters import offline
 from ragbench.adapters.langchain import from_retriever
 from ragbench.models.defaults import DEFAULT_EMBEDDING_MODEL, DEFAULT_GENERATOR_MODEL
+from ragbench.models.embeddings import create_embedding_model
 
 PROMPT = ChatPromptTemplate.from_template(
     "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. "
@@ -46,6 +49,16 @@ class OfflineEmbeddings(Embeddings):
 
     def embed_query(self, text: str) -> list[float]:
         return offline.embed([text])[0]
+
+
+class RagbenchEmbeddings(Embeddings):
+    """`text-embedding-3-small` through RAGBench's client (throttled, retried and cached like the built-in systems' embeddings)."""
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[float(x) for x in row] for row in create_embedding_model(DEFAULT_EMBEDDING_MODEL).embed_texts(texts).vectors]
+
+    def embed_query(self, text: str) -> list[float]:
+        return self.embed_documents([text])[0]
 
 
 class OfflineChatModel(BaseChatModel):
@@ -70,9 +83,9 @@ def _format(inputs: dict[str, Any]) -> dict[str, Any]:
 def ingest(documents: list[Any]) -> None:
     global _store, _generate
     if offline.live():
-        from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+        from langchain_openai import ChatOpenAI
 
-        embeddings: Embeddings = OpenAIEmbeddings(model=DEFAULT_EMBEDDING_MODEL)
+        embeddings: Embeddings = RagbenchEmbeddings()
         llm: Any = ChatOpenAI(model=DEFAULT_GENERATOR_MODEL, temperature=0)
     else:
         embeddings, llm = OfflineEmbeddings(), OfflineChatModel()

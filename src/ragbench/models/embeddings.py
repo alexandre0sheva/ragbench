@@ -14,6 +14,7 @@ from ragbench.models.cost import CostBreakdown, estimate_model_cost
 from ragbench.models.defaults import DEFAULT_EMBEDDING_MODEL
 from ragbench.models.errors import ModelInitError
 from ragbench.models.refs import parse_model_ref, provider_reachable
+from ragbench.models.spend import note_spend
 from ragbench.models.usage import note_embedding, recording
 from ragbench.utils.hashing import stable_hash
 from ragbench.utils.text import estimate_tokens, tokenize
@@ -150,6 +151,16 @@ class CachedEmbeddingModel(EmbeddingModel):
         return cache_key("embeddings", model=self.model_name, kind=kind, text=text_hash)
 
     def embed_texts(self, texts: list[str]) -> EmbeddingResult:
+        result = self._embed_texts(texts)
+        note_spend(result.cost)
+        return result
+
+    def embed_query(self, text: str) -> EmbeddingResult:
+        result = self._embed_query(text)
+        note_spend(result.cost)
+        return result
+
+    def _embed_texts(self, texts: list[str]) -> EmbeddingResult:
         runtime = self._runtime()
         if not texts or (not EMBEDDING_CACHE.enabled and runtime is None):
             return self.inner.embed_texts(texts)
@@ -219,7 +230,7 @@ class CachedEmbeddingModel(EmbeddingModel):
             cost=CostBreakdown(embedding_input_tokens=charged_tokens, embedding_cost=cost),
         )
 
-    def embed_query(self, text: str) -> EmbeddingResult:
+    def _embed_query(self, text: str) -> EmbeddingResult:
         runtime = self._runtime()
         if runtime is None or not runtime.config.cache_query_embeddings:
             return self.inner.embed_query(text)

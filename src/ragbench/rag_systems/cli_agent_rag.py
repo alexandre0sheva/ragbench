@@ -26,6 +26,7 @@ from ragbench.documents.schema import Document
 from ragbench.models import cost as pricing
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.refs import parse_model_ref
+from ragbench.models.spend import note_spend
 from ragbench.rag_systems.cli_trajectory import PARSERS, ToolCall, Trajectory, Turn, action_kind, evidence_paths, input_text
 from ragbench.rag_systems.external_http_rag import fill_env
 from ragbench.rag_systems.external_rag import ExternalRAG, ExternalReply
@@ -214,6 +215,8 @@ class CliAgentRAG(ExternalRAG):
                 _drain(process.stdout)
                 process.wait()
             trajectory = parser.trajectory
+            if timed_out.is_set() or (not stopped and (trajectory.error or process.returncode != 0)):
+                self._charge_partial(trajectory)  # the harness was billed for the turns it ran, even though the answer is lost
             if timed_out.is_set():
                 raise RuntimeError(f"{self.name}: the harness did not finish within {self.options.timeout_s:g} s")
             if stopped:
@@ -226,6 +229,13 @@ class CliAgentRAG(ExternalRAG):
                 tail = stderr.read()[-STDERR_TAIL:].strip()
                 raise RuntimeError(f"{self.name}: `{argv[0]}` exited with code {process.returncode}" + (f": {tail}" if tail else ""))
         return trajectory, stopped
+
+    def _charge_partial(self, trajectory: Trajectory) -> None:
+        costs, known = self._turn_costs(trajectory)
+        if costs:
+            note_spend(sum_costs(costs.values()))
+        elif known and trajectory.cost_usd:  # a reported total and no turns to spread it over
+            note_spend(CostBreakdown(llm_cost=trajectory.cost_usd))
 
     def _answer(self, workspace: Path, trajectory: Trajectory) -> str:
         if self.options.answer_file:

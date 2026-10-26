@@ -50,13 +50,23 @@ def _retry_after_seconds(exc: Any) -> float | None:
         return None
 
 
+def _out_of_credit(exc: Any) -> bool:
+    """OpenAI answers 429 `insufficient_quota` when the account has no credit left: no amount of waiting fixes that."""
+    body = getattr(exc, "body", None)
+    error = body.get("error", body) if isinstance(body, dict) else None
+    code = getattr(exc, "code", None) or (error.get("code") or error.get("type") if isinstance(error, dict) else None)
+    return code == "insufficient_quota" or "insufficient_quota" in str(exc)
+
+
 def _translate_sdk_exception(exc: Exception, sdk: Any) -> Exception:
     """Shared by SDKs with the openai/anthropic exception layout (`RateLimitError`, `APIStatusError`, ...)."""
     if isinstance(exc, RagbenchModelError):
         return exc
     message = str(exc)
-    if isinstance(exc, sdk.RateLimitError):
-        error: RagbenchModelError = RateLimitError(message, retry_after=_retry_after_seconds(exc))
+    if isinstance(exc, sdk.RateLimitError) and _out_of_credit(exc):
+        error: RagbenchModelError = PermanentModelError(f"the account is out of credit (top it up, then resume the run): {message}")
+    elif isinstance(exc, sdk.RateLimitError):
+        error = RateLimitError(message, retry_after=_retry_after_seconds(exc))
     elif isinstance(exc, sdk.APITimeoutError | sdk.APIConnectionError | sdk.InternalServerError):
         error = TransientModelError(message)
     elif isinstance(exc, sdk.APIStatusError):

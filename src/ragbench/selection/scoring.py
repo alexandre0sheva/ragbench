@@ -84,13 +84,16 @@ def weighted_scores(quality: dict[str, float | None], cost: dict[str, float | No
 def efficiency_penalties(cost: dict[str, float | None], latency: dict[str, float | None], weights: Weights) -> dict[str, float]:
     """How much worse each system is on cost and latency than the best of the group (0 = best), weighted by the profile.
 
-    Used to choose between systems whose quality cannot be told apart. With no weight on cost or latency, cost decides.
+    Used to choose between systems whose quality cannot be told apart. With no weight on cost or latency, cost decides. A value that was not
+    measured (unknown cost) counts as the worst of the group on that axis when another system has one: unknown is never the cheapest.
     """
     cost_weight, latency_weight = (weights.cost, weights.latency) if weights.cost + weights.latency > 0 else (1.0, 0.0)
     scaled_cost, scaled_latency = normalize(cost, higher_is_better=False), normalize(latency, higher_is_better=False)
+    has_cost, has_latency = any(v is not None for v in scaled_cost.values()), any(v is not None for v in scaled_latency.values())
     penalties: dict[str, float] = {}
     for system in cost:
-        parts = [(cost_weight, scaled_cost[system]), (latency_weight, scaled_latency[system])]
-        total = sum(weight for weight, value in parts if value is not None)
-        penalties[system] = sum(weight * (1 - value) for weight, value in parts if value is not None) / total if total > 0 else 0.0
+        axes = [(cost_weight, scaled_cost[system], has_cost), (latency_weight, scaled_latency[system], has_latency)]
+        parts = [(weight, 0.0 if value is None else value) for weight, value, measured in axes if measured]
+        total = sum(weight for weight, _ in parts)
+        penalties[system] = sum(weight * (1 - value) for weight, value in parts) / total if total > 0 else 0.0
     return penalties

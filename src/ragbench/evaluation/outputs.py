@@ -36,7 +36,7 @@ from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.providers.openrouter import manifest_settings
 from ragbench.models.refs import answering_model
 from ragbench.reporting.html_report import write_report as write_html_report
-from ragbench.reporting.markdown_report import stage_summary, write_failures, write_leaderboard, write_qrels_audit
+from ragbench.reporting.markdown_report import STAGES_FILE, stage_summary, write_failures, write_leaderboard, write_qrels_audit
 from ragbench.reporting.notices import build_notices
 from ragbench.reporting.schemas import SCHEMA_VERSION
 from ragbench.selection.recommend import recommend
@@ -154,13 +154,18 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
     pd.DataFrame(run_stats.significance_rows, columns=SIGNIFICANCE_COLUMNS).to_csv(out / "significance.csv", index=False)
     (out / "stats.json").write_text(json.dumps(run_stats.stats, indent=2), encoding="utf-8")
     (out / "pareto.json").write_text(json.dumps(run_stats.pareto, indent=2), encoding="utf-8")
+    stage_rows = stage_summary(per_question_rows, [cfg.resolved_name for cfg in systems])
+    # The stage tables again, for `ragbench report` on a published run folder that keeps no per-question rows.
+    (out / STAGES_FILE).write_text(json.dumps(stage_rows, indent=2), encoding="utf-8")
     if routes := build_routes(systems, per_question_rows):
         pd.DataFrame(routes).to_csv(out / "routes.csv", index=False)
     if tool_usage := build_tool_usage(systems, per_question_rows):
         pd.DataFrame(tool_usage).to_csv(out / "tool_usage.csv", index=False)
     unknown_priced = pricing.unknown_priced_models()
     # Pairwise judging is charged like pointwise judging (standalone prices, cache hits included), but to the run rather than a system.
-    charged = float(sum(row.get("total_cost", 0.0) for row in [*rows.ingestion, *rows.cost])) + (pairwise or {}).get("cost_usd", 0.0)
+    # Failed questions have no cost row, but what they spent before failing was paid too.
+    failed_spend = sum(float(row["cost"]["total_cost"]) for row in per_question_rows if row["error"] is not None)
+    charged = float(sum(row.get("total_cost", 0.0) for row in [*rows.ingestion, *rows.cost])) + failed_spend + (pairwise or {}).get("cost_usd", 0.0)
     in_process = EMBEDDING_CACHE.stats()
     probe_cost = sum(probe.cost_usd for probe in run.probe_results.values())
     probe_calls = sum(probe.calls for probe in run.probe_results.values())
@@ -193,7 +198,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
         summary_rows,
         notices=notices,
         primary_k=evaluation.resolved_primary_k,
-        stage_rows=stage_summary(per_question_rows, [cfg.resolved_name for cfg in systems]),
+        stage_rows=stage_rows,
         significance_rows=run_stats.significance_rows,
         stats_info=run_stats.stats,
         pairwise=pairwise,
@@ -251,6 +256,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
                     "stats": "stats.json",
                     "significance": "significance.csv",
                     "pareto": "pareto.json",
+                    "stages": STAGES_FILE,
                     "recommendation": "recommendation.md",
                     **({"arena": "arena.csv", "pairwise": "pairwise.jsonl"} if pairwise is not None else {}),
                     **({"contrasts": CONTRASTS_FILE} if contrast is not None else {}),

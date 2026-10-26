@@ -63,7 +63,8 @@ def tag_trial(result: dict[str, Any], trial: int) -> dict[str, Any]:
     return result
 
 
-def error_result(system: BaseRAGSystem, system_config: SystemConfig, question, error: dict[str, str]) -> dict[str, Any]:
+def error_result(system: BaseRAGSystem, system_config: SystemConfig, question, error: dict[str, str], *, cost: CostBreakdown | None = None) -> dict[str, Any]:
+    """The rows of a question that failed: no scores, and `cost` = what it spent before failing (it is charged, never averaged)."""
     zero_judge = {
         "correctness": 0.0,
         "faithfulness": 0.0,
@@ -90,7 +91,7 @@ def error_result(system: BaseRAGSystem, system_config: SystemConfig, question, e
         "retrieved_contexts": [],
         "retrieval_metrics": {},
         "answer_judge": zero_judge,
-        "cost": CostBreakdown().as_dict(),
+        "cost": (cost or CostBreakdown()).as_dict(),
         "latency_ms": 0.0,
         "failure_type": "run_error",
         "error": error,

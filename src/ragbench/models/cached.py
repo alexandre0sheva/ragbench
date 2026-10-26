@@ -9,6 +9,7 @@ from ragbench.cache import active_cache, cache_key
 from ragbench.cache.trial import trial_key
 from ragbench.models.cost import CostBreakdown, estimate_model_cost
 from ragbench.models.llms import LLM, LLMResult, ToolCall
+from ragbench.models.spend import note_spend
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,13 @@ class CachedLLM(LLM):
         max_tokens: int | None = None,
         json_mode: bool = False,
         tools: list[dict[str, Any]] | None = None,
+    ) -> LLMResult:
+        result = self._generate(messages, temperature=temperature, max_tokens=max_tokens, json_mode=json_mode, tools=tools)
+        note_spend(result.cost)  # what the question has paid so far, should it fail before it finishes
+        return result
+
+    def _generate(
+        self, messages: list[dict[str, Any]], *, temperature: float, max_tokens: int | None, json_mode: bool, tools: list[dict[str, Any]] | None
     ) -> LLMResult:
         runtime = active_cache()
         temperature = temperature or 0

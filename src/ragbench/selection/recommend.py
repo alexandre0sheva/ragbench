@@ -310,7 +310,8 @@ def recommend(
         return base
 
     quality = {system: _mean(vectors[system]) for system in feasible}
-    cost = {system: run.summary[system].get("avg_cost_per_question") for system in feasible}
+    # An external system that reported no cost is recorded at $0; that is unknown, not free, so it must not win a tie on cost.
+    cost = {system: None if _cost_unknown(run.rows[system]) else run.summary[system].get("avg_cost_per_question") for system in feasible}
     latency = {system: run.summary[system].get("latency_ms_p95") for system in feasible}
     scores = weighted_scores(quality, cost, latency, weights)
     steps = {system: _step_counts(run.rows[system]) for system in feasible}
@@ -375,6 +376,11 @@ def recommend(
         alpha=alpha,
     )
     return base
+
+
+def _cost_unknown(rows: dict[str, list[dict[str, Any]]]) -> bool:
+    """Whether some answer's cost is unknown (an external system that reported neither a cost nor priced tokens)."""
+    return any((row.get("external") or {}).get("cost_known") is False for trials in rows.values() for row in trials)
 
 
 def _step_counts(rows: dict[str, list[dict[str, Any]]]) -> tuple[float, float]:
@@ -485,7 +491,7 @@ def winner_yaml_text(run_dir: Path, winner: str) -> str:
     if stats:
         evaluation["stats"] = stats
     out: dict[str, Any] = {"run": run_block, "dataset": raw.get("dataset", {}), "systems": systems}
-    for key in ("providers", "tools", "pricing", "limits", "cache"):
+    for key in ("providers", "openrouter", "tools", "pricing", "limits", "cache"):  # `openrouter:` sets reasoning and provider pinning
         if key in raw:
             out[key] = raw[key]
     if evaluation:

@@ -33,9 +33,11 @@ def _documents() -> list[Document]:
     return [Document(doc_id=doc_id, path=f"{doc_id}.md", title=doc_id, text=text) for doc_id, text in DOCUMENTS.items()]
 
 
-def _system(target=None, *, ingest=None, **options):
-    """A `python_callable` system around a target built in the test (a path-string target would import the example file instead)."""
-    system = create_rag_system(SystemConfig(type="python_callable", name="framework", retrieval={"target": "external_support:answer", "model": "gpt-6-luna", **options}))
+def _system(target=None, *, ingest=None, mock=True, **options):
+    """A `python_callable` system around a target built in the test (a path-string target would import the example file instead). The
+    pipelines here run on the offline models, which only a `--mock` run may score, so the system is a mock run's unless `mock=False`."""
+    config = SystemConfig(type="python_callable", name="framework", retrieval={"target": "external_support:answer", "model": "gpt-6-luna", **options})
+    system = create_rag_system(config, force_mock=mock)
     if target is not None:
         system._answer = target
     system.ingest(_documents())
@@ -104,6 +106,18 @@ def test_a_missing_extra_gives_the_one_line_install_command(monkeypatch, module,
     with pytest.raises(MissingExtraError) as error:
         call(adapter)
     assert f"pip install 'ragbench[{extra}]'" in str(error.value) and package in str(error.value) and "\n" not in str(error.value)
+
+
+def test_a_live_run_refuses_a_pipeline_that_answers_with_the_offline_models():
+    """Without RAGBENCH_REFERENCE_LIVE=1 the reference pipelines fall back to the mock models; a live run must fail them, not score them."""
+
+    def offline_answer(question, top_k):
+        text, prompt_tokens, completion_tokens = offline.answer("HarborShield costs $200 per month.", question)
+        return {"answer": text, "contexts": [], "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}}
+
+    with pytest.raises(RuntimeError, match="offline mock models in a live run"):
+        _system(offline_answer, mock=False).answer_question(QUESTIONS[0], top_k=3)
+    assert _system(offline_answer).answer_question(QUESTIONS[0], top_k=3).answer  # under --mock it is the point
 
 
 def test_the_reference_pipelines_spend_nothing_unless_asked_to(monkeypatch):
@@ -242,7 +256,7 @@ def test_the_llamaindex_reference_pipeline_runs_live_on_ragbench_clients_without
     module = _example("llamaindex_default")
     module.ingest(_documents())
     assert type(module._llm).__name__ == "OpenAI" and module._llm.metadata.is_chat_model
-    result = _system(module.answer).answer_question(QUESTIONS[0], top_k=3)
+    result = _system(module.answer, mock=False).answer_question(QUESTIONS[0], top_k=3)  # a live run: the offline models must not be touched
 
     assert _kinds(result) == [("retrieve", "llamaindex_retriever"), ("generate", "llamaindex_llm")]
     generate = result.steps[-1]

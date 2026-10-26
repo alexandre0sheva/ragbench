@@ -7,6 +7,8 @@ from typing import Any
 from ragbench.rag_systems.trace import STAGE_KEYS, UNTRACKED, mean_by_stage
 from ragbench.reporting.columns import MISSING, Column, format_cell, leaderboard_columns, to_float
 
+STAGES_FILE = "stages.json"  # what `stage_summary` gave when the run was made
+
 
 def stage_summary(per_question_rows: list[dict[str, Any]], systems: list[str]) -> list[dict[str, Any]]:
     """Mean per-question cost and latency by stage for each system, in the order of `systems` (failed questions excluded)."""
@@ -290,5 +292,6 @@ def _markdown_table(columns: list[str], rows: list[dict[str, str]]) -> str:
     sep = "| " + " | ".join(["---"] * len(columns)) + " |"
     body = []
     for row in rows:
-        body.append("| " + " | ".join(str(row.get(col, "")).replace("\n", " ") for col in columns) + " |")
+        # A `|` in a cell (a question that contains one) would otherwise split it into two columns.
+        body.append("| " + " | ".join(str(row.get(col, "")).replace("\n", " ").replace("|", "\\|") for col in columns) + " |")
     return "\n".join([header, sep, *body])

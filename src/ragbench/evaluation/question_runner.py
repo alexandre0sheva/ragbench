@@ -17,6 +17,7 @@ from ragbench.evaluation.judge_panel import JudgePanel
 from ragbench.evaluation.retrieval_metrics import compute_retrieval_metrics
 from ragbench.evaluation.rows import build_question_rows, error_result
 from ragbench.models.refs import answering_model
+from ragbench.models.spend import metering
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem, given_context
 from ragbench.rag_systems.external_rag import unscored_retrieval
 
@@ -42,12 +43,14 @@ def evaluate_question(
     evaluation: EvaluationConfig,
     checks: AnswerChecks | None = None,
 ) -> dict[str, Any]:
-    """The question's rows; a question that raises becomes an error result instead of failing the run."""
-    try:
-        return _score_question(system, system_config, question, qrels, judge, evaluation, checks or AnswerChecks())
-    except Exception as exc:
-        logger.warning("Question %s failed for system %s: %s: %s", question.id, system.name, type(exc).__name__, exc)
-        return error_result(system, system_config, question, _error_info(exc))
+    """The question's rows; a question that raises becomes an error result instead of failing the run. The error result carries what
+    the question had already paid for (calls made before it failed), so the spending cap and the run's spend still count it."""
+    with metering() as meter:
+        try:
+            return _score_question(system, system_config, question, qrels, judge, evaluation, checks or AnswerChecks())
+        except Exception as exc:
+            logger.warning("Question %s failed for system %s: %s: %s", question.id, system.name, type(exc).__name__, exc)
+            return error_result(system, system_config, question, _error_info(exc), cost=meter.cost)
 
 
 def _score_question(

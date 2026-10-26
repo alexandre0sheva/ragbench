@@ -135,7 +135,7 @@ def test_llm_reranker_follows_the_models_order_charges_its_cost_and_falls_back_w
     assert result.cost.rerank_cost == 0.5
     garbage = create_reranker("llm", llm=ScriptedLLM(["ghost"])).rerank(QUESTION, _chunks(), top_k=3)
     assert len(garbage.chunks) == 3 and all("original_rank" in c.metadata for c in garbage.chunks)
-    assert garbage.cost.llm_cost == 0.5, "the failed LLM call was still paid for"
+    assert garbage.cost.rerank_cost == 0.5, "the failed LLM call was still paid for, as reranking"
 
 
 def test_the_llm_reranker_degrades_to_the_free_keyword_reranker_without_an_llm():

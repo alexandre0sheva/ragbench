@@ -59,4 +59,4 @@ class LLMReranker:
             return RerankResult(chunks=final, cost=CostBreakdown(rerank_cost=result.cost.total_cost))
         except Exception:
             fallback = self.fallback.rerank(question, chunks, top_k)
-            return RerankResult(chunks=fallback.chunks, cost=result.cost.plus(fallback.cost))
+            return RerankResult(chunks=fallback.chunks, cost=CostBreakdown(rerank_cost=result.cost.total_cost).plus(fallback.cost))

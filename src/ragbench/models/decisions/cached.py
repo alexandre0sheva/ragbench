@@ -9,6 +9,7 @@ from ragbench.cache import active_cache, cache_key
 from ragbench.cache.trial import trial_key
 from ragbench.models.cost import CostBreakdown, estimate_decision_cost
 from ragbench.models.decisions.base import DecisionModel, DecisionResult, Predicate
+from ragbench.models.spend import note_spend
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,11 @@ class CachedDecisionModel(DecisionModel):
         return self.inner.provider
 
     def decide(self, text: str, predicates: Sequence[Predicate]) -> DecisionResult:
+        result = self._decide(text, predicates)
+        note_spend(result.cost)
+        return result
+
+    def _decide(self, text: str, predicates: Sequence[Predicate]) -> DecisionResult:
         runtime = active_cache()
         if runtime is None or not runtime.config.llm:
             return self.inner.decide(text, predicates)

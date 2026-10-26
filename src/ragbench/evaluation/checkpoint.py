@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from ragbench import __version__
-from ragbench.config.schema import ExperimentConfig, SystemConfig
+from ragbench.config.schema import ExperimentConfig, OpenRouterConfig, SystemConfig
 from ragbench.harness.apply import harness_fingerprint
 
 logger = logging.getLogger(__name__)
@@ -53,9 +53,17 @@ def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest:
         "providers": {name: provider.model_dump(mode="json") for name, provider in sorted(config.providers.items())},
         "dataset": dataset_digest,
         "mode": mode,
+        **_openrouter_payload(config),
         **({"split": split} if split else {}),  # the questions a split keeps; the whole dataset leaves the hash as it was before splits existed
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def _openrouter_payload(config: ExperimentConfig) -> dict[str, Any]:
+    """The `openrouter:` section (reasoning, provider pinning change the answers of `openrouter:` models); the default leaves the hash as it
+    was before the section existed."""
+    settings = config.openrouter.model_dump(mode="json")
+    return {"openrouter": settings} if settings != OpenRouterConfig().model_dump(mode="json") else {}
 
 
 def _system_payload(system: SystemConfig) -> dict[str, Any]:

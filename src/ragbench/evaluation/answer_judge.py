@@ -14,6 +14,7 @@ from ragbench.evaluation.answer_metrics import is_refusal
 from ragbench.evaluation.judge_prompts import JUDGE_PROMPT_VERSION, build_messages, retry_messages
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.defaults import DEFAULT_JUDGE_MODEL
+from ragbench.models.errors import RateLimitError, TransientModelError
 from ragbench.models.llms import LLM, MockLLM, create_llm
 from ragbench.rag_systems.base import RetrievedChunk
 from ragbench.utils.text import normalize_text, tokenize
@@ -49,7 +50,8 @@ class AnswerJudge:
 
     When disabled, or in mock mode, the heuristic judge scores every question by design (`metadata["judge"] == "heuristic"`,
     `fallback` False). A live judge asks for `samples` independent judgments per question and averages them; a reply that
-    is not a complete, well-formed judgment is retried once, and if that fails too the heuristic scores that one question
+    is not a complete, well-formed judgment is retried once (a call that still fails after the provider's own retries gives that sample no
+    verdict, `call_error` in the metadata), and if every sample is left without a verdict the heuristic scores that one question
     with `fallback: True`, so the run counts and reports it (`judge_fallback_rate`) instead of silently mixing the two.
     """
 
@@ -93,10 +95,18 @@ class AnswerJudge:
         judgments: list[AnswerJudgeResult] = []
         retries = parse_errors = 0
         raw_output: str | None = None
+        call_error: str | None = None
         for _ in range(self.samples):
             request = messages
             for attempt in range(self.MAX_ATTEMPTS):
-                llm_result = self.llm.generate(request, json_mode=True, temperature=self.temperature)
+                try:
+                    llm_result = self.llm.generate(request, json_mode=True, temperature=self.temperature)
+                except (RateLimitError, TransientModelError) as exc:
+                    # The provider's own retries are spent: like an unusable reply, this sample has no verdict. A permanent error (credentials,
+                    # no credit, a bad request) still fails the question, since every later judgment would fail the same way.
+                    call_error = f"{type(exc).__name__}: {exc}"[:300]
+                    logger.warning("Judge call for question %r (model=%s) failed: %s", question.id, self.llm.model_name, call_error)
+                    break
                 cost = cost.plus(
                     CostBreakdown(
                         judge_prompt_tokens=llm_result.prompt_tokens,
@@ -113,7 +123,9 @@ class AnswerJudge:
                 retries += attempt + 1 < self.MAX_ATTEMPTS
                 request = retry_messages(messages, llm_result.text)
                 logger.warning("Judge reply for question %r (model=%s) is not a valid judgment: %.120r", question.id, self.llm.model_name, llm_result.text)
-        bookkeeping = {"prompt_version": JUDGE_PROMPT_VERSION, "parse_error": parse_errors > 0, "retries": retries}
+        bookkeeping: dict[str, Any] = {"prompt_version": JUDGE_PROMPT_VERSION, "parse_error": parse_errors > 0, "retries": retries}
+        if call_error is not None:
+            bookkeeping["call_error"] = call_error
         if not judgments:
             result = heuristic_judge(question, answer, contexts)
             result.raw_output = raw_output
