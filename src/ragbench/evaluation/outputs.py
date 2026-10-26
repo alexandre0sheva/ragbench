@@ -38,6 +38,7 @@ from ragbench.models.refs import answering_model
 from ragbench.reporting.html_report import write_report as write_html_report
 from ragbench.reporting.markdown_report import stage_summary, write_failures, write_leaderboard, write_qrels_audit
 from ragbench.reporting.notices import build_notices
+from ragbench.reporting.schemas import SCHEMA_VERSION
 from ragbench.selection.recommend import recommend
 from ragbench.selection.recommend import write_recommendation as write_recommendation_files
 from ragbench.utils.jsonl import write_jsonl
@@ -207,6 +208,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
     (out / "run_summary.json").write_text(
         json.dumps(
             {
+                "schema_version": SCHEMA_VERSION,
                 "run_id": run.run_id,
                 "mode": run.mode,
                 "models_used": sorted(run.models_used),

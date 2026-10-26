@@ -13,6 +13,8 @@ uv venv --python 3.12 && source .venv/bin/activate      # or: python -m venv .ve
 uv pip install -e ".[dev,anthropic,pdf,docx,hub]"           # the extras CI installs, so the SDK and loader tests run instead of skipping
 uv pip install -e ".[langchain,llamaindex,haystack]"         # optional: the framework adapter tests (`tests/test_framework_adapters.py`) skip without them; the `frameworks` CI job runs them
 uv pip install -e ".[mcp]"                                   # optional: the MCP SDK tests (`tests/test_mcp_sdk.py`) skip without it; the `mcp` CI job runs them
+uv pip install -e ".[otel]"                                  # optional: the OTLP export tests (`tests/test_trace_export.py`) skip their sending half without it; the `otel` CI job runs them
+uv pip install -e ".[docs]"                                  # optional: build the docs site locally (`python scripts/build_site.py`); the `site` CI job builds it on every change
 ragbench demo
 pytest -m "not slow" -n auto                      # the fast loop (under a minute on a laptop); plain `pytest` runs everything
 ```
@@ -68,6 +70,8 @@ Each piece of knowledge has one owner; everywhere else links to it. `scripts/aud
 | Writing a new system, chunker, tool, provider or plugin | `docs/extending.md` |
 | Which architecture to try and how to read the result | `docs/choosing-an-architecture.md` |
 | A measured comparison of `decision_gate` with the systems it replaces, and when to try it | `docs/decision-gate-evaluation.md` |
+| Exporting a run's traces (`ragbench export-traces`): formats, backends, what is and is not exported | `docs/observability.md` |
+| Result-file schemas, the cross-run page (`ragbench runs site`), the docs site and its Leaderboard | `docs/results.md` |
 | Optimizing a system's harness (`ragbench optimize`): the loop, its budget, outputs, resuming | `docs/optimization.md` |
 | Release history | `CHANGELOG.md` |
 | Releasing | `docs/release-checklist.md` |

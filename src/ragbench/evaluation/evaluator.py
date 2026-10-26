@@ -45,6 +45,7 @@ from ragbench.models.errors import ModelInitError
 from ragbench.models.refs import answering_model, missing_credentials, resolve_run_mode
 from ragbench.rag_systems import create_rag_system
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
+from ragbench.reporting.schemas import SCHEMA_VERSION
 from ragbench.runtime import (
     ExecutionSettings,
     ProbeResult,
@@ -362,7 +363,7 @@ class BenchmarkEvaluator:
         budget = self.budget_summary(completed, incomplete)
         if not outcomes:  # `write_outputs` did not run: leave the run summary behind so the directory explains itself
             (self.output_dir / "run_summary.json").write_text(
-                json.dumps({"run_id": self.run_id, "mode": self.mode, "run_wall_time_ms": run_wall_time_ms, "num_systems": 0, "budget": budget}, indent=2), encoding="utf-8"
+                json.dumps({"schema_version": SCHEMA_VERSION, "run_id": self.run_id, "mode": self.mode, "run_wall_time_ms": run_wall_time_ms, "num_systems": 0, "budget": budget}, indent=2), encoding="utf-8"
             )
         else:
             summary_path = self.output_dir / "run_summary.json"

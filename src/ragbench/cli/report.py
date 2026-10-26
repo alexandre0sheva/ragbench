@@ -1,10 +1,11 @@
-"""`ragbench report`, `ragbench compare-runs`, `ragbench contrast` and `ragbench judge-audit`: work on finished runs without running anything."""
+"""`ragbench report`, `ragbench compare-runs`, `ragbench contrast`, `ragbench judge-audit` and `ragbench export-traces`: work on finished runs without running anything."""
 
 from __future__ import annotations
 
 import webbrowser
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import typer
 from rich.markup import escape
@@ -24,6 +25,7 @@ from ragbench.evaluation.compare_runs import (
 from ragbench.evaluation.contrast import ContrastError, build_contrasts, write_contrasts
 from ragbench.evaluation.judge_audit import REPORT_FILE, score_audit, write_audit_sheet
 from ragbench.evaluation.stats import CORRECT_THRESHOLD
+from ragbench.evaluation.trace_export import TraceExportError, build_spans, parse_headers, send_spans, trace_count, write_spans
 from ragbench.reporting.history import resolve_run
 from ragbench.reporting.markdown_report import top_groups
 from ragbench.reporting.regenerate import regenerate_reports
@@ -202,3 +204,63 @@ def _print_contrast(summary: dict[str, Any], records: list[dict[str, Any]], limi
             step = record["diverges_at"]
             where = f"{step['reason'].replace('_', ' ')} at step {step['index']} ({step['a']} | {step['b']})" if step else "no trace to align"
             console.print(f"  [dim]{escape(record['question_id'])}[/dim] {escape(truncate(str(record['question']), 70))}  {record['scores'][winner]:.1f} vs {record['scores'][loser]:.1f}; {escape(where)}", soft_wrap=True)
+
+
+TRACE_FORMATS = ("jsonl", "openinference", "otlp")
+TRACES_FILE = "traces.jsonl"
+
+
+@commands.command("export-traces")
+def export_traces_command(
+    run: str = typer.Argument(..., help="A run directory, its name under --results-dir, `latest`, or part of a name."),
+    results_dir: Path = RESULTS_DIR,
+    fmt: str = typer.Option("jsonl", "--format", help="`jsonl` (a file, offline), `openinference` (send to Phoenix, Langfuse, ... with OpenInference attributes) or `otlp` (send with OpenTelemetry GenAI attributes)."),
+    endpoint: str | None = typer.Option(None, "--endpoint", envvar="OTEL_EXPORTER_OTLP_TRACES_ENDPOINT", help="The OTLP/HTTP traces URL for openinference and otlp, e.g. http://localhost:6006/v1/traces (Phoenix)."),
+    header: list[str] = typer.Option([], "--header", help="A header to send, NAME=VALUE; `${ENV_VAR}` in the value is filled in and never printed. Repeatable."),
+    project: str | None = typer.Option(None, "--project", help="The project the backend files the traces under (default: the run's name)."),
+    system: list[str] = typer.Option([], "--system", help="Only this system's traces. Repeatable."),
+    question: list[str] = typer.Option([], "--question", help="Only this question id's traces. Repeatable."),
+    limit: int | None = typer.Option(None, "--limit", min=1, help="Export only the first N traces."),
+    out: Path | None = typer.Option(None, "--out", help=f"Where --format jsonl writes (default: {TRACES_FILE} in the run directory)."),
+    as_json: bool = typer.Option(False, "--json", help="Print a summary as JSON on stdout."),
+) -> None:
+    """Export a finished run's traces as OpenTelemetry / OpenInference spans, to a file or to a trace backend.
+
+    One trace per answered question: a root span with the question, answer, system and score, and one child per step of the system
+    (retrieve, rerank, llm, tool, ...). Nothing is re-run or paid for. Sending needs `pip install 'ragbench[otel]'`. The reference
+    answers and the judge's reasoning are never exported.
+    """
+    if fmt not in TRACE_FORMATS:
+        raise fail(f"--format must be one of {', '.join(TRACE_FORMATS)}, not '{fmt}'.")
+    sending = fmt != "jsonl"
+    if sending and not endpoint:
+        raise fail(f"--format {fmt} needs --endpoint (or OTEL_EXPORTER_OTLP_TRACES_ENDPOINT), e.g. http://localhost:6006/v1/traces for Phoenix. `--format jsonl` writes a file instead.")
+    with json_output(as_json):
+        try:
+            headers = parse_headers(header)
+        except (TraceExportError, ValueError) as exc:
+            raise fail(str(exc)) from exc
+        run_dir = resolve_run(run, results_dir)
+        try:
+            spans = build_spans(run_dir, convention="otel" if fmt == "otlp" else "openinference", systems=system or None, question_ids=question or None, limit=limit, project=project)
+        except TraceExportError as exc:
+            raise fail(str(exc)) from exc
+        summary: dict[str, Any] = {"run": run_dir.name, "format": fmt, "traces": trace_count(spans), "spans": len(spans)}
+        if sending:
+            assert endpoint is not None
+            shown = urlsplit(endpoint)._replace(query="", fragment="", netloc=urlsplit(endpoint).netloc.rpartition("@")[2]).geturl()  # never echo credentials in the URL
+            try:
+                send_spans(spans, endpoint, headers)
+            except TraceExportError as exc:
+                raise fail(str(exc), code=1) from exc
+            summary["endpoint"] = shown
+            message = f"[green]Sent {summary['spans']} spans ({summary['traces']} traces) to {escape(shown)}[/green]"
+        else:
+            target = out or run_dir / TRACES_FILE
+            write_spans(spans, target)
+            summary["path"] = str(target)
+            message = f"[green]Wrote {summary['spans']} spans ({summary['traces']} traces) to {escape(str(target))}[/green]"
+        if as_json:
+            print_json(summary)
+            return
+        console.print(message, soft_wrap=True)

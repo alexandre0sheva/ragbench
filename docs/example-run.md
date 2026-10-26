@@ -1,6 +1,6 @@
 # Example run: 24 systems on the demo dataset
 
-A complete live run of [`configs/all.yaml`](../configs/all.yaml) on the bundled demo dataset, kept as a worked example of what a run produces and as the source of the numbers in the README. It is also the one leaderboard that holds every system side by side, `decision_gate` included. Everything below comes from the files in [`docs/example-run/`](example-run/). For what each metric means see the [methodology](methodology.md); for how to read a report see [choosing an architecture](choosing-an-architecture.md); for a closer look at `decision_gate` see its [evaluation](decision-gate-evaluation.md).
+A complete live run of [`configs/all.yaml`](../configs/all.yaml) on the bundled demo dataset, kept as a worked example of what a run produces and as the source of the numbers in the README. It is also the one leaderboard that holds every system side by side, `decision_gate` included. Everything below comes from the files in [`docs/benchmarks/example-run/`](benchmarks/example-run/). For what each metric means see the [methodology](methodology.md); for how to read a report see [choosing an architecture](choosing-an-architecture.md); for a closer look at `decision_gate` see its [evaluation](decision-gate-evaluation.md).
 
 ## The run
 
@@ -18,7 +18,7 @@ A complete live run of [`configs/all.yaml`](../configs/all.yaml) on the bundled 
 
 ## Recommendation
 
-**Deploy `bm25_default`** under the balanced profile. 17 other systems are statistically tied with the best answer score, so cost and latency decided it. The full reasoning, ranking and per-category winners are in [`recommendation.md`](example-run/recommendation.md), and its config in [`winner.yaml`](example-run/winner.yaml).
+**Deploy `bm25_default`** under the balanced profile. 17 other systems are statistically tied with the best answer score, so cost and latency decided it. The full reasoning, ranking and per-category winners are in [`recommendation.md`](benchmarks/example-run/recommendation.md), and its config in [`winner.yaml`](benchmarks/example-run/winner.yaml).
 
 ## All systems
 
@@ -114,7 +114,7 @@ Difference in answer score against `no_retrieval_floor`, on the questions both a
 | `vector_mmr` | +3.01 | [+2.79, +3.21] | 0.023 | 161 / 1 / 1 |
 | `sentence_window_default` | +2.88 | [+2.63, +3.11] | 0.023 | 154 / 3 / 6 |
 
-Every system beats the no-retrieval floor by a wide margin, so retrieval matters on this corpus. Among the retrieval systems the answer scores are close: the [recommendation](example-run/recommendation.md) lists the systems that cannot be told apart from the best one.
+Every system beats the no-retrieval floor by a wide margin, so retrieval matters on this corpus. Among the retrieval systems the answer scores are close: the [recommendation](benchmarks/example-run/recommendation.md) lists the systems that cannot be told apart from the best one.
 
 ## By question category
 
@@ -148,23 +148,23 @@ The 1 Oct run of the original 22 systems had one question-system pair fail: `rag
 
 ## Files
 
-The small result files are kept in [`docs/example-run/`](example-run/). The full run directory also holds `per_question_results.jsonl` (every answer, retrieved passage, step and, for `decision_gate`, the probability of every judged chunk), `report_questions.json`, `report.html` and the cost breakdown; those are too large to commit, so they stay in `results/` on the machine that ran it (`ragbench report RUN` rebuilds the HTML from them).
+The small result files are kept in [`docs/benchmarks/example-run/`](benchmarks/example-run/). The full run directory also holds `per_question_results.jsonl` (every answer, retrieved passage, step and, for `decision_gate`, the probability of every judged chunk), `report_questions.json`, `report.html` and the cost breakdown; those are too large to commit, so they stay in `results/` on the machine that ran it (`ragbench report RUN` rebuilds the HTML from them).
 
 | File | What it holds |
 | --- | --- |
-| [`config.yaml`](example-run/config.yaml) | the config the run used: `configs/all.yaml` with a spending cap (the run is named `all_systems_plus_decision_gate`) |
-| [`winner.yaml`](example-run/winner.yaml) | a runnable config for the recommended system |
-| [`recommendation.md`](example-run/recommendation.md) | the recommendation, ranking and per-category winners |
-| [`recommendation.json`](example-run/recommendation.json) | the same, machine-readable |
-| [`leaderboard.md`](example-run/leaderboard.md) | the leaderboard and the significance tables |
-| [`metrics_summary.csv`](example-run/metrics_summary.csv) | every metric for every system, with confidence intervals |
-| [`significance.csv`](example-run/significance.csv) | the paired comparisons against the baseline |
-| [`stats.json`](example-run/stats.json) | the statistics behind the intervals and tests |
-| [`failures.md`](example-run/failures.md) | failure types per system, with an example question each |
-| [`qrels_audit.md`](example-run/qrels_audit.md) | relevance labels the run found doubtful |
-| [`system_runtime.csv`](example-run/system_runtime.csv) | ingestion and question wall time per system |
-| [`pareto.json`](example-run/pareto.json) | the quality / cost / latency frontier |
-| [`routes.csv`](example-run/routes.csv) | which route the `adaptive` system chose |
-| [`tool_usage.csv`](example-run/tool_usage.csv) | tool calls of the agentic systems |
-| [`run_summary.json`](example-run/run_summary.json) | mode, models, spend, cache and error counts |
-| [`run_manifest.json`](example-run/run_manifest.json) | versions, dataset and config hashes, timings |
+| [`config.yaml`](benchmarks/example-run/config.yaml) | the config the run used: `configs/all.yaml` with a spending cap (the run is named `all_systems_plus_decision_gate`) |
+| [`winner.yaml`](benchmarks/example-run/winner.yaml) | a runnable config for the recommended system |
+| [`recommendation.md`](benchmarks/example-run/recommendation.md) | the recommendation, ranking and per-category winners |
+| [`recommendation.json`](benchmarks/example-run/recommendation.json) | the same, machine-readable |
+| [`leaderboard.md`](benchmarks/example-run/leaderboard.md) | the leaderboard and the significance tables |
+| [`metrics_summary.csv`](benchmarks/example-run/metrics_summary.csv) | every metric for every system, with confidence intervals |
+| [`significance.csv`](benchmarks/example-run/significance.csv) | the paired comparisons against the baseline |
+| [`stats.json`](benchmarks/example-run/stats.json) | the statistics behind the intervals and tests |
+| [`failures.md`](benchmarks/example-run/failures.md) | failure types per system, with an example question each |
+| [`qrels_audit.md`](benchmarks/example-run/qrels_audit.md) | relevance labels the run found doubtful |
+| [`system_runtime.csv`](benchmarks/example-run/system_runtime.csv) | ingestion and question wall time per system |
+| [`pareto.json`](benchmarks/example-run/pareto.json) | the quality / cost / latency frontier |
+| [`routes.csv`](benchmarks/example-run/routes.csv) | which route the `adaptive` system chose |
+| [`tool_usage.csv`](benchmarks/example-run/tool_usage.csv) | tool calls of the agentic systems |
+| [`run_summary.json`](benchmarks/example-run/run_summary.json) | mode, models, spend, cache and error counts |
+| [`run_manifest.json`](benchmarks/example-run/run_manifest.json) | versions, dataset and config hashes, timings |

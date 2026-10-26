@@ -1,0 +1,75 @@
+# Built by `python scripts/build_site.py` from a staged copy of the Markdown (README.md as the home page, docs/ as the root); see that script.
+site_name: RAGBench
+site_description: Evaluation-first RAG benchmark framework - which RAG approach wins on your data.
+site_url: https://alexandre0sheva.github.io/ragbench/
+repo_url: https://github.com/alexandre0sheva/ragbench
+repo_name: alexandre0sheva/ragbench
+edit_uri: ""
+docs_dir: build/site_src
+site_dir: build/site
+use_directory_urls: true
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle: {icon: material/brightness-7, name: Switch to dark mode}
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle: {icon: material/brightness-4, name: Switch to light mode}
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.highlight
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify {kwds: {case: lower}}
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+validation:
+  omitted_files: info
+  absolute_links: info
+  unrecognized_links: warn
+  anchors: warn
+
+nav:
+  - Home: index.md
+  - Choose and run:
+      - Choosing an architecture: choosing-an-architecture.md
+      - Leaderboard: leaderboard.md
+      - Example run: example-run.md
+      - Decision gate evaluation: decision-gate-evaluation.md
+  - Guides:
+      - Configuration: configuration.md
+      - Models and providers: models.md
+      - Dataset format: dataset-format.md
+      - Benchmarking external systems: benchmarking-external-systems.md
+      - Optimization: optimization.md
+      - Exporting traces: observability.md
+      - Result files and the site: results.md
+  - Reference:
+      - Methodology: methodology.md
+      - System wiki: system-wiki.md
+      - Systems: systems.md
+      - Tools: tools.md
+      - Command line: cli.md
+      - Extending RAGBench: extending.md
+  - Project:
+      - Contributing: CONTRIBUTING.md
+      - Release checklist: release-checklist.md
+      - Changelog: CHANGELOG.md

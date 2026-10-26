@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{{ title }}</title>
+<style>
+:root { color-scheme: light; --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #6b6a66; --hair: rgba(11,11,11,.10); --accent: #2a78d6; --warn: #fab219; --warn-wash: rgba(250,178,25,.13); --sans: system-ui, -apple-system, "Segoe UI", sans-serif; --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --page: #0d0d0d; --surface: #1a1a19; --ink: #fff; --ink-2: #c3c2b7; --ink-3: #a9a8a0; --hair: rgba(255,255,255,.10); --accent: #3987e5; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.55 var(--sans); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 16px 64px; }
+header { padding: 22px 0 14px; border-bottom: 2px solid var(--ink); }
+h1 { margin: 0; font-size: 26px; letter-spacing: -.02em; }
+p.sub { margin: 8px 0 14px; color: var(--ink-3); font-size: 14px; max-width: 75ch; }
+.filters { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; margin: 16px 0; }
+.filters label { display: grid; gap: 4px; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); }
+.filters select, .filters input { font: 14px var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--hair); border-radius: 8px; padding: 7px 10px; min-width: 150px; }
+.filters button { font: 14px var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--hair); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--hair); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { padding: 9px 12px; border-bottom: 1px solid var(--hair); text-align: left; vertical-align: middle; }
+thead th { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+thead th[data-sort] { cursor: pointer; user-select: none; }
+thead th[aria-sort="ascending"]::after { content: " ▲"; }
+thead th[aria-sort="descending"]::after { content: " ▼"; }
+tbody tr:last-child > * { border-bottom: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+a { color: var(--accent); }
+.mono { font-family: var(--mono); font-size: 13px; }
+.pill { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: .08em; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--ink); }
+.pill.mock { border-color: var(--warn); background: var(--warn-wash); }
+.muted { color: var(--ink-3); }
+.empty { padding: 18px; color: var(--ink-2); }
+footer { margin-top: 48px; font-size: 13px; color: var(--ink-3); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>{{ title }}</h1></header>
+  <p class="sub">{{ count }} rows from {{ runs }} run{{ '' if runs == 1 else 's' }}. Mock runs only validate the pipeline, so they are hidden when a live run is present; compare scores within a run, or across live runs of the same dataset. A <span class="mono">—</span> is a number the run did not measure, which is not zero.{% if skipped %} Left out because they have no leaderboard: {{ skipped | join(', ') }}.{% endif %}</p>
+  <form class="filters" onsubmit="return false" aria-label="Filters">
+    <label>Run <select id="filter-run"></select></label>
+    <label>Mode <select id="filter-mode"></select></label>
+    <label>System type <select id="filter-type"></select></label>
+    <label>System name <input id="filter-search" type="search" placeholder="contains…" autocomplete="off"></label>
+    <button type="button" id="filter-reset">Reset</button>
+  </form>
+  <p class="sub" id="shown" role="status"></p>
+  <div class="table-scroll"><table id="board">
+    <thead><tr>
+      <th data-sort="started">Date (UTC)</th><th data-sort="run">Run</th><th data-sort="mode">Mode</th><th data-sort="questions" class="n">Questions</th>
+      <th data-sort="system">System</th><th data-sort="type">Type</th><th data-sort="score" class="n">Answer score</th><th data-sort="hit" class="n">Hit rate</th>
+      <th data-sort="cost" class="n">$/question</th><th data-sort="p50" class="n">Latency p50</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <p class="empty" id="none" hidden>No row matches these filters.</p>
+  <footer>Written by <code>ragbench runs site</code>. One file, no network requests: move or zip the folder and the links to each run's report keep working.</footer>
+</div>
+<script id="site-data" type="application/json">{{ data_json | safe }}</script>
+<script>
+(function () {
+  var data = JSON.parse(document.getElementById("site-data").textContent);
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { run: "", mode: data.default_mode, type: "", search: "", key: "score", dir: -1 };
+  var NUMERIC = { score: 1, hit: 1, cost: 1, p50: 1, questions: 1 };
+
+  function fill(select, values, label, chosen) {
+    select.textContent = "";
+    [["", label]].concat(values.map(function (v) { return [v, v]; })).forEach(function (pair) {
+      var option = document.createElement("option");
+      option.value = pair[0]; option.textContent = pair[1]; select.appendChild(option);
+    });
+    select.value = chosen;
+  }
+  fill($("filter-run"), data.runs, "All runs", state.run);
+  fill($("filter-mode"), data.modes, "All modes", state.mode);
+  fill($("filter-type"), data.types, "All types", state.type);
+
+  function compare(a, b) {
+    var x = a[state.key], y = b[state.key];
+    if (x === null || x === undefined) { return (y === null || y === undefined) ? 0 : 1; }  // a missing value sorts last either way
+    if (y === null || y === undefined) { return -1; }
+    var order = NUMERIC[state.key] ? x - y : String(x).localeCompare(String(y));
+    return order * state.dir;
+  }
+  function text(value, format) { return value === null || value === undefined ? "—" : format(value); }
+  function cell(tr, value, cls) { var td = document.createElement("td"); td.textContent = value; if (cls) { td.className = cls; } tr.appendChild(td); return td; }
+
+  function render() {
+    var needle = state.search.toLowerCase();
+    var rows = data.rows.filter(function (r) {
+      return (!state.run || r.run === state.run) && (!state.mode || r.mode === state.mode) && (!state.type || r.type === state.type) &&
+        (!needle || r.system.toLowerCase().indexOf(needle) >= 0);
+    });
+    rows = rows.map(function (r, i) { return [r, i]; }).sort(function (a, b) { return compare(a[0], b[0]) || a[1] - b[1]; }).map(function (p) { return p[0]; });
+    var body = document.querySelector("#board tbody");
+    body.textContent = "";
+    rows.forEach(function (r) {
+      var tr = document.createElement("tr");
+      cell(tr, text(r.started, function (s) { return s.replace("T", " ").replace("Z", "").slice(0, 16); }), "mono");
+      var run = cell(tr, "");
+      if (r.report) { var a = document.createElement("a"); a.href = r.report; a.textContent = r.run; run.appendChild(a); } else { run.textContent = r.run; }
+      var mode = cell(tr, ""); var pill = document.createElement("span"); pill.className = "pill" + (r.mode === "mock" ? " mock" : ""); pill.textContent = (r.mode || "—").toUpperCase(); mode.appendChild(pill);
+      cell(tr, text(r.questions, String), "n");
+      cell(tr, r.system, "mono");
+      cell(tr, r.type || "—");
+      cell(tr, text(r.score, function (v) {
+        var ci = r.ci_lo !== null && r.ci_hi !== null ? " [" + r.ci_lo.toFixed(2) + ", " + r.ci_hi.toFixed(2) + "]" : "";
+        return v.toFixed(2) + ci;
+      }), "n");
+      cell(tr, text(r.hit, function (v) { return v.toFixed(2) + " @" + r.hit_k; }), "n");
+      cell(tr, text(r.cost, function (v) { return "$" + v.toFixed(5); }), "n");
+      cell(tr, text(r.p50, function (v) { return v.toFixed(0) + " ms"; }), "n");
+      body.appendChild(tr);
+    });
+    $("shown").textContent = "Showing " + rows.length + " of " + data.rows.length + " rows";
+    $("none").hidden = rows.length > 0;
+    document.querySelectorAll("#board thead th[data-sort]").forEach(function (th) {
+      th.setAttribute("aria-sort", th.dataset.sort === state.key ? (state.dir > 0 ? "ascending" : "descending") : "none");
+    });
+  }
+
+  [["filter-run", "run"], ["filter-mode", "mode"], ["filter-type", "type"]].forEach(function (pair) {
+    $(pair[0]).addEventListener("change", function (e) { state[pair[1]] = e.target.value; render(); });
+  });
+  $("filter-search").addEventListener("input", function (e) { state.search = e.target.value; render(); });
+  $("filter-reset").addEventListener("click", function () {
+    state.run = state.type = state.search = ""; state.mode = "";
+    $("filter-run").value = $("filter-type").value = $("filter-search").value = ""; $("filter-mode").value = "";
+    render();
+  });
+  document.querySelectorAll("#board thead th[data-sort]").forEach(function (th) {
+    th.addEventListener("click", function () {
+      var key = th.dataset.sort;
+      state.dir = state.key === key ? -state.dir : (NUMERIC[key] && key !== "cost" && key !== "p50" ? -1 : 1);
+      state.key = key; render();
+    });
+  });
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexandre0sheva/ragbench/schemas/metrics_summary.v1.schema.json",
+  "title": "RAGBench metrics_summary.csv, version 1 (one row)",
+  "description": "One row of metrics_summary.csv read as an object: one row per system. An empty cell is a metric that does not apply or could not be measured (missing, never zero) and is left out of the object. Columns are open-ended: retrieval_*@k exists for each k in the run, *_ci_lo / *_ci_hi bound a metric, and systems add their own (avg_steps, gate_abstain_rate, ...). The version of the file is the schema_version of the run's run_summary.json.",
+  "type": "object",
+  "required": ["system", "system_type", "n_ok", "n_error"],
+  "properties": {
+    "system": {"type": "string", "minLength": 1},
+    "system_type": {"type": "string"},
+    "n_ok": {"type": "integer", "minimum": 0, "description": "Questions answered."},
+    "n_error": {"type": "integer", "minimum": 0, "description": "Questions that failed; they are left out of every mean, never scored zero."},
+    "correctness": {"type": "number", "minimum": 0, "maximum": 5},
+    "faithfulness": {"type": "number", "minimum": 0, "maximum": 5},
+    "completeness": {"type": "number", "minimum": 0, "maximum": 5},
+    "relevance": {"type": "number", "minimum": 0, "maximum": 5},
+    "citation_quality": {"type": "number", "minimum": 0, "maximum": 5},
+    "answer_score": {"type": "number", "minimum": 0, "maximum": 5, "description": "The judge's overall answer score, 0 to 5."},
+    "answer_score_ci_lo": {"type": "number"},
+    "answer_score_ci_hi": {"type": "number"},
+    "exact_match": {"type": "number", "minimum": 0, "maximum": 1},
+    "token_f1": {"type": "number", "minimum": 0, "maximum": 1},
+    "keyword_recall": {"type": "number", "minimum": 0, "maximum": 1},
+    "context_recall": {"type": "number", "minimum": 0, "maximum": 1},
+    "context_precision": {"type": "number", "minimum": 0, "maximum": 1},
+    "avg_cost_per_question": {"type": "number", "minimum": 0, "description": "USD per question, answering and judging, at standalone prices."},
+    "cost_per_correct": {"type": "number", "minimum": 0},
+    "avg_latency_ms": {"type": "number", "minimum": 0},
+    "latency_ms_p50": {"type": "number", "minimum": 0},
+    "latency_ms_p95": {"type": "number", "minimum": 0},
+    "latency_source": {"type": "string"},
+    "system_wall_time_ms": {"type": "number", "minimum": 0},
+    "pareto_optimal": {"type": "boolean"}
+  },
+  "patternProperties": {
+    "^retrieval_(recall|precision|hit|mrr|ndcg)@[0-9]+$": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "additionalProperties": true
+}

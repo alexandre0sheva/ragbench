@@ -132,6 +132,58 @@ jobs:
       - name: The MCP tools against the real SDK (they skip everywhere else)
         run: pytest tests/test_mcp_sdk.py tests/test_mcp_tools.py -n auto
 
+  otel:
+    name: Trace export (real OpenTelemetry SDK, local collector)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install with the otel extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,otel]"
+      - name: Spans against the real exporter (the sending tests skip everywhere else)
+        run: pytest tests/test_trace_export.py -n auto
+
+  site:
+    name: Docs site (mkdocs, strict)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Install with the docs extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[docs]"
+      - name: Build the site (a broken link or anchor fails here; the Leaderboard is generated from docs/benchmarks)
+        run: python scripts/build_site.py
+      - name: Upload the site for GitHub Pages
+        if: github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: build/site
+
+  deploy-site:
+    name: Publish the docs site (GitHub Pages)
+    needs: site
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+
   smoke:
     name: CLI smoke test (mock mode)
     runs-on: ubuntu-latest

@@ -41,6 +41,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `judge-audit`: Calibrate the judge against a human: draw...
 * `compare-runs`: How a later run moved against an earlier...
 * `contrast`: Where two systems disagree: the questions...
+* `export-traces`: Export a finished run's traces as...
 * `doctor`: Check Python, packages, optional extras,...
 * `runs`: List, inspect, remove and index the runs...
 * `models`: List the models RAGBench has prices for,...
@@ -616,6 +617,38 @@ $ ragbench contrast [OPTIONS] {run} {a} {b}
 * `--json`: Print the summary and every contrast as JSON on stdout.
 * `--help`: Show this message and exit.
 
+## `ragbench export-traces`
+
+Export a finished run's traces as OpenTelemetry / OpenInference spans, to a file or to a trace backend.
+
+One trace per answered question: a root span with the question, answer, system and score, and one child per step of the system
+(retrieve, rerank, llm, tool, ...). Nothing is re-run or paid for. Sending needs `pip install 'ragbench[otel]'`. The reference
+answers and the judge's reasoning are never exported.
+
+**Usage**:
+
+```console
+$ ragbench export-traces [OPTIONS] {run}
+```
+
+**Arguments**:
+
+* `run`: A run directory, its name under --results-dir, `latest`, or part of a name.  [required]
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--format <str>`: `jsonl` (a file, offline), `openinference` (send to Phoenix, Langfuse, ... with OpenInference attributes) or `otlp` (send with OpenTelemetry GenAI attributes).  [default: jsonl]
+* `--endpoint <str>`: The OTLP/HTTP traces URL for openinference and otlp, e.g. http://localhost:6006/v1/traces (Phoenix).  [env var: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT]
+* `--header <str>`: A header to send, NAME=VALUE; `${ENV_VAR}` in the value is filled in and never printed. Repeatable.
+* `--project <str>`: The project the backend files the traces under (default: the run's name).
+* `--system <str>`: Only this system's traces. Repeatable.
+* `--question <str>`: Only this question id's traces. Repeatable.
+* `--limit <int range>`: Export only the first N traces.  [x>=1]
+* `--out <path>`: Where --format jsonl writes (default: traces.jsonl in the run directory).
+* `--json`: Print a summary as JSON on stdout.
+* `--help`: Show this message and exit.
+
 ## `ragbench doctor`
 
 Check Python, packages, optional extras, API keys (never shown), folders and the price table. Exits with status 1 if something is broken.
@@ -656,6 +689,8 @@ $ ragbench runs [OPTIONS] COMMAND [ARGS]...
 * `show`: One run in detail: its leaderboard,...
 * `rm`: Delete a run directory.
 * `index`: Write results/index.html: every run with...
+* `site`: Many runs as one static, filterable...
+* `schema`: The JSON Schema of a file a run writes...
 
 ### `ragbench runs list`
 
@@ -727,6 +762,50 @@ $ ragbench runs index [OPTIONS]
 
 * `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
 * `--open`: Open the page in your browser.
+* `--help`: Show this message and exit.
+
+### `ragbench runs site`
+
+Many runs as one static, filterable leaderboard: every system of every complete run, with filters by run, mode, type and name and a sortable column each.
+
+One HTML file with its data inside and no network requests, plus a copy of each run's report.html to link to. Mock runs are hidden by default
+when a live run is present. Nothing is re-run or paid for.
+
+**Usage**:
+
+```console
+$ ragbench runs site [OPTIONS] {folder}
+```
+
+**Arguments**:
+
+* `folder`: The folder that holds the run directories (a results folder, or docs/benchmarks).  [required]
+
+**Options**:
+
+* `--out <path>`: Where to write the site (default: a `site` folder inside FOLDER).
+* `--title <str>`: The page title.
+* `--open`: Open the page in your browser.
+* `--json`: Print a summary as JSON on stdout.
+* `--help`: Show this message and exit.
+
+### `ragbench runs schema`
+
+The JSON Schema of a file a run writes (run_summary.json, or one row of metrics_summary.csv), for tools that read RAGBench results.
+
+**Usage**:
+
+```console
+$ ragbench runs schema [OPTIONS] [name]
+```
+
+**Arguments**:
+
+* `name`: Which schema: run_summary, metrics_summary. Without a name, lists them.
+
+**Options**:
+
+* `--version <int>`: The schema version (the `schema_version` of a run's run_summary.json).  [default: 1]
 * `--help`: Show this message and exit.
 
 ## `ragbench models`

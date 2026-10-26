@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/alexandre0sheva/ragbench/schemas/run_summary.v1.schema.json",
+  "title": "RAGBench run_summary.json, version 1",
+  "description": "One run in numbers: mode, models, spend, cache, errors and where the other files are. A run stopped before any system finished writes only run_id, mode, run_wall_time_ms, num_systems and budget. Version 1 files may lack schema_version.",
+  "type": "object",
+  "required": ["run_id", "mode", "run_wall_time_ms", "num_systems"],
+  "properties": {
+    "schema_version": {"const": 1, "description": "Absent in files written before it existed; absence means 1."},
+    "run_id": {"type": "string"},
+    "mode": {"enum": ["mock", "live"], "description": "`mock`: hashing embeddings, scripted LLM, heuristic judge; scores validate the pipeline only."},
+    "models_used": {"type": "array", "items": {"type": "string"}},
+    "unknown_priced_models": {"type": "array", "items": {"type": "string"}, "description": "Models the price table does not know: their cost is unknown, not zero."},
+    "pricing_as_of": {"type": "string"},
+    "run_wall_time_ms": {"type": "number", "minimum": 0},
+    "max_workers": {"type": "integer", "minimum": 1},
+    "execution": {
+      "type": "object",
+      "properties": {
+        "max_workers": {"type": "integer"},
+        "system_workers": {"type": "integer"},
+        "ingest_workers": {"type": "integer"},
+        "latency_probe_questions": {"type": "integer"},
+        "latency_source": {"enum": ["probe", "concurrent"]},
+        "probe_calls": {"type": "integer"},
+        "probe_cost_usd": {"type": "number"}
+      }
+    },
+    "num_systems": {"type": "integer", "minimum": 0},
+    "budget": {
+      "type": "object",
+      "properties": {
+        "max_cost_usd": {"type": ["number", "null"]},
+        "spent_usd": {"type": "number"},
+        "stopped": {"type": "boolean"},
+        "completed_systems": {"type": "array", "items": {"type": "string"}},
+        "incomplete_systems": {"type": "object"}
+      }
+    },
+    "num_question_rows": {"type": "integer", "minimum": 0},
+    "trials": {"type": "integer", "minimum": 2, "description": "Present only when the run repeated every question."},
+    "num_errors": {"type": "integer", "minimum": 0},
+    "errors_by_system": {"type": "object", "additionalProperties": {"type": "integer"}},
+    "k_values": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+    "retrieval_depth": {"type": "integer"},
+    "context_k": {"type": "integer"},
+    "primary_k": {"type": "integer", "description": "The cutoff the leaderboard's retrieval columns use."},
+    "embedding_cache": {"type": "object"},
+    "cache": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "charged_cost_usd": {"type": "number", "description": "Spend at standalone prices: what the run would cost with an empty cache."},
+        "real_spend_usd": {"type": "number", "description": "What was actually paid after cache hits."}
+      }
+    },
+    "dataset": {
+      "type": "object",
+      "properties": {
+        "questions": {"type": "integer"},
+        "labeled_questions": {"type": "integer"},
+        "label_free": {"type": "boolean"},
+        "synthetic_questions": {"type": "integer"},
+        "needs_review_questions": {"type": "integer"},
+        "mock_questions": {"type": "integer"}
+      }
+    },
+    "notices": {"type": "array", "items": {"type": "string"}},
+    "judge": {"type": "object"},
+    "external": {"type": "object"},
+    "pairwise": {"type": ["object", "null"]},
+    "dataset_warnings": {"type": "array"},
+    "document_warnings": {"type": "array"},
+    "outputs": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Name of each output file the run wrote, relative to the run directory."}
+  },
+  "additionalProperties": true
+}

@@ -14,6 +14,8 @@ from ragbench.cli.common import console, fail, is_interactive, json_output, mone
 from ragbench.cli.run import print_run_summary
 from ragbench.errors import UsageError
 from ragbench.reporting.history import INDEX_NAME, RunRecord, describe_run, is_run_dir, resolve_run, scan_runs, write_index
+from ragbench.reporting.schemas import SCHEMA_VERSION, SCHEMAS, SUPPORTED_VERSIONS, load_schema
+from ragbench.reporting.site import site_rows, write_site
 
 RESULTS_DIR = typer.Option(Path("results"), "--results-dir", envvar="RAGBENCH_RESULTS_DIR", help="The folder that holds the run directories.")
 AS_JSON = typer.Option(False, "--json", help="Print JSON on stdout instead of a table.")
@@ -122,3 +124,44 @@ def index_runs(
     console.print(f"[green]Wrote {page}[/green] ({len(scan_runs(results_dir))} runs)", soft_wrap=True)
     if open_page:
         webbrowser.open(page.resolve().as_uri())
+
+
+@runs_app.command("site")
+def site_command(
+    folder: Path = typer.Argument(..., help="The folder that holds the run directories (a results folder, or docs/benchmarks)."),
+    out: Path | None = typer.Option(None, "--out", help="Where to write the site (default: a `site` folder inside FOLDER)."),
+    title: str | None = typer.Option(None, "--title", help="The page title."),
+    open_page: bool = typer.Option(False, "--open", help="Open the page in your browser."),
+    as_json: bool = typer.Option(False, "--json", help="Print a summary as JSON on stdout."),
+) -> None:
+    """Many runs as one static, filterable leaderboard: every system of every complete run, with filters by run, mode, type and name and a sortable column each.
+
+    One HTML file with its data inside and no network requests, plus a copy of each run's report.html to link to. Mock runs are hidden by default
+    when a live run is present. Nothing is re-run or paid for.
+    """
+    with json_output(as_json):
+        page = write_site(folder, out, title=title)
+        rows = len(site_rows(folder))
+        if as_json:
+            print_json({"page": str(page), "rows": rows})
+            return
+        console.print(f"[green]Wrote {page}[/green] ({rows} rows)", soft_wrap=True)
+        if open_page:
+            webbrowser.open(page.resolve().as_uri())
+
+
+@runs_app.command("schema")
+def schema_command(
+    name: str | None = typer.Argument(None, help=f"Which schema: {', '.join(SCHEMAS)}. Without a name, lists them."),
+    version: int = typer.Option(SCHEMA_VERSION, "--version", help="The schema version (the `schema_version` of a run's run_summary.json)."),
+) -> None:
+    """The JSON Schema of a file a run writes (run_summary.json, or one row of metrics_summary.csv), for tools that read RAGBench results."""
+    if name is None:
+        for known in SCHEMAS:
+            console.print(f"{known}  [dim](versions: {', '.join(map(str, SUPPORTED_VERSIONS))})[/dim]")
+        return
+    try:
+        schema = load_schema(name, version)
+    except ValueError as exc:
+        raise fail(str(exc)) from exc
+    print_json(schema)

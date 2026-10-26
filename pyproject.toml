@@ -62,6 +62,7 @@ dev = [
   "build>=1.6.1",
   "twine>=7",
   "pytest-cov>=7.1",
+  "jsonschema>=4.26",  # validates a run's files against the published schemas (`tests/test_run_schemas.py`)
   "mypy>=2.4",
   "pre-commit>=4.7",
   "types-PyYAML>=6.0.12.20260906",
@@ -79,6 +80,10 @@ llamaindex = ["llama-index-core>=0.14.25"]
 haystack = ["haystack-ai>=3.3"]
 # MCP tools (`tools: [{type: mcp, ...}]`); 2.x is the Client API the integration uses.
 mcp = ["mcp>=2.3"]
+# Trace export (`ragbench export-traces --format otlp|openinference`): spans sent over OTLP/HTTP to Phoenix, Langfuse or any collector.
+# The docs site (`scripts/build_site.py`, published to GitHub Pages by CI).
+docs = ["mkdocs-material>=9.8"]
+otel = ["opentelemetry-sdk>=1.45.1", "opentelemetry-exporter-otlp-proto-http>=1.45.1"]
 # ColBERT late interaction (`late_interaction`): an in-house loader, because pylate 1.6.0 pins sentence-transformers==5.3.0.
 colbert = ["transformers>=5.20", "torch>=2.14", "safetensors>=0.8"]
 # Vector backends (`retrieval.vector_store`); the default, `numpy`, needs none of them.
@@ -97,7 +102,7 @@ ragbench = "ragbench.cli:app"
 where = ["src"]
 
 [tool.setuptools.package-data]
-ragbench = ["py.typed", "reporting/templates/*", "models/data/*.json"]
+ragbench = ["py.typed", "reporting/templates/*", "models/data/*.json", "schemas/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

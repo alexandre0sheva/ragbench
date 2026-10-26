@@ -92,3 +92,14 @@ def test_slow_tests_are_marked_and_ci_runs_them_on_one_python_version_and_the_re
     full = [step for step in test_steps if '-m "not slow"' not in step["run"]]
     assert len(fast) == 1 and fast[0]["if"] == "matrix.python-version != '3.13'" and "-n auto" in fast[0]["run"]
     assert len(full) == 1 and full[0]["if"] == "matrix.python-version == '3.13'" and "--cov" in full[0]["run"]
+
+
+def test_the_docs_site_is_built_on_every_change_and_deployed_only_from_main():
+    site, deploy = CI["jobs"]["site"], CI["jobs"]["deploy-site"]
+    commands = "\n".join(step.get("run", "") for step in site["steps"])
+    assert 'pip install -e ".[docs]"' in commands and "scripts/build_site.py" in commands  # a broken link fails the pull request, not the deploy
+    upload = [step for step in site["steps"] if step.get("uses", "").startswith("actions/upload-pages-artifact@")]
+    assert len(upload) == 1 and upload[0]["with"]["path"] == "build/site" and upload[0]["if"] == "github.event_name == 'push'"
+    assert deploy["needs"] == "site" and deploy["if"] == "github.event_name == 'push' && github.ref == 'refs/heads/main'"
+    assert deploy["permissions"] == {"pages": "write", "id-token": "write"} and deploy["environment"]["name"] == "github-pages"
+    assert [step["uses"].split("@")[0] for step in deploy["steps"]] == ["actions/deploy-pages"]

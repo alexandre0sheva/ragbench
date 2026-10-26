@@ -104,6 +104,8 @@ Every system implements the same interface and runs on any dataset. Options and 
 - [Dataset format](docs/dataset-format.md): documents, questions, qrels, importers, generating questions and labels
 - [Benchmarking external systems](docs/benchmarking-external-systems.md): your deployed RAG (any HTTP endpoint) or your own Python function next to the built-in systems, in 3 steps
 - [Methodology](docs/methodology.md): metrics, the judge, statistics, cost accounting, how to read the report, limitations
+- [Result files and the site](docs/results.md): versioned JSON Schemas for `run_summary.json` and `metrics_summary.csv`, `ragbench runs site` for many runs on one page, and the docs site with its generated leaderboard
+- [Exporting traces](docs/observability.md): `ragbench export-traces` sends a run's traces to Phoenix, Langfuse or any OpenTelemetry backend, or writes them as JSONL
 - [Optimization](docs/optimization.md): `ragbench optimize` improves a system's prompts and knobs on the train split and keeps a change only if the test split confirms it
 - [System wiki](docs/system-wiki.md): how every system, chunker, reranker and agent works, with diagrams
 - [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*
