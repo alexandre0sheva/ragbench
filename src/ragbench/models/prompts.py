@@ -12,6 +12,10 @@ EXTRACT_GRAPH_MARKER = "Extract the named entities in the text below and the rel
 SUMMARIZE_COMMUNITY_MARKER = "Write a report on the community of related entities below"
 MAP_COMMUNITY_MARKER = "List the points of the community report below that help answer the question"
 
+# `compression`'s `llm_extract` compressor (JSON) and `raptor`'s cluster summaries at ingestion (plain text).
+COMPRESS_PASSAGES_MARKER = "Quote, word for word, the sentences of each numbered passage below that help answer the question"
+SUMMARIZE_CLUSTER_MARKER = "Write a summary of the related passages below"
+
 # Query-time planning prompts of `rag_fusion` and `decompose` (JSON answers).
 GENERATE_QUERY_VARIANTS_MARKER = "Write alternative search queries for the question below"
 PLAN_SUBQUESTIONS_MARKER = "Break the question below into the ordered sub-questions needed to answer it"

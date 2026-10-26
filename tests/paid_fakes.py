@@ -81,6 +81,7 @@ class PaidHashingEmbedding(HashingEmbeddingModel):
 
 def install(monkeypatch: Any) -> None:
     """Make every OpenAI client in the process one of the paid fakes, and give the process a (fake) key so runs are live."""
+    import ragbench.models.colbert as colbert
     import ragbench.models.decisions.openai_decisions as decisions_provider
     import ragbench.models.providers.openai as openai_provider
 
@@ -88,3 +89,6 @@ def install(monkeypatch: Any) -> None:
     monkeypatch.setattr(openai_provider, "OpenAILLM", lambda model_name: PaidMockLLM(model_name))
     monkeypatch.setattr(openai_provider, "OpenAIEmbeddingModel", PaidHashingEmbedding)
     monkeypatch.setattr(decisions_provider, "OpenAIDecisionModel", lambda model_name: PaidMockDecisionModel(model_name))
+    # `late_interaction` loads a local ColBERT model in live runs: the hashing token encoder stands in (no torch, no download).
+    monkeypatch.setattr(colbert, "ColBERTEncoder", lambda name: colbert.HashingTokenEncoder())
+    monkeypatch.setattr(colbert, "_ENCODERS", {})

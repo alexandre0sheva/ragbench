@@ -308,6 +308,25 @@ flowchart LR
 
 Use it to isolate the reranker's contribution against `vector`, and `hybrid_rerank` to see what the lexical half adds on top. Options: [systems.md](systems.md#rerank).
 
+#### `late_interaction`
+
+**Idea (ColBERT).** A single vector per chunk averages away detail: a chunk that names the exact term the question uses scores no better than one that is merely on topic. Keep one vector per *token* instead, and score a chunk by how well each question token finds its best match in it (MaxSim).
+
+```mermaid
+flowchart TD
+    Q["Question"] --> QE{{"ColBERT encoder: one vector per query token<br/>([Q] marker, padded with mask tokens)"}}
+    Q --> FS("rerank mode: hybrid or BM25 first stage,<br/>candidate_k candidates")
+    FS --> DE{{"Encode each candidate once: one vector per token<br/>([D] marker, punctuation dropped), cached"}}
+    QE --> MS("maxsim: for every query vector its best dot product<br/>with the chunk's vectors, summed")
+    DE --> MS
+    IX[("full mode: every chunk encoded at ingestion,<br/>one fp16 matrix")] --> MS
+    MS --> R["Top k by MaxSim"]
+```
+
+**Details.** `rerank` (the default) reorders the first stage's `candidate_k` candidates; each chunk is encoded the first time it is a candidate and kept, and each keeps its `first_stage_rank` in the chunk metadata. `full` encodes every chunk at ingestion into one fp16 matrix and scores all of them exactly, in blocks; a corpus that would need more than `max_index_vectors` token vectors is refused with a pointer to `rerank`. The model runs locally ($0 API cost; `pip install 'ragbench[colbert]'`), is loaded once per run and shared by every system that names it, and its libraries are imported on the main thread before a live run starts its workers. RAGBench reads ColBERT checkpoints itself (the Hugging Face encoder, the checkpoint's projection layer, the `[Q]` / `[D]` markers and query padding), from either the Stanford ColBERT or the PyLate layout, because PyLate pins an older sentence-transformers than RAGBench. Mock runs use fixed random vectors per word, so MaxSim runs for real and nothing is downloaded. On macOS, torch and faiss cannot share a process (each brings its own OpenMP runtime and the process aborts), so a live run that combines a torch user (`late_interaction`, the `cross_encoder` reranker, `local:` embeddings) with a `faiss` vector store is refused before it starts, with the systems named (`adaptive` routes included).
+
+**Strengths:** exact terms, names and rare words that a pooled embedding blurs; a strong reranker with no API cost. **Costs:** CPU or GPU time per candidate, and in `full` mode memory (about 2 bytes per dimension per token of the corpus). Options: [systems.md](systems.md#late_interaction).
+
 ### Shaping what the generator reads
 
 #### `parent_doc`
@@ -329,6 +348,22 @@ flowchart TD
 **Details.** Only children are embedded; parents are looked up by id. `parent_score_aggregation` decides how child evidence rolls up: `max` trusts the single best match, `sum` rewards a parent hit by several children (a topic spread over the section), `mean` rewards consistently relevant parents. Asking for a deeper ranking automatically searches enough children to cover that many distinct parents. Chunking is by words (it has its own `parent_chunk_size` and `child_chunk_size` options, not the shared `chunker:`).
 
 **Strengths:** the answer's surrounding context is intact. **Watch out:** parents cost more prompt tokens, and a big parent can bury the answer sentence. Options: [systems.md](systems.md#parent_doc).
+
+#### `compression`
+
+**Idea (contextual compression).** Retrieve generously, then throw away what does not bear on the question, so the generator reads more candidates in fewer tokens.
+
+```mermaid
+flowchart TD
+    Q["Question"] --> H("Hybrid search: BM25 + vector, RRF,<br/>candidate_k candidates (the ranking that is scored)")
+    H --> C{{"compress: keep the sentences that bear on the question<br/>llm_extract: one call quotes them, a quote not in its chunk is dropped<br/>embedding_filter: cosine to the question at least similarity_threshold<br/>decision: a decision model judges each sentence"}}
+    C --> P["Pack compressed candidates in rank order<br/>up to context_token_budget tokens"]
+    P --> G{{"Generator reads the compressed text"}}
+```
+
+**Details.** Every compressor keeps whole sentences of the chunk, so the generator never reads text that is not in the documents; an `llm_extract` quote that is not found word for word (whitespace aside) is dropped and counted (`unverified_quotes`), and a reply that is not usable JSON falls back to the uncompressed candidates. As with `decision_gate`, the ranking handed back and scored for retrieval is the uncompressed hybrid one; the context metrics and the judge read the compressed text the generator read. `top_k` is replaced by `candidate_k` (how many candidates are compressed) and `context_token_budget` (how much of them the generator reads). Each question's `compression` block records tokens before and after and the kept text; the summary has `avg_context_tokens_before` and `avg_context_tokens_after`.
+
+**Strengths:** long or noisy chunks; fitting more candidates into a small budget. **Costs:** `llm_extract` adds one call that carries every candidate; `embedding_filter` adds embeddings only; `decision` adds one decision request per candidate. **Watch out:** a sentence that only makes sense next to its neighbours can be cut away from them. Options: [systems.md](systems.md#compression).
 
 #### `sentence_window`
 
@@ -497,6 +532,31 @@ flowchart TD
 In `local` mode the generator reads document chunks, so the retrieval metrics and the judge work as for any system; the entities and relations are labelled as notes, not evidence. In `global` mode the generator reads community reports: each counts as its most mentioned document for the retrieval metrics (all its documents are in the chunk's `metadata.doc_ids`), the judge reads the same reports, and `top_k` is the number of reports mapped, one extra LLM call each per question.
 
 **Strengths:** `local` for questions that bridge entities across documents; `global` for corpus-wide questions about themes and groups. **Costs:** ingestion is the most expensive of any system (an extraction call per chunk carries the chunk and asks for a long JSON reply; `ragbench estimate` prices it from measured calls), and `global` adds `top_k` calls per question (made at once, so they add one call's latency). **Watch out:** `global` is weak on fact lookup, since a report keeps the gist of a community, not its details. Options: [systems.md](systems.md#graph_rag).
+
+#### `raptor`
+
+**Idea (RAPTOR, Sarthi et al. 2024).** Some answers are spread over many chunks, and some questions are about the gist rather than a detail. Build a tree: cluster similar chunks, have an LLM summarise each cluster, cluster and summarise the summaries, and search chunks and summaries together.
+
+```mermaid
+flowchart TD
+    subgraph Ingestion
+        C["Chunks, embedded"] --> CL["Cluster: Gaussian mixture on PCA-reduced embeddings,<br/>number of clusters by BIC"]
+        CL --> FIT["A cluster too long for summary_input_chars<br/>is clustered again within itself"]
+        FIT --> S{{"LLM summary per cluster of 2 or more<br/>(a node alone is carried up)"}}
+        S --> E["Embed the summaries"]
+        E --> CL2{"min_cluster_nodes or more nodes,<br/>below max_levels?"}
+        CL2 -- yes --> CL
+        CL2 -- no --> T[("Tree: chunks + summaries of every level")]
+    end
+    subgraph Question
+        Q["Question"] --> CO("collapsed_search: cosine over every node,<br/>leaves and summaries alike")
+        Q --> TR("tree_search: best branch_k of the top level,<br/>then best branch_k of their children, down to chunks")
+    end
+```
+
+**Details.** Summaries are temperature-0 calls run `ingest_workers` at a time and cached; a failed one is replaced by the first sentence of each member and counted. A summary covers the chunks under it, so for the retrieval metrics a retrieved summary counts as the document most of them come from (all its documents are in the chunk's `metadata.doc_ids`). How it differs from `hierarchical`: there, every document gets one summary written from its own text and summaries only route the search; here, summaries are written over clusters of related passages from anywhere in the corpus, at several levels, and are themselves what the generator reads. A cluster whose members together exceed `summary_input_chars` is clustered again within itself (the paper's local clustering) until every part fits, so a summary always reads its members whole; parts that identical vectors cannot separate are filled in order. Search is exact NumPy.
+
+**Strengths:** questions that need several related passages at once; "what is this about" questions. **Costs:** one LLM call per cluster at ingestion (far fewer than one per chunk). **Watch out:** a summary may drop the detail a question asks about; `collapsed` keeps the chunks in the index for that reason. Options: [systems.md](systems.md#raptor).
 
 #### `llm_heavy`
 
@@ -758,7 +818,9 @@ A side-by-side view of what each system pays for and when. "Ingestion" calls hap
 | [hybrid](#hybrid) | embeddings | none | `bm25_search` + `vector_search` per query, optional `mmr` |
 | [hybrid_rerank](#hybrid_rerank) | embeddings | none (one if reranker is `llm`) | search steps + `rerank` |
 | [rerank](#rerank) | embeddings | none (one if reranker is `llm`) | `vector_search` + `rerank` |
+| [late_interaction](#late_interaction) | embeddings for a hybrid first stage; `full` encodes every chunk with the local token model | none (a local model, $0) | first-stage search + `maxsim` (`rerank`), or `maxsim_search` (`full`) |
 | [parent_doc](#parent_doc) | embeddings of children | none | `child_vector_search` |
+| [compression](#compression) | embeddings | one extraction call (`llm_extract`), one decision request per candidate (`decision`), none (`embedding_filter`) | hybrid search steps, `compress` |
 | [sentence_window](#sentence_window) | embeddings of every sentence | none | `sentence_search` |
 | [hyde](#hyde) | embeddings | one (hypothetical passage) | `hypothetical_document` (llm), two `vector_search` |
 | [rag_fusion](#rag_fusion) | embeddings | one (query variants) | `query_variants` (llm), one `variant_search` per query |
@@ -766,6 +828,7 @@ A side-by-side view of what each system pays for and when. "Ingestion" calls hap
 | [contextual](#contextual) | one per chunk | none | like `hybrid` |
 | [hierarchical](#hierarchical) | one per document | none | `doc_search`, `chunk_search` |
 | [graph_rag](#graph_rag) | one per chunk, one per community | none (`local`); one per report read (`global`) | `entity_search`, `graph_expand` (`local`); `community_search`, `map_communities`, `reduce` (`global`) |
+| [raptor](#raptor) | one per cluster, per level | none | `collapsed_search` or `tree_search` |
 | [llm_heavy](#llm_heavy) | one per chunk if enabled | one rewrite; one rerank if enabled | `query_rewrite`, `vector_search` per query, `rerank` |
 | [corrective](#corrective) | embeddings | one grade per round, one rewrite per retry, optional self-check | `round_search`, `grade_chunks`, `rewrite_query`, `groundedness` |
 | [iterative](#iterative) | embeddings | one `next_hop` per round | `hop_search`, `next_hop` per round |

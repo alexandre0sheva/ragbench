@@ -24,6 +24,7 @@ from ragbench.datasets.loader import load_configured_dataset
 from ragbench.datasets.schema import Dataset, has_relevance_labels
 from ragbench.datasets.validation import validate_dataset
 from ragbench.documents.loaders import load_dataset_documents
+from ragbench.errors import UsageError
 from ragbench.evaluation import outputs, question_runner, rows
 from ragbench.evaluation.answer_checks import AnswerChecks
 from ragbench.evaluation.budget import BudgetExceededError, BudgetGuard
@@ -36,7 +37,7 @@ from ragbench.evaluation.plan import EvaluationPlan
 from ragbench.evaluation.rows import RunRows
 from ragbench.evaluation.run_stats import cheapest_system
 from ragbench.evaluation.summary import failed_systems
-from ragbench.evaluation.warm_up import modules_to_warm_up
+from ragbench.evaluation.warm_up import modules_to_warm_up, openmp_conflict, openmp_hint
 from ragbench.models import cost as pricing
 from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.errors import ModelInitError
@@ -152,6 +153,8 @@ class BenchmarkEvaluator:
 
     def run(self) -> Path:
         """Execute the configured benchmark and return the output directory path."""
+        if (conflict := openmp_conflict(self.config, self.mode)) is not None:
+            raise UsageError(conflict, hint=openmp_hint())
         if self.credential_problems:
             raise ModelInitError("Cannot start a live run: " + "; ".join(self.credential_problems) + ". Set them, pass --mock, or change the model refs.")
         pricing.clear_pricing_overrides()

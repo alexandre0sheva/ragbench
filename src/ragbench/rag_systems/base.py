@@ -46,6 +46,12 @@ class AnswerResult(BaseModel):
     steps: list[Step] = Field(default_factory=list)
 
 
+def given_context(answer: AnswerResult, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """`chunks` as the generator read them: a system that passed on a rewritten text (`compression`) lists it in `metadata["context_texts"]`."""
+    texts = answer.metadata.get("context_texts") or {}
+    return [chunk.model_copy(update={"text": texts[chunk.chunk_id]}) if chunk.chunk_id in texts else chunk for chunk in chunks]
+
+
 class IngestionResult(BaseModel):
     """Summary of a one-time ingestion pass over a document corpus."""
 

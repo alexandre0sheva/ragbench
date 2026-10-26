@@ -107,6 +107,31 @@ def test_graph_rag_extraction_and_community_reports_are_measured_as_ingestion(tm
         assert by_name[name].total_usd == pytest.approx(actual[name], rel=TOLERANCE), f"{name}: {by_name[name].total_usd} vs {actual[name]}"
 
 
+def test_raptor_compression_and_late_interaction_are_priced_like_the_run_charges_them(tmp_path, monkeypatch):
+    install_paid_fakes(monkeypatch)
+    models = {"generator": GENERATOR, "embedding": EMBEDDING}
+    path = _config(
+        tmp_path,
+        [
+            {"type": "vector", "name": "vector", "models": models, "retrieval": {"vector_store": "numpy"}},
+            {"type": "raptor", "name": "raptor", "models": models},
+            {"type": "compression", "name": "compression", "models": models},
+            {"type": "compression", "name": "compression_decision", "models": models, "retrieval": {"compressor": "decision"}},
+            {"type": "late_interaction", "name": "late", "models": models},
+        ],
+    )
+    estimate = estimate_run(load_config(path))
+    actual = _charged(run_benchmark(path, max_workers=1))
+
+    by_name = {s.system: s for s in estimate.systems}
+    assert all(s.error is None for s in estimate.systems)
+    assert by_name["raptor"].ingestion_usd > by_name["vector"].ingestion_usd, "one LLM summary per cluster"
+    assert by_name["compression"].answer_usd_per_question > by_name["vector"].answer_usd_per_question, "the extraction call is priced"
+    assert by_name["late"].ingestion_usd == pytest.approx(by_name["vector"].ingestion_usd), "the local token model costs nothing"
+    for name in ("raptor", "compression", "compression_decision", "late"):
+        assert by_name[name].total_usd == pytest.approx(actual[name], rel=TOLERANCE), f"{name}: {by_name[name].total_usd} vs {actual[name]}"
+
+
 def test_without_a_judge_the_estimate_has_no_judge_line(tmp_path, monkeypatch):
     install_paid_fakes(monkeypatch)
     path = _config(tmp_path, judge_enabled=False)

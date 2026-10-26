@@ -157,6 +157,16 @@ def _gate_fields(gates: list[dict[str, Any]]) -> dict[str, float]:
     }
 
 
+def _compression_fields(blocks: list[dict[str, Any]]) -> dict[str, float]:
+    """Mean context tokens before and after compression; empty for a system that does not compress."""
+    if not blocks:
+        return {}
+    return {
+        "avg_context_tokens_before": sum(b["tokens_before"] for b in blocks) / len(blocks),
+        "avg_context_tokens_after": sum(b["tokens_after"] for b in blocks) / len(blocks),
+    }
+
+
 def _latency_fields(concurrent_ms: list[float], probe: ProbeResult | None) -> dict[str, Any]:
     """Latency columns of one system.
 
@@ -239,6 +249,7 @@ def build_summary(
         row.update(_agent_fields([r["agent"] for r in ok_rows if r["system"] == system_name and r.get("agent")]))
         row.update(trajectory_summary_fields(ok_system_rows, agentic=_agentic(system_types[system_name])))
         row.update(_gate_fields([r["gate"] for r in ok_system_rows if r.get("gate")]))
+        row.update(_compression_fields([r["compression"] for r in ok_system_rows if r.get("compression")]))
         row.update(_latency_fields(latency_rows["latency_ms"].tolist(), probe_results.get(system_name)))
         if runtime_df is not None and not runtime_df.empty:
             runtime = runtime_df[runtime_df["system"] == system_name]

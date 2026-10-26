@@ -31,6 +31,7 @@ from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.refs import system_model_refs
 from ragbench.models.usage import UsageRecorder, record_usage
 from ragbench.rag_systems import create_rag_system
+from ragbench.rag_systems.base import given_context
 from ragbench.registry import SYSTEMS
 from ragbench.runtime import RuntimeContext, activate_runtime
 from ragbench.runtime.executor import AUTO_PROBE_MAX
@@ -186,7 +187,7 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
             answer_tokens += estimate_tokens(answer.answer)
             answer_seconds += _seconds(usage)
             given = answer.metadata.get("context_chunk_ids")
-            chunks = [c for c in answer.retrieval_result.chunks if given is None or c.chunk_id in given]
+            chunks = given_context(answer, [c for c in answer.retrieval_result.chunks if given is None or c.chunk_id in given])
             check_usd, check_seconds = _answer_checks(evaluation, question.question, answer.answer, "\n".join(c.text for c in chunks))
             judge_usd += check_usd  # checks on the answer are charged as judge spend
             judge_seconds += check_seconds

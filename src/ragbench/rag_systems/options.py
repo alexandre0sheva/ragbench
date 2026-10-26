@@ -267,6 +267,70 @@ class DecisionGateOptions(HybridRerankOptions):
         return self
 
 
+class RaptorOptions(TopKOptions):
+    mode: Literal["collapsed", "tree"] = Field(
+        default="collapsed",
+        description="`collapsed`: search the chunks and every summary as one flat index (the paper's better variant). `tree`: start at the top summaries and descend, keeping `branch_k` nodes per level.",
+    )
+    max_levels: int = Field(default=3, ge=1, le=10, description="Most summary levels built above the chunks.")
+    min_cluster_nodes: int = Field(default=5, ge=2, description="A level with fewer nodes than this is not clustered again: the tree stops there.")
+    max_clusters: int = Field(default=50, ge=2, description="Most clusters per level; the number is chosen by BIC among 2 and this (at most half the level's nodes).")
+    pca_dims: int = Field(default=10, ge=2, description="Dimensions the embeddings are reduced to (PCA) before Gaussian-mixture clustering.")
+    summary_input_chars: int = Field(
+        default=12000,
+        ge=500,
+        description="Most characters of members one summary prompt carries; a larger cluster is clustered again within itself until its parts fit, so members go in whole.",
+    )
+    branch_k: int = Field(default=3, ge=1, description="Nodes kept per level in `tree` mode.")
+
+
+class LateInteractionOptions(HybridOptions):
+    mode: Literal["rerank", "full"] = Field(
+        default="rerank",
+        description=(
+            "`rerank`: MaxSim over the first stage's `candidate_k` candidates (cheap; a candidate is encoded the first time it is seen). `full`: exact "
+            "MaxSim over every chunk, all encoded at ingestion and kept in memory (fp16); refused above `max_index_vectors`."
+        ),
+    )
+    model: str = Field(
+        default="answerdotai/answerai-colbert-small-v1",
+        description="ColBERT checkpoint (Hugging Face id or local folder; Stanford ColBERT or PyLate layout). Local, $0 API cost; needs `pip install 'ragbench[colbert]'`.",
+    )
+    first_stage: Literal["hybrid", "bm25"] = Field(default="hybrid", description="The ranking `rerank` mode reorders: hybrid (BM25 + vector, RRF) or BM25 alone (no embedding cost).")
+    candidate_k: int = Field(default=30, ge=1, description="First-stage candidates `rerank` mode scores (raised to the retrieval depth if smaller).")
+    max_index_vectors: int = Field(
+        default=2_000_000, ge=1, description="Most token vectors `full` mode will hold (about 2 bytes per dimension each); a larger corpus is refused with a pointer to `rerank`."
+    )
+
+
+class CompressionOptions(HybridOptions):
+    candidate_k: int = Field(
+        default=20, ge=1, description="Hybrid candidates compressed per question (also the ranking scored for retrieval, raised to the retrieval depth if smaller)."
+    )
+    compressor: Literal["llm_extract", "embedding_filter", "decision"] = Field(
+        default="llm_extract",
+        description=(
+            "`llm_extract`: one generator call quotes the sentences of every candidate that bear on the question; a quote not found word for word in its "
+            "chunk is dropped. `embedding_filter`: keep sentences whose embedding is at least `similarity_threshold` similar to the question (no LLM). "
+            "`decision`: a decision model judges each sentence (the interface `decision_gate` uses), keeping those at `relevance_threshold` or above."
+        ),
+    )
+    context_token_budget: int = Field(default=1500, ge=1, description="Tokens of compressed text the generator reads: compressed candidates in rank order, each that fits.")
+    similarity_threshold: float = Field(default=0.3, ge=-1, le=1, description="Cosine similarity to the question a sentence needs under `embedding_filter`.")
+    relevance_threshold: float = Field(default=0.5, ge=0, le=1, description="Probability a sentence needs under `decision`; one the model does not give is kept.")
+    decision_model: DecisionModelOptions = Field(default_factory=DecisionModelOptions, description="The decision model backend for `compressor: decision`; see its fields.")
+
+    @model_validator(mode="after")
+    def _the_budget_sets_the_context(self) -> CompressionOptions:
+        if self.top_k is not None or self.final_top_k is not None:
+            raise ValueError("compression packs its context by `context_token_budget` from `candidate_k` candidates; set those instead of top_k / final_top_k")
+        return self
+
+    @property
+    def configured_top_k(self) -> int | None:
+        return self.candidate_k
+
+
 class RerankOptions(RerankerModelOptions, VectorOptions, FinalTopKOptions, MultiQueryOptions):
     candidate_top_k: int = Field(default=30, ge=1, description="Vector candidates handed to the reranker (raised to the retrieval depth if smaller).")
     reranker: RerankerName = Field(default="simple_keyword_overlap", description=_RERANKER_NAMES)

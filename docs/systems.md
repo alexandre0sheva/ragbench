@@ -19,12 +19,15 @@ Profiles are relative: **cost** `low` = one generation call plus embeddings, `me
 | [`sentence_window`](#sentence_window) | Sentence window | low | fast | no | no | Precise matching with enough surrounding text to answer from |
 | [`vector`](#vector) | Vector | low | fast | no | no | Semantic baseline |
 | [`external_http`](#external_http) | External HTTP endpoint | low | medium | no | no | Benchmarking a RAG you already run (any stack) against the built-in systems |
+| [`late_interaction`](#late_interaction) | Late interaction (ColBERT MaxSim) | low | medium | no | no | Questions whose wording must match precisely (names, terms of art) where one pooled vector per chunk blurs the detail |
 | [`python_callable`](#python_callable) | Python callable | low | medium | no | no | Benchmarking your own code or a framework pipeline against the built-in systems without deploying it |
+| [`compression`](#compression) | Contextual compression | medium | medium | yes | no | Long or noisy chunks where most of each passage is beside the point; smaller prompts on long contexts |
 | [`decompose`](#decompose) | Question decomposition | medium | medium | yes | no | Multi-part, comparison and multi-hop questions |
 | [`hyde`](#hyde) | HyDE | medium | medium | yes | no | Short or vaguely-worded questions |
 | [`rag_fusion`](#rag_fusion) | RAG-Fusion | medium | medium | yes | no | Questions worded differently from the documents |
 | [`contextual`](#contextual) | Contextual retrieval | high | fast | no | no | Corpora where chunks lose their meaning out of context (many similar documents, pronouns, section-relative facts) |
 | [`hierarchical`](#hierarchical) | Hierarchical (summary-routed) | high | fast | no | no | "Which document?" questions and corpora too large to search chunk by chunk |
+| [`raptor`](#raptor) | RAPTOR (recursive summary tree) | high | fast | no | no | Questions that need the gist of several related passages, and corpora where one fact is spread over many chunks |
 | [`adaptive`](#adaptive) | Adaptive router | high | medium | yes | no | Mixed workloads where no single architecture is best for every question |
 | [`decision_gate`](#decision_gate) | Decision-gated RAG | high | medium | yes | no | Corpora where many questions have no answer in the documents, and a confident wrong answer costs more than a refusal |
 | [`full_context`](#full_context) | Full context | high | medium | no | no | Small corpora, and measuring how much a retrieval pipeline loses against reading everything |
@@ -239,6 +242,36 @@ Best for: Benchmarking a RAG you already run (any stack) against the built-in sy
 
 This system takes no `chunker:` section.
 
+## `late_interaction`
+
+**Late interaction (ColBERT MaxSim).** Per-token embeddings scored by MaxSim (ColBERT): reranks hybrid or BM25 candidates, or searches every chunk exactly.
+
+Best for: Questions whose wording must match precisely (names, terms of art) where one pooled vector per chunk blurs the detail. Cost: low; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `diversity` | `none` \| `mmr` | `none` | `mmr` re-ranks a candidate pool by maximal marginal relevance so near-duplicate chunks stop crowding out other evidence. `none` keeps the plain ranking. |
+| `mmr_lambda` | `float` | `0.5` | Relevance versus diversity when `diversity: mmr`: 1.0 reproduces the plain ranking, 0.0 only avoids repeats. Relevance is the retrieval score scaled so the best candidate is 1. |
+| `mmr_candidates` | `int` | `20` | Candidates MMR chooses from when `diversity: mmr` (raised to the retrieval depth if smaller). |
+| `multi_query` | `bool` | `false` | Retrieve with local (non-LLM) query variants to help multi-hop questions. |
+| `max_query_variants` | `int` | `4` | Maximum number of query variants when `multi_query` is on. |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `bm25_top_k` | `int` | `20` | BM25 candidates per query (raised to the retrieval depth if smaller). |
+| `vector_top_k` | `int` | `20` | Vector candidates per query (raised to the retrieval depth if smaller). |
+| `bm25_weight` | `float` | `1.0` | Weight of the BM25 ranking in weighted RRF; raise it to favor lexical evidence. |
+| `vector_weight` | `float` | `1.0` | Weight of the vector ranking in weighted RRF; raise it to favor semantic evidence. |
+| `mode` | `rerank` \| `full` | `rerank` | `rerank`: MaxSim over the first stage's `candidate_k` candidates (cheap; a candidate is encoded the first time it is seen). `full`: exact MaxSim over every chunk, all encoded at ingestion and kept in memory (fp16); refused above `max_index_vectors`. |
+| `model` | `str` | `answerdotai/answerai-colbert-small-v1` | ColBERT checkpoint (Hugging Face id or local folder; Stanford ColBERT or PyLate layout). Local, $0 API cost; needs `pip install 'ragbench[colbert]'`. |
+| `first_stage` | `hybrid` \| `bm25` | `hybrid` | The ranking `rerank` mode reorders: hybrid (BM25 + vector, RRF) or BM25 alone (no embedding cost). |
+| `candidate_k` | `int` | `30` | First-stage candidates `rerank` mode scores (raised to the retrieval depth if smaller). |
+| `max_index_vectors` | `int` | `2000000` | Most token vectors `full` mode will hold (about 2 bytes per dimension each); a larger corpus is refused with a pointer to `rerank`. |
+
 ## `python_callable`
 
 **Python callable.** Your own pipeline, called in-process: a function `(question, top_k)` returning a dict (answer, passages, usage, cost) or an `AnswerResult`.
@@ -254,6 +287,39 @@ Best for: Benchmarking your own code or a framework pipeline against the built-i
 | `ingest_target` | `str` | unset | A function called once with the list of documents before the questions (same notation). |
 
 This system takes no `chunker:` section.
+
+## `compression`
+
+**Contextual compression.** Hybrid retrieval of `candidate_k` candidates, each cut down to the sentences that bear on the question (LLM quotes, an embedding filter or a decision model), then packed to a token budget.
+
+Best for: Long or noisy chunks where most of each passage is beside the point; smaller prompts on long contexts. Cost: medium; latency: medium.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `diversity` | `none` \| `mmr` | `none` | `mmr` re-ranks a candidate pool by maximal marginal relevance so near-duplicate chunks stop crowding out other evidence. `none` keeps the plain ranking. |
+| `mmr_lambda` | `float` | `0.5` | Relevance versus diversity when `diversity: mmr`: 1.0 reproduces the plain ranking, 0.0 only avoids repeats. Relevance is the retrieval score scaled so the best candidate is 1. |
+| `mmr_candidates` | `int` | `20` | Candidates MMR chooses from when `diversity: mmr` (raised to the retrieval depth if smaller). |
+| `multi_query` | `bool` | `false` | Retrieve with local (non-LLM) query variants to help multi-hop questions. |
+| `max_query_variants` | `int` | `4` | Maximum number of query variants when `multi_query` is on. |
+| `rrf_k` | `int` | `60` | Reciprocal Rank Fusion smoothing constant. |
+| `final_top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `top_k` | `int` | unset | Alias for `final_top_k`; `final_top_k` wins when both are set. |
+| `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
+| `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+| `bm25_top_k` | `int` | `20` | BM25 candidates per query (raised to the retrieval depth if smaller). |
+| `vector_top_k` | `int` | `20` | Vector candidates per query (raised to the retrieval depth if smaller). |
+| `bm25_weight` | `float` | `1.0` | Weight of the BM25 ranking in weighted RRF; raise it to favor lexical evidence. |
+| `vector_weight` | `float` | `1.0` | Weight of the vector ranking in weighted RRF; raise it to favor semantic evidence. |
+| `candidate_k` | `int` | `20` | Hybrid candidates compressed per question (also the ranking scored for retrieval, raised to the retrieval depth if smaller). |
+| `compressor` | `llm_extract` \| `embedding_filter` \| `decision` | `llm_extract` | `llm_extract`: one generator call quotes the sentences of every candidate that bear on the question; a quote not found word for word in its chunk is dropped. `embedding_filter`: keep sentences whose embedding is at least `similarity_threshold` similar to the question (no LLM). `decision`: a decision model judges each sentence (the interface `decision_gate` uses), keeping those at `relevance_threshold` or above. |
+| `context_token_budget` | `int` | `1500` | Tokens of compressed text the generator reads: compressed candidates in rank order, each that fits. |
+| `similarity_threshold` | `float` | `0.3` | Cosine similarity to the question a sentence needs under `embedding_filter`. |
+| `relevance_threshold` | `float` | `0.5` | Probability a sentence needs under `decision`; one the model does not give is kept. |
+| `decision_model` | block | its fields below | The decision model backend for `compressor: decision`; see its fields. |
+| `decision_model.provider` | `str` | `openai_decisions` | `openai_decisions` (OpenAI's Decisions API, `POST /v1/decisions`, needs `OPENAI_API_KEY`), `llm_json` (the same questions put to a chat model that replies with JSON; the like-for-like control for `openai_decisions`), `mock` (deterministic word-overlap probabilities, no key), or a registered third-party backend. Mock runs (`--mock`, or no key) always use `mock`. |
+| `decision_model.model` | `str` | unset | Model the backend calls: for `openai_decisions` a Decisions model (default `gpt-6-luna`, the only one served today), for `llm_json` a chat model ref (default `gpt-6-luna`). |
 
 ## `decompose`
 
@@ -355,6 +421,25 @@ Best for: "Which document?" questions and corpora too large to search chunk by c
 | `docs_k` | `int` | `5` | Documents the first stage selects (by BM25 and embedding similarity over each document's title and summary). |
 | `chunks_per_doc` | `int` | `2` | Chunks taken from each selected document in the second stage; the best of them overall are returned. |
 | `summary_max_chars` | `int` | `6000` | Characters of each document shown to the LLM when it writes the summary. |
+
+## `raptor`
+
+**RAPTOR (recursive summary tree).** Chunks clustered and summarised by an LLM, recursively, into a tree; the question is matched against chunks and summaries of every level.
+
+Best for: Questions that need the gist of several related passages, and corpora where one fact is spread over many chunks. Cost: high; latency: fast.
+
+`retrieval:` options
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
+| `mode` | `collapsed` \| `tree` | `collapsed` | `collapsed`: search the chunks and every summary as one flat index (the paper's better variant). `tree`: start at the top summaries and descend, keeping `branch_k` nodes per level. |
+| `max_levels` | `int` | `3` | Most summary levels built above the chunks. |
+| `min_cluster_nodes` | `int` | `5` | A level with fewer nodes than this is not clustered again: the tree stops there. |
+| `max_clusters` | `int` | `50` | Most clusters per level; the number is chosen by BIC among 2 and this (at most half the level's nodes). |
+| `pca_dims` | `int` | `10` | Dimensions the embeddings are reduced to (PCA) before Gaussian-mixture clustering. |
+| `summary_input_chars` | `int` | `12000` | Most characters of members one summary prompt carries; a larger cluster is clustered again within itself until its parts fit, so members go in whole. |
+| `branch_k` | `int` | `3` | Nodes kept per level in `tree` mode. |
 
 ## `adaptive`
 

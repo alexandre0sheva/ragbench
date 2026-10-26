@@ -6,6 +6,7 @@ from ragbench.rag_systems.agent_search_rag import AgentSearchRAG
 from ragbench.rag_systems.base import BaseRAGSystem
 from ragbench.rag_systems.bm25_rag import BM25RAG
 from ragbench.rag_systems.cli_agent_rag import CliAgentRAG
+from ragbench.rag_systems.compression_rag import CompressionRAG
 from ragbench.rag_systems.contextual_rag import ContextualRAG
 from ragbench.rag_systems.corrective_rag import CorrectiveRAG
 from ragbench.rag_systems.decision_gate_rag import DecisionGateRAG
@@ -19,11 +20,13 @@ from ragbench.rag_systems.hybrid_rag import HybridRAG
 from ragbench.rag_systems.hybrid_rerank_rag import HybridRerankRAG
 from ragbench.rag_systems.hyde_rag import HyDERAG
 from ragbench.rag_systems.iterative_rag import IterativeRAG
+from ragbench.rag_systems.late_interaction_rag import LateInteractionRAG
 from ragbench.rag_systems.llm_heavy_rag import LLMHeavyRAG
 from ragbench.rag_systems.no_retrieval_rag import NoRetrievalRAG
 from ragbench.rag_systems.parent_doc_rag import ParentDocumentRAG
 from ragbench.rag_systems.python_callable_rag import PythonCallableRAG
 from ragbench.rag_systems.rag_fusion_rag import RagFusionRAG
+from ragbench.rag_systems.raptor_rag import RaptorRAG
 from ragbench.rag_systems.rerank_rag import RerankRAG
 from ragbench.rag_systems.sentence_window_rag import SentenceWindowRAG
 from ragbench.rag_systems.spec import SystemSpec
@@ -59,6 +62,7 @@ __all__ = [
     "SYSTEM_REGISTRY",
     "BaseRAGSystem",
     "CliAgentRAG",
+    "CompressionRAG",
     "ContextualRAG",
     "CorrectiveRAG",
     "DecisionGateRAG",
@@ -72,11 +76,13 @@ __all__ = [
     "HybridRAG",
     "HybridRerankRAG",
     "IterativeRAG",
+    "LateInteractionRAG",
     "LLMHeavyRAG",
     "NoRetrievalRAG",
     "ParentDocumentRAG",
     "PythonCallableRAG",
     "RagFusionRAG",
+    "RaptorRAG",
     "RerankRAG",
     "SentenceWindowRAG",
     "SystemSpec",

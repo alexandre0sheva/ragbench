@@ -204,6 +204,52 @@ systems:
       embedding: text-embedding-3-small
       generator: gpt-6-luna
 
+  # Recursive summary tree: one cheap call per cluster at ingestion, cached; chunks and summaries searched as one index.
+  - type: raptor
+    name: raptor_collapsed
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      mode: collapsed
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Contextual compression: 20 hybrid candidates cut to the sentences that bear on the question (one extra call), packed to 1,500 tokens.
+  - type: compression
+    name: compression_llm_extract
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      vector_store: numpy
+      compressor: llm_extract
+      candidate_k: 20
+      context_token_budget: 1500
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # ColBERT MaxSim reranking of hybrid candidates: a local model ($0 API cost), live runs need `pip install 'ragbench[colbert]'`.
+  - type: late_interaction
+    name: late_interaction_rerank
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      vector_store: numpy
+      mode: rerank
+      candidate_k: 30
+      final_top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
   # LLM query planning: one short extra call per question that writes alternative queries (rag_fusion) or sub-questions (decompose).
   - type: rag_fusion
     name: rag_fusion_default

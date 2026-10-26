@@ -115,6 +115,8 @@ _EXTRA_COLUMNS: tuple[tuple[str, str, str, bool], ...] = (
     ("gate_abstain_rate", "Gate abstains", "{:.2f}", False),
     ("avg_chunks_kept", "Chunks kept", "{:.1f}", False),
     ("avg_decision_calls", "Decisions", "{:.1f}", False),
+    ("avg_context_tokens_before", "Ctx tokens before", "{:.0f}", False),
+    ("avg_context_tokens_after", "Ctx tokens after", "{:.0f}", False),
     ("avg_steps", "Steps", "{:.1f}", False),
     ("avg_llm_calls", "LLM calls", "{:.1f}", False),
     ("avg_tool_calls", "Tool calls", "{:.1f}", False),

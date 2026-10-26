@@ -12,6 +12,20 @@ def normalize_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def sentence_pieces(text: str) -> list[str]:
+    """The sentences of `text` (split after `.`, `!`, `?` and at line breaks), each a verbatim substring of it, empty ones dropped."""
+    return [piece.strip() for piece in _SENTENCE_END.split(text) if piece.strip()]
+
+
+def lead_sentences(texts: Iterable[str], limit: int) -> str:
+    """The first sentence of each text (whitespace normalised), each once, joined and cut to `limit` characters: a summary that needs no model."""
+    firsts = [pieces[0] for text in texts if (pieces := sentence_pieces(normalize_text(text)))]
+    return " ".join(dict.fromkeys(firsts))[:limit]
+
+
 def tokenize(text: str) -> list[str]:
     return [m.group(0).lower() for m in _TOKEN_RE.finditer(text)]
 

@@ -128,6 +128,7 @@ def build_question_rows(
     for extra in (refusal, claims):  # checks on the answer are charged as judge spend
         if extra is not None:
             total_cost = total_cost.plus(extra.cost)
+    given = answer.metadata.get("context_texts") or {}  # what the generator read, when a system rewrote the chunk (`compression`)
     retrieved_contexts = [
         {
             "rank": chunk.rank,
@@ -135,7 +136,7 @@ def build_question_rows(
             "chunk_id": chunk.chunk_id,
             "score": chunk.score,
             "in_context": chunk.chunk_id in in_context,
-            "text_preview": truncate(chunk.text, 260),
+            "text_preview": truncate(given.get(chunk.chunk_id, chunk.text), 260),
             **_location(chunk.metadata),
         }
         for chunk in answer.retrieval_result.chunks
@@ -178,7 +179,9 @@ def build_question_rows(
         "route": answer.metadata.get("route"),  # the pipeline an `adaptive` system chose; None for every other system
         "routing_hint": question.routing_hint,
         "agent": answer.metadata.get("agent"),  # steps / hops / termination / budget_exhausted / llm_calls; None unless the system is agentic
-        "gate": answer.metadata.get("gate"),  # what a `decision_gate` decided (per-chunk probabilities, sufficiency, abstain reason); None for every other system
+        "gate": answer.metadata.get("gate"),
+        # what `compression` kept (tokens before and after, the text the generator read); None for every other system
+        "compression": answer.metadata.get("compression"),  # what a `decision_gate` decided (per-chunk probabilities, sufficiency, abstain reason); None for every other system
     }
     claim_columns: dict[str, Any] = {}
     if claims is not None:

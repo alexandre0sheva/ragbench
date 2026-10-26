@@ -17,7 +17,7 @@ from ragbench.evaluation.judge_panel import JudgePanel
 from ragbench.evaluation.retrieval_metrics import compute_retrieval_metrics
 from ragbench.evaluation.rows import build_question_rows, error_result
 from ragbench.models.refs import answering_model
-from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem
+from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem, given_context
 from ragbench.rag_systems.external_rag import unscored_retrieval
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ def _score_question(
     # ... and so does a question that has an answer but no labels to score the ranking against (label-free mode); an unanswerable one still scores 0.
     scorable = retrieves and (has_relevance_labels(question, qrels) or not question.is_answerable)
     retrieval_metrics = compute_retrieval_metrics(ranked, question.relevant_doc_ids, qrels=qrels, k_values=evaluation.k_values, evidence=question.evidence) if scorable else {}
-    context_chunks = [chunk for chunk in ranked if chunk.chunk_id in in_context]
+    context_chunks = given_context(result, [chunk for chunk in ranked if chunk.chunk_id in in_context])
     # Same notion of "relevant" as the retrieval metrics: the question's own list, else the positive qrels.
     relevant = question.relevant_doc_ids or [doc_id for doc_id, grade in qrels.items() if grade > 0]
     context_metrics = {
