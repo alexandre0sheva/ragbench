@@ -39,6 +39,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `report`: Rebuild every report of a finished run...
 * `judge-audit`: Calibrate the judge against a human: draw...
 * `compare-runs`: How a later run moved against an earlier...
+* `contrast`: Where two systems disagree: the questions...
 * `doctor`: Check Python, packages, optional extras,...
 * `runs`: List, inspect, remove and index the runs...
 * `models`: List the models RAGBench has prices for,...
@@ -541,6 +542,35 @@ $ ragbench compare-runs [OPTIONS] {a} {b}
 * `--min-drop <float range>`: When two runs share too few questions to test, flag an answer-score drop larger than this.  [default: 0.25; x>=0]
 * `--fail-on-regression`: Exit with status 1 when any system regressed (for CI).
 * `--json`: Print the comparison as JSON on stdout.
+* `--help`: Show this message and exit.
+
+## `ragbench contrast`
+
+Where two systems disagree: the questions one answers well and the other does not, and the first step at which their traces part.
+
+Computed from the run's files (nothing is re-run or paid for). Unless --no-write, the pair is written into contrasts.jsonl and
+contrast_summary.json (replacing that pair's earlier lines) and the run's reports are rebuilt with a "Where systems disagree" section.
+
+**Usage**:
+
+```console
+$ ragbench contrast [OPTIONS] {run} {a} {b}
+```
+
+**Arguments**:
+
+* `run`: A run directory, its name under --results-dir, `latest`, or part of a name.  [required]
+* `a`: The first system.  [required]
+* `b`: The second system.  [required]
+
+**Options**:
+
+* `--results-dir <path>`: The folder that holds the run directories.  [env var: RAGBENCH_RESULTS_DIR; default: results]
+* `--source <str>`: What makes a system right: `score` (its answer score reaches --threshold) or `verdicts` (it wins the arena's verdict; needs evaluation.pairwise).  [default: score]
+* `--threshold <float range>`: Answer score (0-5) from which an answer counts as correct, for --source score.  [default: 4.0; 0<=x<=5]
+* `--limit <int range>`: Contrast questions to list per direction.  [default: 5; x>=0]
+* `--no-write`: Only print: leave contrasts.jsonl and the reports of the run as they are.
+* `--json`: Print the summary and every contrast as JSON on stdout.
 * `--help`: Show this message and exit.
 
 ## `ragbench doctor`

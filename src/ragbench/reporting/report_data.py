@@ -17,6 +17,7 @@ from typing import Any
 
 import pandas as pd
 
+from ragbench.evaluation.contrast import read_summaries
 from ragbench.rag_systems.trace import STAGE_KEYS, UNTRACKED
 from ragbench.reporting import charts
 from ragbench.reporting.columns import MISSING, Column, extra_columns, format_cell, is_missing, leaderboard_columns, to_float
@@ -341,6 +342,12 @@ def _arena(run_dir: Path, run_summary: dict[str, Any], order: list[str]) -> dict
     return {"arena": {"systems": names, "rows": rows, "matrix": matrix, **{key: pairwise.get(key) for key in keys}}}
 
 
+def _contrast(run_dir: Path) -> dict[str, Any]:
+    """The contrast sets' per-pair summaries (`contrast_summary.json`); `{}` for a run without them."""
+    pairs = read_summaries(run_dir)
+    return {"contrast": {"pairs": pairs}} if pairs else {}
+
+
 def _judge(run_dir: Path, run_summary: dict[str, Any]) -> dict[str, Any]:
     """The judge panel and the human audit of the judge, when the run has either (`{}` otherwise, so plain runs keep their shape)."""
     panel = run_summary.get("judge")
@@ -481,6 +488,7 @@ def build_report(run_dir: Path, max_embedded_mb: float = DEFAULT_MAX_EMBEDDED_MB
         "notices": notices,
         **_judge(run_dir, run_summary),
         **_arena(run_dir, run_summary, order),
+        **_contrast(run_dir),
         "dataset": dataset,
         "cost": cost,
         "recommendation": _recommendation(recommendation, winner_yaml, by_name),

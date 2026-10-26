@@ -52,6 +52,7 @@ evaluation:
   # trials: 1  (see Statistics)
   # judge: {...} (see Judge), stats: {n_boot: 2000, seed: 0, baseline: null} (see Statistics)
   # pairwise: {enabled: false, pairs: all} (see Pairwise judging)
+  # contrast: {enabled: false, pairs: vs_baseline} (see Contrast sets)
   # claims: {enabled: false}, refusal_detector: heuristic  (see Claims and refusal detection)
 # selection: {profile: balanced, constraints: {...}} (see Selection)
 # report: {max_embedded_mb: 4}  (see Report)
@@ -190,6 +191,21 @@ evaluation:
 ```
 
 It needs at least two systems, uses the run's judge (or panel), seed (`evaluation.stats.seed`) and baseline (`evaluation.stats.baseline`), and costs two judge calls per pair and question: n systems with `pairs: all` is n(n − 1) calls per question, so `ragbench estimate` shows the line before a paid run. How pairs are picked and judged and what the arena score means is in [methodology.md](methodology.md#pairwise-arena). Changing this section does not invalidate resume checkpoints.
+
+## Contrast sets
+
+`evaluation.contrast` writes, for pairs of systems, the questions one answers well and the other does not, with both traces aligned step by step. Off by default; `ragbench contrast RUN A B` does the same for one pair of a finished run, with no API and no cost.
+
+```yaml
+evaluation:
+  contrast:
+    enabled: true
+    pairs: vs_baseline   # vs_baseline | all (default vs_baseline: every system against evaluation.stats.baseline)
+    source: score        # score | verdicts (default score; verdicts needs evaluation.pairwise)
+    threshold: 4.0       # answer score from which an answer is right, for source: score (default 4.0, the same as cost per correct answer)
+```
+
+It needs at least two systems. Changing this section does not invalidate resume checkpoints. What counts as a contrast, how the traces are aligned and the files it writes: [methodology.md](methodology.md#contrast-sets).
 
 ## Selection
 

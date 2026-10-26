@@ -10,6 +10,7 @@ from pathlib import Path
 
 import yaml
 
+from ragbench.evaluation.contrast import read_summaries
 from ragbench.reporting.explorer_data import DEFAULT_MAX_EMBEDDED_MB
 from ragbench.reporting.html_report import write_report
 from ragbench.reporting.markdown_report import stage_summary, write_failures, write_leaderboard, write_qrels_audit
@@ -50,6 +51,7 @@ def regenerate_reports(run_dir: Path) -> tuple[list[Path], list[str]]:
         stats_info=stats or None,
         pairwise=run_summary.get("pairwise"),
         split=(run_summary.get("dataset") or {}).get("split"),
+        contrast=read_summaries(run_dir),
     )
     written.append(run_dir / "leaderboard.md")
     if per_question:

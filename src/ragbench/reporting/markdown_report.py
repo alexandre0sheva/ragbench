@@ -51,6 +51,7 @@ def write_leaderboard(
     stats_info: dict[str, Any] | None = None,
     pairwise: dict[str, Any] | None = None,
     split: dict[str, str] | None = None,
+    contrast: list[dict[str, Any]] | None = None,
 ) -> None:
     columns = leaderboard_columns({key for row in summary_rows for key in row}, primary_k)
     pareto = any("pareto_optimal" in row for row in summary_rows)
@@ -73,6 +74,7 @@ def write_leaderboard(
     content.extend([_markdown_table(headers, rows), ""])
     content.extend(_statistics_sections(summary_rows, columns, significance_rows or [], stats_info or {}, pareto))
     content.extend(_pairwise_section(summary_rows, pairwise))
+    content.extend(_contrast_section(contrast))
     content.extend(_stage_sections(stage_rows or []))
     path.write_text("\n".join(content), encoding="utf-8")
 
@@ -107,6 +109,51 @@ def _pairwise_section(summary_rows: list[dict[str, Any]], pairwise: dict[str, An
     missing = [name for name in names if to_float(by_name[name].get("arena_score")) is None]
     if missing:
         lines += [f"No complete comparison, so no arena score: {', '.join(missing)}.", ""]
+    return lines
+
+
+def top_groups(counts: dict[str, int], limit: int = 3) -> str:
+    """`retrieval_miss 7, partial_answer 2`: the biggest groups of a cluster, most first."""
+    ranked = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    return ", ".join(f"{name} {count}" for name, count in ranked[:limit]) or MISSING
+
+
+def _contrast_section(contrast: list[dict[str, Any]] | None) -> list[str]:
+    """Per pair of systems, the questions only one answers well, and what the losing side tripped on and where the traces first parted."""
+    if not contrast:
+        return []
+    verdicts = any(pair.get("source") == "verdicts" for pair in contrast)
+    right = "won the arena's both-order verdict" if verdicts else f"scored at least {contrast[0].get('threshold')} on the answer score"
+    lines = [
+        "## Where systems disagree",
+        "",
+        f"Per pair, the questions where exactly one system is right (it {right}) and the other is not; a failed question is left out. "
+        "Each contrast also records where the two traces first part (`contrasts.jsonl`; `ragbench contrast RUN A B` for another pair).",
+        "",
+    ]
+    rows = [
+        {
+            "Pair": " vs ".join(pair["pair"]),
+            "Compared": pair["compared"],
+            "Only first right": pair["a_only"],
+            "Only second right": pair["b_only"],
+            ("Equal" if verdicts else "Both right"): pair.get("both_equal", pair.get("both_correct", 0)),
+            **({} if verdicts else {"Both wrong": pair.get("both_wrong", 0)}),
+        }
+        for pair in contrast
+    ]
+    lines += [_markdown_table(list(rows[0]), rows), ""]
+    for pair in contrast:
+        for winner, loser in (tuple(pair["pair"]), tuple(reversed(pair["pair"]))):
+            won = pair["a_only"] if winner == pair["pair"][0] else pair["b_only"]
+            if not won:
+                continue
+            cluster = (pair.get("clusters") or {}).get(winner) or {}
+            lines.append(
+                f"- **{winner}** right, **{loser}** not ({won}): {loser} failed as {top_groups(cluster.get('failure_type') or {})}; "
+                f"categories {top_groups(cluster.get('category') or {})}; traces part at {top_groups(cluster.get('diverges_at') or {})}."
+            )
+    lines.append("")
     return lines
 
 

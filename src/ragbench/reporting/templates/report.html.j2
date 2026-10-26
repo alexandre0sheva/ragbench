@@ -152,6 +152,21 @@
     </section>
     {% endif %}
 
+    {% if contrast %}
+    <section class="block" id="contrast" aria-labelledby="h-contrast">
+      <header><span class="num">{{ sec.contrast }}</span><h2 id="h-contrast">Where systems disagree</h2></header>
+      <p class="lede">Per pair, the questions where exactly one system is right{% if contrast.pairs[0].source == 'verdicts' %} (it won the arena's both-order verdict){% else %} (its answer score reaches {{ contrast.pairs[0].threshold }}){% endif %} and the other is not. A failed question is left out. <code>contrasts.jsonl</code> holds every question with both traces aligned step by step and the first step where they part.</p>
+      <div class="table-scroll"><table>
+        <thead><tr><th>Pair</th><th class="n">Compared</th><th class="n">Only first right</th><th class="n">Only second right</th><th class="n">{{ 'Equal' if contrast.pairs[0].source == 'verdicts' else 'Both right' }}</th>{% if contrast.pairs[0].source != 'verdicts' %}<th class="n">Both wrong</th>{% endif %}</tr></thead>
+        <tbody>{% for pair in contrast.pairs %}<tr><th scope="row">{{ pair.pair | join(' vs ') }}</th><td class="n">{{ pair.compared }}</td><td class="n">{{ pair.a_only }}</td><td class="n">{{ pair.b_only }}</td><td class="n">{{ pair.both_equal if pair.both_equal is defined else pair.both_correct }}</td>{% if pair.source != 'verdicts' %}<td class="n">{{ pair.both_wrong }}</td>{% endif %}</tr>{% endfor %}</tbody>
+      </table></div>
+      <details class="tableview"><summary>What the losing system tripped on, and where the traces part</summary><div class="table-scroll"><table>
+        <thead><tr><th>Right</th><th>Not right</th><th class="n">Questions</th><th>Failure types</th><th>Categories</th><th>Traces part at</th></tr></thead>
+        <tbody>{% for row in contrast_rows %}<tr><th scope="row">{{ row.winner }}</th><td>{{ row.loser }}</td><td class="n">{{ row.count }}</td><td>{{ row.failure_type }}</td><td>{{ row.category }}</td><td>{{ row.diverges_at }}</td></tr>{% endfor %}</tbody>
+      </table></div></details>
+    </section>
+    {% endif %}
+
     {% if heat %}
     <section class="block" id="categories" aria-labelledby="h-categories">
       <header><span class="num">{{ sec.categories }}</span><h2 id="h-categories">By question category</h2></header>

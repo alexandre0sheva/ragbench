@@ -28,7 +28,7 @@ CHECKPOINT_DIR = "checkpoints"
 FORMAT_VERSION = 1
 # Evaluation settings that change how fast or how safely a run goes, never what a system answers or scores.
 NEUTRAL_EVALUATION_KEYS = frozenset(
-    {"max_workers", "system_workers", "ingest_workers", "latency_probe_questions", "max_cost_usd", "cost_confirm_threshold_usd", "max_error_rate", "stats", "pairwise"}
+    {"max_workers", "system_workers", "ingest_workers", "latency_probe_questions", "max_cost_usd", "cost_confirm_threshold_usd", "max_error_rate", "stats", "pairwise", "contrast"}
 )
 
 

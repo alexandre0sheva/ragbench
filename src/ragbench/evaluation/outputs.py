@@ -16,6 +16,7 @@ import yaml
 from ragbench.cache import summarize_cache
 from ragbench.config.schema import SelectionConfig
 from ragbench.evaluation.arena import ARENA_SUMMARY_COLUMNS
+from ragbench.evaluation.contrast import CONTRASTS_FILE, ContrastError, build_contrasts, write_contrasts
 from ragbench.evaluation.judge_panel import panel_agreement
 from ragbench.evaluation.manifest import build_manifest, utc_now_iso
 from ragbench.evaluation.pairwise_run import summarize
@@ -103,6 +104,20 @@ def _write_pairwise(run: BenchmarkEvaluator, out: Path, summary_rows: list[dict[
     return {**result["summary"], "max_pairs_per_question": settings.max_pairs_per_question, "win_rates": result["win_rates"]}
 
 
+def _write_contrast(run: BenchmarkEvaluator, out: Path, baseline: str | None) -> list[dict[str, Any]] | None:
+    """`contrasts.jsonl` and `contrast_summary.json` (None without `evaluation.contrast.enabled`). Never turns a finished run into an error."""
+    settings = run.config.evaluation.contrast
+    if not settings.enabled:
+        return None
+    try:
+        contrasts = build_contrasts(out, source=settings.source, threshold=settings.threshold, pair_mode=settings.pairs, baseline=baseline)
+        write_contrasts(out, contrasts)
+    except (ContrastError, OSError) as exc:
+        logger.warning("Could not write the contrast sets: %s: %s", type(exc).__name__, exc)
+        return None
+    return contrasts.summaries
+
+
 def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: float) -> None:
     """Every output file of a run that has at least one finished system, report last (it reads all the others)."""
     out = run.output_dir
@@ -171,6 +186,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
     )
     # Only a panel gets a block: a one-judge run's summary stays as it was.
     judge_block = {"judge": {"models": evaluation.judge_models, "aggregate": evaluation.judge.aggregate, "independent": evaluation.judge.independent, "agreement": agreement}} if panel else {}
+    contrast = _write_contrast(run, out, run_stats.stats.get("baseline"))
     write_leaderboard(
         out / "leaderboard.md",
         summary_rows,
@@ -181,6 +197,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
         stats_info=run_stats.stats,
         pairwise=pairwise,
         split=run.split_info,
+        contrast=contrast,
     )
     write_failures(out / "failures.md", per_question_rows)
     qrels_audit_rows = build_qrels_audit(per_question_rows, evaluation.resolved_primary_k)
@@ -234,6 +251,7 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
                     "pareto": "pareto.json",
                     "recommendation": "recommendation.md",
                     **({"arena": "arena.csv", "pairwise": "pairwise.jsonl"} if pairwise is not None else {}),
+                    **({"contrasts": CONTRASTS_FILE} if contrast is not None else {}),
                 },
             },
             indent=2,

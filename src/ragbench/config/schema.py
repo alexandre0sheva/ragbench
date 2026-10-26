@@ -270,6 +270,21 @@ class PairwiseConfig(BaseModel):
     )
 
 
+class ContrastConfig(BaseModel):
+    """`evaluation.contrast:` section: where systems disagree (see docs/methodology.md#contrast-sets)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = Field(default=False, description="Write `contrasts.jsonl` and the report section: per pair, the questions one system answers well and the other does not.")
+    pairs: Literal["vs_baseline", "all"] = Field(
+        default="vs_baseline", description="Which pairs: every system against `evaluation.stats.baseline` (default: the cheapest system), or every pair."
+    )
+    source: Literal["score", "verdicts"] = Field(
+        default="score", description="What makes a system right: its answer score reaching `threshold`, or winning the arena's both-order verdict (needs `evaluation.pairwise`)."
+    )
+    threshold: float = Field(default=4.0, ge=0, le=5, description="Answer score (0-5) from which an answer counts as correct, for `source: score`.")
+
+
 class ClaimsConfig(BaseModel):
     """`evaluation.claims:` section: claim-level faithfulness (see docs/methodology.md#claim-level-faithfulness)."""
 
@@ -311,6 +326,7 @@ class EvaluationConfig(BaseModel):
     judge: JudgeConfig = Field(default_factory=JudgeConfig)
     stats: StatsConfig = Field(default_factory=StatsConfig)
     pairwise: PairwiseConfig = Field(default_factory=PairwiseConfig)
+    contrast: ContrastConfig = Field(default_factory=ContrastConfig)
     claims: ClaimsConfig = Field(default_factory=ClaimsConfig)
     # How a refusal is recognized (abstention metrics, failure types): the wording heuristic, or a decision model asked with the judge model.
     # Mock runs always use the heuristic.
@@ -655,6 +671,11 @@ class ExperimentConfig(BaseModel):
                     raise ValueError(f"{label}.models.embedding: {exc}") from None
         if self.evaluation.pairwise.enabled and len(self.systems) < 2:
             raise ValueError("evaluation.pairwise needs at least two systems to compare")
+        contrast = self.evaluation.contrast
+        if contrast.enabled and len(self.systems) < 2:
+            raise ValueError("evaluation.contrast needs at least two systems to compare")
+        if contrast.enabled and contrast.source == "verdicts" and not self.evaluation.pairwise.enabled:
+            raise ValueError("evaluation.contrast with source: verdicts needs the arena's verdicts: set evaluation.pairwise.enabled: true (or use source: score)")
         panel = self.evaluation.judge.panel
         for index, ref in enumerate(self.evaluation.judge_models):
             try:

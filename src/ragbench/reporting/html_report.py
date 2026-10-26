@@ -17,10 +17,23 @@ from jinja2 import Environment, select_autoescape
 from ragbench.reporting import charts
 from ragbench.reporting.columns import MISSING
 from ragbench.reporting.explorer_data import DEFAULT_MAX_EMBEDDED_MB, QUESTIONS_FILE, script_json
+from ragbench.reporting.markdown_report import top_groups
 from ragbench.reporting.report_data import FAILURE_NAMES, FAILURE_OTHER, ReportBuild, build_report, money
 
 TEMPLATES = "ragbench.reporting"
 _ENV = Environment(autoescape=select_autoescape(default=True, default_for_string=True), trim_blocks=False, lstrip_blocks=False)
+
+
+def _contrast_rows(contrast: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """One row per direction of each pair that has contrasts: who is right, who is not, and the clusters of the questions between them."""
+    rows = []
+    for pair in (contrast or {}).get("pairs", []):
+        for winner, loser in (tuple(pair["pair"]), tuple(reversed(pair["pair"]))):
+            count = pair["a_only"] if winner == pair["pair"][0] else pair["b_only"]
+            cluster = (pair.get("clusters") or {}).get(winner) or {}
+            if count:
+                rows.append({"winner": winner, "loser": loser, "count": count, **{key: top_groups(cluster.get(key) or {}) for key in ("failure_type", "category", "diverges_at")}})
+    return rows
 
 
 def _asset(name: str) -> str:
@@ -155,6 +168,8 @@ def _view(build: ReportBuild) -> dict[str, Any]:
     sections.append(("leaderboard-section", "Leaderboard"))
     if data.get("arena"):
         sections.append(("arena", "Pairwise arena"))
+    if data.get("contrast"):
+        sections.append(("contrast", "Where systems disagree"))
     if heat:
         sections.append(("categories", "Categories"))
     sections.append(("costs", "Cost and latency"))
@@ -166,7 +181,7 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         sections.append(("questions", "Questions"))
     sections.append(("repro", "Reproducibility"))
     numbers = {key: f"{n:02d}" for n, (key, _) in enumerate(sections, start=1)}
-    sec = {"recommendation": numbers.get("recommendation"), "tradeoff": numbers["tradeoff"], "leaderboard": numbers["leaderboard-section"], "arena": numbers.get("arena"), "categories": numbers.get("categories"),
+    sec = {"recommendation": numbers.get("recommendation"), "tradeoff": numbers["tradeoff"], "leaderboard": numbers["leaderboard-section"], "arena": numbers.get("arena"), "contrast": numbers.get("contrast"), "categories": numbers.get("categories"),
            "costs": numbers["costs"], "agents": numbers.get("agents"), "failures": numbers.get("failures"), "audit": numbers.get("audit"), "questions": numbers.get("questions"), "repro": numbers["repro"]}
     return {
         "css": _asset("report.css"),
@@ -176,6 +191,7 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         "notices": data["notices"],
         "judge": data.get("judge"),
         "arena": data.get("arena"),
+        "contrast": data.get("contrast"),
         "dataset": data["dataset"],
         "cost": data["cost"],
         "money": money,
@@ -189,6 +205,7 @@ def _view(build: ReportBuild) -> dict[str, Any]:
         "baseline": data["baseline"],
         "heat": heat_ctx,
         "heat_table": heat_table,
+        "contrast_rows": _contrast_rows(data.get("contrast")),
         "stage_svg": stage_svg,
         "stage_legend": stage_legend,
         "stage_table": stage_table,

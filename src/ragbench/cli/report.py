@@ -1,9 +1,10 @@
-"""`ragbench report`, `ragbench compare-runs` and `ragbench judge-audit`: work on finished runs without running anything."""
+"""`ragbench report`, `ragbench compare-runs`, `ragbench contrast` and `ragbench judge-audit`: work on finished runs without running anything."""
 
 from __future__ import annotations
 
 import webbrowser
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.markup import escape
@@ -20,10 +21,14 @@ from ragbench.evaluation.compare_runs import (
     compare_runs,
     comparison_to_dict,
 )
+from ragbench.evaluation.contrast import ContrastError, build_contrasts, write_contrasts
 from ragbench.evaluation.judge_audit import REPORT_FILE, score_audit, write_audit_sheet
+from ragbench.evaluation.stats import CORRECT_THRESHOLD
 from ragbench.reporting.history import resolve_run
+from ragbench.reporting.markdown_report import top_groups
 from ragbench.reporting.regenerate import regenerate_reports
 from ragbench.reporting.report_data import ReportError
+from ragbench.utils.text import truncate
 
 commands = typer.Typer()
 
@@ -137,3 +142,63 @@ def compare_runs_command(
             console.print(f"[red]Regressed: {escape(', '.join(comparison.regressions))}[/red]", soft_wrap=True)
             if fail_on_regression:
                 raise typer.Exit(1)
+
+
+@commands.command("contrast")
+def contrast_command(
+    run: str = typer.Argument(..., help="A run directory, its name under --results-dir, `latest`, or part of a name."),
+    a: str = typer.Argument(..., help="The first system."),
+    b: str = typer.Argument(..., help="The second system."),
+    results_dir: Path = RESULTS_DIR,
+    source: str = typer.Option("score", "--source", help="What makes a system right: `score` (its answer score reaches --threshold) or `verdicts` (it wins the arena's verdict; needs evaluation.pairwise)."),
+    threshold: float = typer.Option(CORRECT_THRESHOLD, "--threshold", min=0, max=5, help="Answer score (0-5) from which an answer counts as correct, for --source score."),
+    limit: int = typer.Option(5, "--limit", min=0, help="Contrast questions to list per direction."),
+    no_write: bool = typer.Option(False, "--no-write", help="Only print: leave contrasts.jsonl and the reports of the run as they are."),
+    as_json: bool = typer.Option(False, "--json", help="Print the summary and every contrast as JSON on stdout."),
+) -> None:
+    """Where two systems disagree: the questions one answers well and the other does not, and the first step at which their traces part.
+
+    Computed from the run's files (nothing is re-run or paid for). Unless --no-write, the pair is written into contrasts.jsonl and
+    contrast_summary.json (replacing that pair's earlier lines) and the run's reports are rebuilt with a "Where systems disagree" section.
+    """
+    if source not in ("score", "verdicts"):
+        raise fail(f"--source must be 'score' or 'verdicts', not '{source}'.")
+    with json_output(as_json):
+        run_dir = resolve_run(run, results_dir)
+        try:
+            contrasts = build_contrasts(run_dir, [(a, b)], source=source, threshold=threshold)  # type: ignore[arg-type]
+        except ContrastError as exc:
+            raise fail(str(exc)) from exc
+        summary = contrasts.summaries[0]
+        if not no_write:
+            write_contrasts(run_dir, contrasts, merge=True)
+            try:
+                regenerate_reports(run_dir)
+            except ReportError as exc:
+                console.print(f"  [yellow]•[/yellow] report not rebuilt: {escape(str(exc))}", soft_wrap=True)
+        if as_json:
+            print_json({"summaries": contrasts.summaries, "contrasts": contrasts.records})
+            return
+        _print_contrast(summary, contrasts.records, limit)
+        if not no_write:
+            console.print(f"[dim]Written to {run_dir / 'contrasts.jsonl'} and the report.[/dim]", soft_wrap=True)
+
+
+def _print_contrast(summary: dict[str, Any], records: list[dict[str, Any]], limit: int) -> None:
+    first, second = summary["pair"]
+    rule = "won the arena's verdict" if summary["source"] == "verdicts" else f"scored at least {summary['threshold']:g}"
+    console.print(f"[bold]{escape(first)} vs {escape(second)}[/bold]  [dim]right = {rule}; {summary['compared']} questions compared, {summary['skipped']} left out[/dim]", soft_wrap=True)
+    console.print(f"  only {escape(first)} right: {summary['a_only']}   only {escape(second)} right: {summary['b_only']}   " + (f"equal: {summary['both_equal']}" if summary["source"] == "verdicts" else f"both right: {summary['both_correct']}   both wrong: {summary['both_wrong']}"), soft_wrap=True)
+    for winner in summary["pair"]:
+        cluster = summary["clusters"][winner]
+        won = [r for r in records if r["winner"] == winner]
+        if not won:
+            continue
+        loser = second if winner == first else first
+        console.print(f"\n[green]{escape(winner)} right, {escape(loser)} not[/green] ({len(won)})")
+        console.print(f"  {escape(loser)} failed as {escape(top_groups(cluster['failure_type']))}; categories {escape(top_groups(cluster['category']))}", soft_wrap=True)
+        console.print(f"  traces first part at {escape(top_groups(cluster['diverges_at']))}", soft_wrap=True)
+        for record in sorted(won, key=lambda r: -r["gap"])[:limit]:
+            step = record["diverges_at"]
+            where = f"{step['reason'].replace('_', ' ')} at step {step['index']} ({step['a']} | {step['b']})" if step else "no trace to align"
+            console.print(f"  [dim]{escape(record['question_id'])}[/dim] {escape(truncate(str(record['question']), 70))}  {record['scores'][winner]:.1f} vs {record['scores'][loser]:.1f}; {escape(where)}", soft_wrap=True)
