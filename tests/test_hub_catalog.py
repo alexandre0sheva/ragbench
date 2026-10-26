@@ -100,3 +100,12 @@ def test_a_missing_pyarrow_names_the_extra_to_install(tmp_path, monkeypatch):
 
     with pytest.raises(MissingExtraError, match=r"ragbench\[hub\]"):
         READERS["hotpotqa"](_entry("hotpotqa"), {"validation.parquet": tmp_path / "missing.parquet"})
+
+
+@pytest.mark.parametrize("entry", _entries(), ids=lambda entry: entry.name)
+def test_each_shipped_config_throttles_openai_below_the_lowest_tier_embedding_limit(entry):
+    """MultiHop-RAG's corpus is ~1.4M tokens: indexing it at full concurrency hit OpenAI's 1M tokens-per-minute embedding limit (429) on
+    2026-10-26 and outlasted the retries. The shipped configs throttle so a first live run gets through."""
+    config = load_config(ROOT / "configs" / f"{entry.config_name}.yaml")
+
+    assert config.limits.tokens_per_minute is not None and config.limits.tokens_per_minute <= 1_000_000

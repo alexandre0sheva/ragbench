@@ -1,13 +1,15 @@
 """The harness proposer: reads an evidence tree and proposes one change to a system's harness, of a requested kind.
 
 **INV** asks for a general change (one that would help on any document collection), **DOM** for one made for this collection (Harness²'s
-two proposal kinds). The model gets the evidence files inline (an API model cannot open a folder), framing files first and rollouts last,
+two proposal kinds), **COMPOSE** for one harness that merges candidate changes, read from evidence whose contrasts compare each candidate
+with the system it changed. The model gets the evidence files inline (an API model cannot open a folder), framing files first and rollouts last,
 within `max_evidence_chars`; the whole request passes the leakage guard before it is sent. The reply is a patch with omitted-is-inherited
 semantics. A reply that cannot be used (not JSON, an unknown field, a value out of range, a field the system does not have, no change, or
 held-out text) is sent back once with the reason; a second bad reply leaves the harness as it was (`Proposal.inherited`).
 
 Any chat model works (`Proposer.from_ref`); in mock mode `MockLLM` answers with a scripted edit (`models/mock_proposer.py`), which reads
-the `Kind:`, `Proposal number:`, `Fields you may change:` and `Current harness (JSON):` lines of the request, so keep them as they are.
+the `Kind:`, `Proposal number:`, `Fields you may change:`, `Current harness (JSON):` and `Candidate changes (JSON):` lines of the request,
+so keep them as they are.
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from ragbench.optimize.evidence import MANIFEST, field_names, guard_for_run, rea
 
 logger = logging.getLogger(__name__)
 
-ProposalKind = Literal["INV", "DOM"]
+ProposalKind = Literal["INV", "DOM", "COMPOSE"]
 MAX_EVIDENCE_CHARS = 60_000  # about 15k tokens of evidence per request
 
 PROPOSER_SYSTEM_PROMPT = f"""{PROPOSE_HARNESS_MARKER}: the prompt texts and settings that shape how it finds passages and writes answers.
@@ -47,6 +49,8 @@ Rules:
 KIND_REQUESTS: dict[str, str] = {
     "INV": "a general change that would help this kind of system on any document collection. Do not mention names, terms or topics of this one.",
     "DOM": "a change made for this document collection: its vocabulary, its kinds of questions, the shape of its documents.",
+    "COMPOSE": "one harness that combines the candidate changes listed below. Each candidate's harness is in `harness/<name>.yaml` and its "
+    "behaviour against this system in `contrasts/<name>.md`: keep what helped, drop what hurt, and settle fields two candidates set differently.",
 }
 RETRY_PROMPT = "That change cannot be used: {error}. Reply again with one JSON object of the same form."
 
@@ -106,12 +110,17 @@ class Proposer:
         """A proposer on a model ref (`deepseek/...` through OpenRouter, `anthropic:claude-sonnet-5-5`, ...); the mock in mock mode."""
         return cls(create_llm(ref, force_mock=force_mock), **kwargs)
 
-    def propose(self, evidence: Path, system: SystemConfig, kind: ProposalKind, *, variant: int = 0) -> Proposal:
-        """One proposal of `kind` for `system` from the evidence tree at `evidence`. `variant` numbers the proposals made from one tree."""
+    def propose(
+        self, evidence: Path, system: SystemConfig, kind: ProposalKind, *, variant: int = 0, candidates: dict[str, dict[str, Any]] | None = None
+    ) -> Proposal:
+        """One proposal of `kind` for `system` from the evidence tree at `evidence`. `variant` numbers the proposals made from one tree;
+        `candidates` (name -> patch) are the changes a COMPOSE request merges."""
+        if (kind == "COMPOSE") != bool(candidates):
+            raise ValueError("a COMPOSE request needs the candidates it merges, and only a COMPOSE request takes candidates")
         manifest = read_manifest(evidence)
         guard = self.guard or guard_for_run(Path(manifest["run_dir"]), manifest["split"])
         current = effective_harness(system)
-        request = f"{render_evidence(evidence, manifest, self.max_evidence_chars)}\n\n{_request(kind, variant, field_names(system, current), current)}"
+        request = f"{render_evidence(evidence, manifest, self.max_evidence_chars)}\n\n{_request(kind, variant, field_names(system, current), current, candidates)}"
         guard.assert_text_clean(request, "the proposer's request")
         messages = [{"role": "system", "content": PROPOSER_SYSTEM_PROMPT}, {"role": "user", "content": request}]
         proposal = Proposal(kind, {}, dict(system.harness))
@@ -147,7 +156,7 @@ class Proposer:
         return harness
 
 
-def _request(kind: ProposalKind, variant: int, fields: list[str], current: dict[str, Any]) -> str:
+def _request(kind: ProposalKind, variant: int, fields: list[str], current: dict[str, Any], candidates: dict[str, dict[str, Any]] | None) -> str:
     return "\n".join(
         [
             "=== request ===",
@@ -155,6 +164,7 @@ def _request(kind: ProposalKind, variant: int, fields: list[str], current: dict[
             f"Proposal number: {variant + 1} (each proposal from this evidence should try a different idea)",
             f"Fields you may change: {', '.join(fields)}",
             f"Current harness (JSON): {json.dumps(current, ensure_ascii=False, default=str)}",
+            *([f"Candidate changes (JSON): {json.dumps(candidates, ensure_ascii=False, default=str)}"] if candidates else []),
             'Reply with one JSON object and nothing else: {"rationale": "the pattern you saw and why this change fixes it, in two or three sentences", '
             '"harness": {"<field>": <new value>, ...}}',
         ]

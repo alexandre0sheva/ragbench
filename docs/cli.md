@@ -25,6 +25,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `estimate`: Project what a run would cost and how long...
 * `recommend`: Which system to deploy, from a finished...
 * `auto`: From a folder of documents to a decision:...
+* `optimize`: Propose → Probe → Compose: improve a...
 * `demo`: Create or verify a bundled dataset: the...
 * `inspect-dataset`: Profile a dataset: sizes and balance,...
 * `split`: Split a dataset's questions into train /...
@@ -105,7 +106,8 @@ $ ragbench compare [OPTIONS]
 Project what a run would cost and how long it would take, without spending anything.
 
 Runs every system on the offline mock models (corpus indexing in full, a sample of the questions) to measure prompts and call
-counts, then prices them with the configured models. Warns when the price table is old or a model has no price.
+counts, then prices them with the configured models. Warns when the price table is old or a model has no price. With
+`--optimize SYSTEM` it projects an optimization of that system instead: its probes, dev and test runs, and proposer requests.
 
 **Usage**:
 
@@ -122,6 +124,12 @@ $ ragbench estimate [OPTIONS]
 * `--qrels <path>`: Optional qrels JSONL for --preset.
 * `--only, --systems <str>`: Only these systems (names or sweep base names, comma-separated or repeated), after sweeps are expanded.
 * `--skip <str>`: Leave these systems out (names or sweep base names, comma-separated or repeated). Applied after --only.
+* `--optimize <str>`: Estimate `ragbench optimize --system NAME` instead of a run (with --k, --mode, --finalists, --proposer, --test-trials).
+* `--k <int range>`: With --optimize: the loop's k.  [default: 2; x>=1]
+* `--mode <str>`: With --optimize: parallel or sequential.  [default: parallel]
+* `--finalists <int range>`: With --optimize: candidates taken to dev.  [default: 2; x>=1]
+* `--proposer <str>`: With --optimize: the proposer's model ref (default: the system's generator).
+* `--test-trials <int range>`: With --optimize: trials of each test question.  [default: 1; x>=1]
 * `--help`: Show this message and exit.
 
 ## `ragbench recommend`
@@ -182,6 +190,38 @@ $ ragbench auto [OPTIONS]
 * `--no-cache`: Do not read or write the persistent disk cache.
 * `-y, --yes`: Do not ask before spending more than evaluation.cost_confirm_threshold_usd.
 * `--open`: Open report.html in your browser when done.
+* `--help`: Show this message and exit.
+
+## `ragbench optimize`
+
+Propose → Probe → Compose: improve a system's harness (prompts and knobs) on train, pick on dev, verify on test.
+
+The proposer reads evidence from train runs only (never dev or test); a change is adopted only when the test split shows a
+significant gain over the base (paired bootstrap, Holm). Writes `optimized.yaml`, `optimization.md` and `ledger.json`.
+
+**Usage**:
+
+```console
+$ ragbench optimize [OPTIONS]
+```
+
+**Options**:
+
+* `-c, --config <path>`: Experiment config holding the system and a dataset with `splits.json` (`ragbench split`).  [required]
+* `--system <str>`: Name of the system whose harness to optimize.  [required]
+* `--k <int range>`: Width (parallel) or depth (sequential): 4k train probes and 3k proposer requests.  [default: 2; x>=1]
+* `--mode <str>`: parallel: k rollouts, k INV + k DOM candidates, k compositions. sequential: k rounds, carrying the best forward.  [default: parallel]
+* `--feedback <str>`: What the proposer sees: contrast (behaviour only), labels (train grades and references) or none.  [default: contrast]
+* `--proposer <str>`: Model ref of the proposer. Default: the system's own generator.
+* `--finalists <int range>`: Candidates that beat the base on train and go on to dev.  [default: 2; x>=1]
+* `--select <str>`: How dev picks: score, arena (pairwise, label-free), or auto (arena on a label-free dataset).  [default: auto]
+* `--test-trials <int range>`: Times each test question is answered by the base and the pick.  [default: 1; x>=1]
+* `--max-cost-usd <float range>`: Spending cap for the whole optimization (default: `evaluation.max_cost_usd`). Required for a live run.  [x>=0]
+* `--out <path>`: Output folder (default: results/optimize_<system>_<time>). Re-running into the same folder resumes.
+* `--mock`: Mock models and the scripted proposer: the whole loop offline, at no cost.
+* `--max-workers <int range>`: Questions answered at the same time in each probe.  [x>=1]
+* `-y, --yes`: Do not ask before a live optimization whose estimate is above `evaluation.cost_confirm_threshold_usd`.
+* `--json`: Print the outcome as JSON on stdout.
 * `--help`: Show this message and exit.
 
 ## `ragbench demo`

@@ -354,8 +354,17 @@ def _prepare(out_dir: Path) -> None:
     out_dir.mkdir(parents=True)
 
 
-def build_evidence(run_dir: Path, split: Literal["train", "dev"] = "train", *, system: str | None = None, feedback: Feedback = "contrast", out_dir: Path | None = None) -> Path:
+def build_evidence(
+    run_dir: Path,
+    split: Literal["train", "dev"] = "train",
+    *,
+    system: str | None = None,
+    feedback: Feedback = "contrast",
+    out_dir: Path | None = None,
+    trial: int | None = None,
+) -> Path:
     """Write the evidence tree of `system` (required when the run has several) from the `split` questions of a finished run; returns its folder.
+    `trial` keeps the target's rows of one trial of a repeated run (`evaluation.trials`), so each trial gives its own rollouts.
 
     The default folder is `<run>/evidence/<system>-<feedback>`; an earlier tree there is replaced. Raises `LeakageError` (and leaves no
     folder) when held-out text reached the tree in a way no single passage shows, such as a harness prompt that holds a test question.
@@ -374,7 +383,7 @@ def build_evidence(run_dir: Path, split: Literal["train", "dev"] = "train", *, s
     name = target.resolved_name
     by_question: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for row in rows:
-        if row["system"] == name and str(row["question_id"]) in visible:
+        if row["system"] == name and str(row["question_id"]) in visible and (trial is None or int(row.get("trial", 0)) == trial):
             by_question[str(row["question_id"])].append(row)
     if not by_question:
         raise EvidenceError(f"The run has no {split} questions for `{name}`: run it on `dataset.split: {split}` (or `all`) first.")
@@ -420,6 +429,7 @@ def build_evidence(run_dir: Path, split: Literal["train", "dev"] = "train", *, s
             "split": split,
             "split_hash": splits.digest,
             "feedback": feedback,
+            "trial": trial,
             "questions": len(by_question),
             "rollouts": len(by_question),
             "contrast_questions": len(set(contrasted)),

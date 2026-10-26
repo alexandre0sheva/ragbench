@@ -183,3 +183,33 @@ def test_a_valid_patch_keeps_the_fields_the_system_already_patched(evidence, sys
 
     assert proposal.harness == {"citation_style": "Cite [doc].", "answer_instructions": "Answer in one sentence."}
     assert isinstance(proposal, Proposal) and proposal.rationale == "because"
+
+
+# -- composition ------------------------------------------------------------------------------------------------------------------------------
+
+
+def test_a_composition_request_lists_the_candidate_changes(evidence, system):
+    llm = scripted(reply({"answer_instructions": "Answer in one sentence.", "top_k": 6}))
+    candidates = {"p0-inv": {"answer_instructions": "Answer in one sentence."}, "p0-dom": {"top_k": 6}}
+
+    proposal = Proposer(llm).propose(evidence, system, "COMPOSE", candidates=candidates)
+
+    request = llm.prompts[0].split("=== request ===", 1)[1]
+    assert "Kind: COMPOSE" in request and 'Candidate changes (JSON): {"p0-inv"' in request
+    assert proposal.kind == "COMPOSE" and proposal.patch == {"answer_instructions": "Answer in one sentence.", "top_k": 6}
+
+
+def test_a_composition_needs_candidates(evidence, system):
+    with pytest.raises(ValueError, match="candidates"):
+        Proposer(scripted(reply({}))).propose(evidence, system, "COMPOSE")
+
+
+def test_the_mock_composition_merges_the_candidates_and_varies(evidence, system):
+    candidates = {"a": {"answer_instructions": "Answer in one sentence."}, "b": {"top_k": 7}, "c": {}}
+    proposer = Proposer.from_ref(None, force_mock=True)
+
+    merged = proposer.propose(evidence, system, "COMPOSE", candidates=candidates, variant=0)
+    other = proposer.propose(evidence, system, "COMPOSE", candidates=candidates, variant=1)
+
+    assert merged.patch == {"answer_instructions": "Answer in one sentence.", "top_k": 7}
+    assert other.patch and other.patch != merged.patch

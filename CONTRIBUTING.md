@@ -68,6 +68,7 @@ Each piece of knowledge has one owner; everywhere else links to it. `scripts/aud
 | Writing a new system, chunker, tool, provider or plugin | `docs/extending.md` |
 | Which architecture to try and how to read the result | `docs/choosing-an-architecture.md` |
 | A measured comparison of `decision_gate` with the systems it replaces, and when to try it | `docs/decision-gate-evaluation.md` |
+| Optimizing a system's harness (`ragbench optimize`): the loop, its budget, outputs, resuming | `docs/optimization.md` |
 | Release history | `CHANGELOG.md` |
 | Releasing | `docs/release-checklist.md` |
 

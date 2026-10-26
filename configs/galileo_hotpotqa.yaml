@@ -59,3 +59,8 @@ evaluation:
   judge_model: anthropic:claude-haiku-5-5   # another model family than the generators (self-preference); live: ANTHROPIC_API_KEY + ragbench[anthropic]
   max_questions: null
   max_workers: 4
+
+# Hub corpora can be large (MultiHop-RAG is ~1.4M tokens): indexing one at full concurrency can exceed OpenAI's lowest-tier limit of
+# 1M embedding tokens per minute, and the run's retries give up before the minute frees. Raise or drop this on a higher usage tier.
+limits:
+  tokens_per_minute: 900000

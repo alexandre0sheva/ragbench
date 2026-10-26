@@ -10,7 +10,7 @@ from typer.core import TyperGroup
 from typer.exceptions import TyperException
 
 from ragbench import __version__
-from ragbench.cli import auto, dataset, doctor, harness, hub, models, report, run, runs, tools
+from ragbench.cli import auto, dataset, doctor, harness, hub, models, optimize, report, run, runs, tools
 from ragbench.cli.common import STATE, console, render_error
 from ragbench.documents.loaders import DocumentLoadError
 from ragbench.errors import EXIT_FAILED, EXIT_USAGE, ConfigError, RagbenchError, config_issues
@@ -77,7 +77,7 @@ def main(
     load_project_env()
 
 
-for module in (run, auto, dataset, tools, report, doctor):
+for module in (run, auto, optimize, dataset, tools, report, doctor):
     app.add_typer(module.commands)
 app.add_typer(runs.runs_app, name="runs")
 app.add_typer(models.models_app, name="models")

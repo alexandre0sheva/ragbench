@@ -1,0 +1,25 @@
+{
+  "dataset": "multihop-rag",
+  "revision": "71ac0d0bd1f951d2d6b70311f7d2ae404e1ffa82",
+  "license": "ODC-By-1.0",
+  "subset": {
+    "questions": 300,
+    "seed": 42
+  },
+  "files": [
+    {
+      "name": "MultiHopRAG.json",
+      "url": "https://huggingface.co/datasets/yixuantt/MultiHopRAG/resolve/71ac0d0bd1f951d2d6b70311f7d2ae404e1ffa82/MultiHopRAG.json",
+      "size": 5171312,
+      "sha256": null,
+      "git_sha1": "fcb9efe65c7730dd4126a42afb6c2c7e45721ebb"
+    },
+    {
+      "name": "corpus.json",
+      "url": "https://huggingface.co/datasets/yixuantt/MultiHopRAG/resolve/71ac0d0bd1f951d2d6b70311f7d2ae404e1ffa82/corpus.json",
+      "size": 6785567,
+      "sha256": null,
+      "git_sha1": "bb98345ef3921312aad05fd117b5a3e39888de2c"
+    }
+  ]
+}

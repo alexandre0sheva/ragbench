@@ -104,6 +104,7 @@ Every system implements the same interface and runs on any dataset. Options and 
 - [Dataset format](docs/dataset-format.md): documents, questions, qrels, importers, generating questions and labels
 - [Benchmarking external systems](docs/benchmarking-external-systems.md): your deployed RAG (any HTTP endpoint) or your own Python function next to the built-in systems, in 3 steps
 - [Methodology](docs/methodology.md): metrics, the judge, statistics, cost accounting, how to read the report, limitations
+- [Optimization](docs/optimization.md): `ragbench optimize` improves a system's prompts and knobs on the train split and keeps a change only if the test split confirms it
 - [System wiki](docs/system-wiki.md): how every system, chunker, reranker and agent works, with diagrams
 - [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*
 - [Extending RAGBench](docs/extending.md): new systems, tools, chunkers, rerankers, loaders, vector backends and model providers

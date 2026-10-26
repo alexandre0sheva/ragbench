@@ -271,3 +271,21 @@ def test_a_system_with_no_harness_to_change_is_refused(run, tmp_path):
 
     with pytest.raises(EvidenceError, match="no harness"):
         build_evidence(run_dir, system="bm25", out_dir=tmp_path / "ev")
+
+
+def test_a_trial_keeps_the_rows_of_that_trial_only(run, tmp_path):
+    run_dir, splits = copy_run(run[0], tmp_path / "run"), run[1]
+    path = run_dir / "per_question_results.jsonl"
+    from ragbench.utils.jsonl import read_jsonl, write_jsonl
+
+    rows = read_jsonl(path)
+    write_jsonl(path, [*({**row, "trial": 0} for row in rows), *({**row, "trial": 1, "answer": "second attempt"} for row in rows)])
+
+    first = build_evidence(run_dir, system="bm25", out_dir=tmp_path / "t0", trial=0)
+    second = build_evidence(run_dir, system="bm25", out_dir=tmp_path / "t1", trial=1)
+
+    question = splits.train[0]
+    assert "second attempt" not in (first / "rollouts" / f"{question}.md").read_text(encoding="utf-8")
+    text = (second / "rollouts" / f"{question}.md").read_text(encoding="utf-8")
+    assert "second attempt" in text and "Attempt 2" not in text
+    assert read_manifest(second)["trial"] == 1

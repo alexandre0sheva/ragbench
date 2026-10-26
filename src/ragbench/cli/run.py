@@ -313,15 +313,37 @@ def estimate(
     qrels: Path | None = typer.Option(None, "--qrels", help="Optional qrels JSONL for --preset."),
     only: list[str] | None = typer.Option(None, "--only", "--systems", help=_ONLY_HELP),
     skip: list[str] | None = typer.Option(None, "--skip", help=_SKIP_HELP),
+    optimize: str | None = typer.Option(None, "--optimize", help="Estimate `ragbench optimize --system NAME` instead of a run (with --k, --mode, --finalists, --proposer, --test-trials)."),
+    k: int = typer.Option(2, "--k", min=1, help="With --optimize: the loop's k."),
+    mode: str = typer.Option("parallel", "--mode", help="With --optimize: parallel or sequential."),
+    finalists: int = typer.Option(2, "--finalists", min=1, help="With --optimize: candidates taken to dev."),
+    proposer: str | None = typer.Option(None, "--proposer", help="With --optimize: the proposer's model ref (default: the system's generator)."),
+    test_trials: int = typer.Option(1, "--test-trials", min=1, help="With --optimize: trials of each test question."),
 ) -> None:
     """Project what a run would cost and how long it would take, without spending anything.
 
     Runs every system on the offline mock models (corpus indexing in full, a sample of the questions) to measure prompts and call
-    counts, then prices them with the configured models. Warns when the price table is old or a model has no price.
+    counts, then prices them with the configured models. Warns when the price table is old or a model has no price. With
+    `--optimize SYSTEM` it projects an optimization of that system instead: its probes, dev and test runs, and proposer requests.
     """
     path, raw = resolve_config(config, preset, docs, questions, qrels, only, skip)
     load_project_env(path)
     loaded = load_experiment(path, raw)
+    if optimize is not None:
+        from ragbench.cli.optimize import MODES, print_optimize_estimate, proposer_model
+        from ragbench.optimize.estimate import estimate_optimize
+        from ragbench.optimize.loop import OptimizeSettings
+
+        if mode not in MODES:
+            raise fail(f"--mode must be one of {', '.join(MODES)}, not '{mode}'.")
+        settings = OptimizeSettings(system=optimize, k=k, mode=mode, finalists=finalists, test_trials=test_trials)  # type: ignore[arg-type]
+        try:
+            with console.status(f"Measuring {optimize} on the mock models…"):
+                planned = estimate_optimize(loaded, settings, proposer_model(loaded, optimize, proposer))
+        except (FileNotFoundError, DocumentLoadError, ValueError) as exc:
+            raise fail(str(exc)) from exc
+        print_optimize_estimate(planned)
+        return
     try:
         with console.status("Measuring each system on the mock models…") as status:
             result = estimate_run(loaded, progress=lambda name: status.update(f"Measuring {name}…"))

@@ -2,7 +2,8 @@
 
 The edit is read off the request's `Kind:`, `Proposal number:`, `Fields you may change:` and `Current harness (JSON):` lines
 (`optimize/proposer.py`). INV edits are general (answer form, grounding, depth); DOM edits name the most common question kind from
-`task.md`. Proposal number N takes the Nth edit the system has fields for, skipping one that would change nothing.
+`task.md`. Proposal number N takes the Nth edit the system has fields for, skipping one that would change nothing. COMPOSE merges the
+`Candidate changes (JSON):` (later names win a field); proposal number N > 1 leaves out the (N-1)th candidate that changes something.
 """
 
 from __future__ import annotations
@@ -46,11 +47,13 @@ def _line(prompt: str, label: str) -> str:
 
 def _proposal(prompt: str) -> str:
     request = prompt.rsplit("=== request ===", 1)[-1]  # the evidence above it has `Kind:` lines of its own (a rollout's question kind)
-    kind = "DOM" if _line(request, "Kind:").startswith("DOM") else "INV"
+    kind = next((name for name in ("DOM", "COMPOSE") if _line(request, "Kind:").startswith(name)), "INV")
     numbered = re.match(r"\d+", _line(request, "Proposal number:"))
     number = int(numbered[0]) if numbered else 1
     fields = {name.strip() for name in _line(request, "Fields you may change:").split(",") if name.strip()}
     current = json.loads(_line(request, "Current harness (JSON):") or "{}")
+    if kind == "COMPOSE":
+        return _composition(json.loads(_line(request, "Candidate changes (JSON):") or "{}"), number)
     kinds = re.search(r"^- Kinds: `([^`]+)`", prompt, flags=re.M)
     topic = kinds[1] if kinds else "factual"
     usable = [(name, value) for name, value in (edit(current, topic) for edit in (DOM_EDITS if kind == "DOM" else INV_EDITS)) if name in fields]
@@ -59,6 +62,17 @@ def _proposal(prompt: str) -> str:
         return json.dumps({"rationale": f"Scripted {kind} proposal {number}: nothing left to change.", "harness": {}})
     name, value = changing[(number - 1) % len(changing)]
     return json.dumps({"rationale": f"Scripted {kind} proposal {number}: change `{name}`.", "harness": {name: value}})
+
+
+def _composition(candidates: dict[str, dict[str, Any]], number: int) -> str:
+    changing = [name for name in sorted(candidates) if candidates[name]]
+    left_out = changing[(number - 2) % len(changing)] if number > 1 and len(changing) > 1 else None
+    merged: dict[str, Any] = {}
+    for name in changing:
+        if name != left_out:
+            merged.update(candidates[name])
+    note = f", without `{left_out}`" if left_out else ""
+    return json.dumps({"rationale": f"Scripted composition {number}: every candidate's change{note}.", "harness": merged})
 
 
 def register(mock_llm: Any) -> None:
