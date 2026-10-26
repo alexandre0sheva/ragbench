@@ -21,6 +21,7 @@ import json
 import shutil
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -29,13 +30,17 @@ import yaml
 from ragbench.config.loader import load_config_dict
 from ragbench.config.schema import ExperimentConfig, SystemConfig
 from ragbench.config.sweep import expand_sweeps
+from ragbench.datasets.leakage import LeakageError
 from ragbench.datasets.loader import configured_splits_path, load_dataset
-from ragbench.datasets.splits import Splits, load_splits
+from ragbench.datasets.profile import profile_dataset
+from ragbench.datasets.splits import Splits, apply_split, load_splits
+from ragbench.documents.loaders import load_dataset_documents
 from ragbench.evaluation.stats import ALPHA, grouped_paired_bootstrap, holm_adjust
 from ragbench.harness.apply import effective_harness, harness_fingerprint
 from ragbench.models.cost import CostBreakdown
-from ragbench.optimize.evidence import Feedback, build_evidence, field_names
+from ragbench.optimize.evidence import Feedback, build_evidence, evidence_guard, field_names
 from ragbench.optimize.ledger import Entry, Ledger
+from ragbench.optimize.library import Library, LibraryError, build_entry, features_of, lesson_markdown, resolve_library
 from ragbench.optimize.probe import ProbeFailed, ProbeResult, ProbeStopped, probe_config, run_probe
 from ragbench.optimize.proposer import Proposal, ProposalKind, Proposer
 from ragbench.utils.jsonl import read_jsonl, write_jsonl
@@ -56,6 +61,7 @@ class OptimizeSettings:
     select: Select = "auto"  # auto: arena points on a label-free dataset, answer score otherwise
     max_cost_usd: float | None = None
     test_trials: int = 1
+    library: bool = True  # read lessons from the experience library and, on an adopted harness, write one (`library.enabled` in the config also applies)
 
     def identity(self) -> dict[str, Any]:
         """What a resumed attempt must share with the first (the cap may change between attempts)."""
@@ -149,11 +155,23 @@ class _Optimizer:
         self.splits: Splits = load_splits(configured_splits_path(self.config.dataset))
         if not self.splits.train or not self.splits.test:
             raise ValueError("Optimizing needs train and test questions in the splits file (`ragbench split --train 0.5 --dev 0.1`).")
-        self.label_free = load_dataset(self.config.dataset.questions_path, self.config.dataset.qrels_path).label_free
+        dataset = load_dataset(self.config.dataset.questions_path, self.config.dataset.qrels_path)
+        self.label_free = dataset.label_free
         self.ledger = Ledger(settings.k, settings.mode, settings.max_cost_usd)
         self.probed: dict[str, ProbeResult] = {}  # harness fingerprint -> its one-trial train probe
         self.candidates: list[Candidate] = []
         self.notes: list[str] = []
+        self.started_at = datetime.now(UTC)
+        self.library: Library | None = None
+        self.library_named = False
+        self.features: dict[str, Any] = {}
+        self.lessons: list[tuple[str, str]] = []
+        if settings.library and self.config.library.enabled:
+            self.library, self.library_named = resolve_library(self.config.library.path)
+            # What the library sees of this collection is its corpus and its train questions: dev and test questions never describe it.
+            train = apply_split(dataset, self.splits, "train")
+            self.features = features_of(profile_dataset(load_dataset_documents(self.config.dataset, warnings=[]), train))
+            self.guard = evidence_guard(dataset, self.splits, "train")
 
     # -- state and resume ---------------------------------------------------------------------------------------------------------------
 
@@ -163,11 +181,14 @@ class _Optimizer:
         path = self.out / STATE
         if path.is_file():
             previous = json.loads(path.read_text(encoding="utf-8"))
+            started = previous.pop("started_at", None)  # when the first attempt began: a resume reads the library as of then, never what that attempt wrote
             if previous != state:
                 changed = ", ".join(key for key in state if previous.get(key) != state[key])
                 raise ValueError(f"{self.out} holds an optimization made with other settings ({changed}); choose another output folder.")
+            if started:
+                self.started_at = datetime.fromisoformat(started)
         self.out.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+        path.write_text(json.dumps({**state, "started_at": self.started_at.isoformat(timespec="microseconds")}, indent=2) + "\n", encoding="utf-8")
 
     # -- probes -------------------------------------------------------------------------------------------------------------------------
 
@@ -239,7 +260,7 @@ class _Optimizer:
         return candidate
 
     def _evidence(self, source: ProbeResult, name: str, trial: int | None = None) -> Path:
-        return build_evidence(source.run_dir, system=source.label, feedback=self.settings.feedback, out_dir=self.out / "evidence" / name, trial=trial)
+        return build_evidence(source.run_dir, system=source.label, feedback=self.settings.feedback, out_dir=self.out / "evidence" / name, trial=trial, library=self.lessons)
 
     def _pool_evidence(self, base: Candidate, candidates: list[Candidate], name: str) -> tuple[Path, dict[str, dict[str, Any]]]:
         """Evidence whose contrasts compare each candidate that changed the harness with `base`: a run folder holding their train rows."""
@@ -352,8 +373,54 @@ class _Optimizer:
             "improved": bool(result.mean_diff > 0 and p_holm < ALPHA),
         }  # fmt: skip
 
+    # -- the experience library ---------------------------------------------------------------------------------------------------------
+
+    def read_library(self) -> None:
+        """The lessons of the nearest earlier entries (older than this run's start, and of the same kind: mock or live), for every evidence tree."""
+        if self.library is None:
+            return
+        try:
+            matches = self.library.nearest(self.features, before=self.started_at, mock=self.force_mock)
+        except LibraryError as exc:
+            self.notes.append(f"Library: not read ({exc}). Continuing without it.")
+            return
+        self.lessons = [(match.entry.id, lesson_markdown(match.entry, match.similarity)) for match in matches]
+        if self.lessons:
+            self.notes.append(f"Library: the proposer read {len(self.lessons)} lesson(s) from earlier work on similar collections ({', '.join(match.entry.id for match in matches)}).")
+
+    def write_library(self, result: OptimizeResult) -> None:
+        """Keep an adopted harness, its verified gain and a lesson. Nothing else is worth a lesson: a gain the test split did not confirm is not one."""
+        adopted = result.adopted
+        if self.library is None or adopted is None or result.verification is None:
+            return
+        if self.force_mock and not self.library_named:
+            self.notes.append("Library: nothing written, because a mock run only writes to a library you name (`library.path` or RAGBENCH_LIBRARY).")
+            return
+        entry = build_entry(
+            features=self.features,
+            system=self.settings.system,
+            system_type=adopted.config.type,
+            base_harness=effective_harness(result.base.config),
+            adopted_harness=effective_harness(adopted.config),
+            patch=dict(adopted.raw.get("harness") or {}),
+            rationale=adopted.proposal.rationale if adopted.proposal is not None else "",
+            verification=result.verification,
+            mock=self.force_mock,
+            run=str(self.out),
+        )
+        try:
+            if any(old.run == entry.run and old.harness == entry.harness for old in self.library.entries()):
+                self.notes.append("Library: this optimization is already recorded.")  # a resumed run that finished before
+                return
+            stored = self.library.append(entry, guard=self.guard)
+        except (LeakageError, LibraryError) as exc:
+            self.notes.append(f"Library: nothing written ({exc})")
+            return
+        self.notes.append(f"Library: recorded lesson {stored.id} in {self.library.path}.")
+
     def run(self) -> OptimizeResult:
         self._check_state()
+        self.read_library()
         base: Candidate | None = None
         pick: Candidate | None = None
         verification: dict[str, Any] | None = None
@@ -389,5 +456,6 @@ def optimize(
 
     optimizer = _Optimizer(config_path, settings, proposer, out_dir, force_mock=force_mock, max_workers=max_workers, raw_config=raw_config, progress=progress or (lambda _: None))
     result = optimizer.run()
+    optimizer.write_library(result)
     write_outputs(result, optimizer.raw, optimizer.target_index)
     return result

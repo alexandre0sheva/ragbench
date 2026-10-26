@@ -46,6 +46,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `models`: List the models RAGBench has prices for,...
 * `datasets`: Public benchmarks on demand: list them,...
 * `harness`: Show a system's editable harness (prompts...
+* `library`: The experience library: what `ragbench...
 
 ## `ragbench run`
 
@@ -177,7 +178,7 @@ $ ragbench auto [OPTIONS]
 * `--docs <path>`: Your documents: a folder, or one file.
 * `--questions <path>`: Your questions JSONL. Without it, questions are written from your documents (flagged needs_review).
 * `--qrels <path>`: Optional qrels JSONL for --questions.
-* `--preset <str>`: Which systems to compare: quick, standard, thorough, agentic.  [default: standard]
+* `--preset <str>`: Which systems to compare: quick, standard, thorough, agentic. Default: standard, or what the experience library suggests for a similar collection.
 * `--profile <str>`: What the recommendation optimizes: balanced, max_quality, cheapest_acceptable or lowest_latency.  [default: balanced]
 * `--n-questions <int range>`: How many questions to write when you have none.  [default: 50; x>=1]
 * `--seed <int>`: Seed for writing questions.  [default: 0]
@@ -189,6 +190,7 @@ $ ragbench auto [OPTIONS]
 * `--mock`: Force local mock mode: nothing is paid for and the scores only validate the pipeline.
 * `--no-cache`: Do not read or write the persistent disk cache.
 * `-y, --yes`: Do not ask before spending more than evaluation.cost_confirm_threshold_usd.
+* `--no-library`: Do not consult the experience library when choosing the preset.
 * `--open`: Open report.html in your browser when done.
 * `--help`: Show this message and exit.
 
@@ -219,6 +221,7 @@ $ ragbench optimize [OPTIONS]
 * `--max-cost-usd <float range>`: Spending cap for the whole optimization (default: `evaluation.max_cost_usd`). Required for a live run.  [x>=0]
 * `--out <path>`: Output folder (default: results/optimize_<system>_<time>). Re-running into the same folder resumes.
 * `--mock`: Mock models and the scripted proposer: the whole loop offline, at no cost.
+* `--no-library`: Do not read lessons from the experience library, and do not write one.
 * `--max-workers <int range>`: Questions answered at the same time in each probe.  [x>=1]
 * `-y, --yes`: Do not ask before a live optimization whose estimate is above `evaluation.cost_confirm_threshold_usd`.
 * `--json`: Print the outcome as JSON on stdout.
@@ -894,4 +897,100 @@ $ ragbench harness diff [OPTIONS] {first} {second}
 
 * `-s, --system <str>`: Only this system (by name).
 * `--json`: Print JSON on stdout instead of text.
+* `--help`: Show this message and exit.
+
+## `ragbench library`
+
+The experience library: what `ragbench optimize` learned on earlier collections. Offline; nothing here spends money.
+
+**Usage**:
+
+```console
+$ ragbench library [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `list`: List the entries, oldest first: id, date,...
+* `show`: Print one entry in full: the collection's...
+* `export`: Write the entries as JSONL (one entry per...
+* `clear`: Delete entries for good (the library is...
+
+### `ragbench library list`
+
+List the entries, oldest first: id, date, the system, its verified gain on held-out questions and the lesson.
+
+**Usage**:
+
+```console
+$ ragbench library list [OPTIONS]
+```
+
+**Options**:
+
+* `--path <path>`: Library folder (default: `library.path` of --config, else RAGBENCH_LIBRARY, else ~/.ragbench/library).
+* `-c, --config <path>`: Take `library.path` from this config.
+* `--fingerprint <str>`: Only the entries of this collection key, or the start of one (`show` and `--json` print it).
+* `--json`: Print the entries as JSON on stdout.
+* `--help`: Show this message and exit.
+
+### `ragbench library show`
+
+Print one entry in full: the collection's features, the adopted harness, the verified gain and the lesson.
+
+**Usage**:
+
+```console
+$ ragbench library show [OPTIONS] {entry_id}
+```
+
+**Arguments**:
+
+* `entry_id`: An entry id, or the start of one.  [required]
+
+**Options**:
+
+* `--path <path>`: Library folder (default: `library.path` of --config, else RAGBENCH_LIBRARY, else ~/.ragbench/library).
+* `-c, --config <path>`: Take `library.path` from this config.
+* `--json`: Print the entry as JSON on stdout.
+* `--help`: Show this message and exit.
+
+### `ragbench library export`
+
+Write the entries as JSONL (one entry per line, oldest first) to stdout, or to --out.
+
+**Usage**:
+
+```console
+$ ragbench library export [OPTIONS]
+```
+
+**Options**:
+
+* `--path <path>`: Library folder (default: `library.path` of --config, else RAGBENCH_LIBRARY, else ~/.ragbench/library).
+* `-c, --config <path>`: Take `library.path` from this config.
+* `--fingerprint <str>`: Only the entries of this collection key, or the start of one (`show` and `--json` print it).
+* `--out <path>`: Write the JSONL here instead of stdout.
+* `--help`: Show this message and exit.
+
+### `ragbench library clear`
+
+Delete entries for good (the library is append-only otherwise). Asks first; with no terminal, or in CI, it needs --yes.
+
+**Usage**:
+
+```console
+$ ragbench library clear [OPTIONS]
+```
+
+**Options**:
+
+* `--path <path>`: Library folder (default: `library.path` of --config, else RAGBENCH_LIBRARY, else ~/.ragbench/library).
+* `-c, --config <path>`: Take `library.path` from this config.
+* `--fingerprint <str>`: Remove only the entries of this collection key; without it, every entry.
+* `-y, --yes`: Do not ask first.
 * `--help`: Show this message and exit.

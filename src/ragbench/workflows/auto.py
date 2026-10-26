@@ -13,12 +13,15 @@ from pathlib import Path
 from typing import Any
 
 from ragbench.config.loader import load_config_dict
-from ragbench.config.presets import apply_preset
+from ragbench.config.presets import PRESET_NAMES, apply_preset, preset_systems
 from ragbench.config.sweep import expand_sweeps
+from ragbench.optimize.library import Library, Match
 from ragbench.selection.scoring import resolve_profile
 
 STATE_NAME = "auto.json"
 QUESTIONS_NAME = "questions.jsonl"
+LIBRARY_NAME = "library.json"
+DEFAULT_PRESET = "standard"
 
 
 class AutoError(ValueError):
@@ -110,3 +113,38 @@ def winner_files(run_dir: Path) -> dict[str, Path]:
     """The deliverables of a finished run that exist: `winner.yaml`, `report.html`, `recommendation.md`."""
     names = {"winner": "winner.yaml", "report": "report.html", "recommendation": "recommendation.md"}
     return {key: run_dir / name for key, name in names.items() if (run_dir / name).exists()}
+
+
+def preset_holding(system_type: str) -> str:
+    """The preset a comparison needs to include `system_type`: `standard` or `thorough` when one has it, `agentic` when only that does, else `standard`."""
+    for name in (DEFAULT_PRESET, *(name for name in PRESET_NAMES if name not in (DEFAULT_PRESET, "agentic")), "agentic"):
+        if any(system["type"] == system_type for system in preset_systems(name)):
+            return name
+    return DEFAULT_PRESET
+
+
+@dataclass
+class LibraryChoice:
+    preset: str
+    matches: list[Match]
+
+
+def choose_from_library(library: Library, features: dict[str, Any], *, before: datetime, mock: bool) -> LibraryChoice | None:
+    """What the experience library says about a collection like this one: the preset that includes the system the nearest earlier optimization
+    worked on (never smaller than `standard`, since an optimization says a system was worth tuning, not that it beats the others), and the lessons.
+    None when no earlier entry is similar enough."""
+    matches = library.nearest(features, before=before, mock=mock)
+    if not matches:
+        return None
+    return LibraryChoice(preset_holding(matches[0].entry.system_type), matches)
+
+
+def write_library_matches(run_dir: Path, choice: LibraryChoice) -> None:
+    payload = {
+        "preset": choice.preset,
+        "matches": [
+            {"id": m.entry.id, "similarity": round(m.similarity, 3), "system_type": m.entry.system_type, "gain": m.entry.gain, "lesson": m.entry.lesson, "harness": m.entry.harness}
+            for m in choice.matches
+        ],
+    }
+    (run_dir / LIBRARY_NAME).write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")

@@ -207,6 +207,18 @@ evaluation:
 
 It needs at least two systems. Changing this section does not invalidate resume checkpoints. What counts as a contrast, how the traces are aligned and the files it writes: [methodology.md](methodology.md#contrast-sets).
 
+## Library
+
+`library:` says where `ragbench optimize` keeps the lessons it learned and whether `optimize` and `auto` use them (what an entry holds and the rules for reading it are in [optimization.md](optimization.md#the-experience-library)). Both settings are optional.
+
+```yaml
+library:
+  path: ~/team-library    # default: RAGBENCH_LIBRARY if set, else ~/.ragbench/library
+  enabled: true           # false: optimize and auto neither read nor write the library
+```
+
+Changing this section does not invalidate resume checkpoints.
+
 ## Selection
 
 `selection:` decides what each run recommends deploying (`recommendation.md`, `recommendation.json` and `winner.yaml` in the run directory; how it works is in [methodology.md](methodology.md#selection)). Everything is optional; by default the `balanced` profile and no constraints.

@@ -10,7 +10,7 @@ from typer.core import TyperGroup
 from typer.exceptions import TyperException
 
 from ragbench import __version__
-from ragbench.cli import auto, dataset, doctor, harness, hub, models, optimize, report, run, runs, tools
+from ragbench.cli import auto, dataset, doctor, harness, hub, library, models, optimize, report, run, runs, tools
 from ragbench.cli.common import STATE, console, render_error
 from ragbench.documents.loaders import DocumentLoadError
 from ragbench.errors import EXIT_FAILED, EXIT_USAGE, ConfigError, RagbenchError, config_issues
@@ -83,3 +83,4 @@ app.add_typer(runs.runs_app, name="runs")
 app.add_typer(models.models_app, name="models")
 app.add_typer(hub.datasets_app, name="datasets")
 app.add_typer(harness.harness_app, name="harness")
+app.add_typer(library.library_app, name="library")

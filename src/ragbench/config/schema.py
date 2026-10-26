@@ -585,6 +585,15 @@ class ReportConfig(BaseModel):
     )
 
 
+class LibraryConfig(BaseModel):
+    """`library:` section: the experience library `ragbench optimize` writes lessons to and reads them from. See docs/optimization.md#the-experience-library."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: Path | None = Field(default=None, description="Folder of the library. Default: `RAGBENCH_LIBRARY` if set, else `~/.ragbench/library`.")
+    enabled: bool = Field(default=True, description="`false` neither reads nor writes the library (`ragbench optimize` and `auto`).")
+
+
 class ExperimentConfig(BaseModel):
     run: RunConfig
     dataset: DatasetConfig
@@ -605,6 +614,8 @@ class ExperimentConfig(BaseModel):
     selection: SelectionConfig = Field(default_factory=SelectionConfig)
     # How report.html is built (the size of the question explorer's data).
     report: ReportConfig = Field(default_factory=ReportConfig)
+    # Where `optimize` keeps what it learned, and whether `optimize` and `auto` use it.
+    library: LibraryConfig = Field(default_factory=LibraryConfig)
 
     @model_validator(mode="before")
     @classmethod

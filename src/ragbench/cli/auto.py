@@ -29,7 +29,7 @@ def auto(
     docs: Path | None = typer.Option(None, "--docs", help="Your documents: a folder, or one file."),
     questions: Path | None = typer.Option(None, "--questions", help="Your questions JSONL. Without it, questions are written from your documents (flagged needs_review)."),
     qrels: Path | None = typer.Option(None, "--qrels", help="Optional qrels JSONL for --questions."),
-    preset: str = typer.Option("standard", "--preset", help=f"Which systems to compare: {', '.join(PRESET_NAMES)}."),
+    preset: str | None = typer.Option(None, "--preset", help=f"Which systems to compare: {', '.join(PRESET_NAMES)}. Default: standard, or what the experience library suggests for a similar collection."),
     profile: str = typer.Option("balanced", "--profile", help="What the recommendation optimizes: balanced, max_quality, cheapest_acceptable or lowest_latency."),
     n_questions: int = typer.Option(50, "--n-questions", min=1, help="How many questions to write when you have none."),
     seed: int = typer.Option(0, "--seed", help="Seed for writing questions."),
@@ -41,6 +41,7 @@ def auto(
     mock: bool = typer.Option(False, "--mock", help="Force local mock mode: nothing is paid for and the scores only validate the pipeline."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before spending more than evaluation.cost_confirm_threshold_usd."),
+    no_library: bool = typer.Option(False, "--no-library", help="Do not consult the experience library when choosing the preset."),
     open_report: bool = typer.Option(False, "--open", help="Open report.html in your browser when done."),
 ) -> None:
     """From a folder of documents to a decision: profile them, write questions if you have none, run the preset, and recommend a system.
@@ -49,10 +50,12 @@ def auto(
     `--resume RUN_DIR` continues without paying again for the systems that finished.
     """
     import webbrowser
+    from datetime import UTC, datetime
 
     from ragbench.datasets.profile import profile_dataset
     from ragbench.datasets.synthesis import parse_mix
     from ragbench.models.defaults import DEFAULT_GENERATOR_MODEL
+    from ragbench.optimize.library import features_of, resolve_library
     from ragbench.utils.jsonl import write_jsonl
     from ragbench.workflows import auto as workflow
 
@@ -70,12 +73,12 @@ def auto(
         else:
             if docs is None:
                 raise workflow.AutoError("Pass --docs (a folder of documents) to start, or --resume RUN_DIR to continue a run.")
-            workflow.check_choices(preset, profile)
+            workflow.check_choices(preset or workflow.DEFAULT_PRESET, profile)
             settings = workflow.AutoSettings(
                 docs=str(docs.resolve()),
                 questions=str(questions.resolve()) if questions else None,
                 qrels=str(qrels.resolve()) if qrels else None,
-                preset=preset,
+                preset=preset or workflow.DEFAULT_PRESET,
                 profile=profile,
                 n_questions=n_questions,
                 seed=seed,
@@ -143,6 +146,25 @@ def auto(
     )
     for warning in [*validate_dataset(documents, dataset), *profile_result.warnings][:6]:
         console.print(f"  [yellow]•[/yellow] {escape(warning)}", soft_wrap=True)
+
+    # An earlier optimization of a similar collection can choose the preset (never one you named, never on a resumed run: its config is fixed).
+    if resume is None and preset is None and not no_library and (loaded is None or loaded.library.enabled):
+        try:
+            library, _ = resolve_library(loaded.library.path if loaded is not None else None)
+            choice = workflow.choose_from_library(library, features_of(profile_result), before=datetime.now(UTC), mock=settings.mock)
+        except RagbenchError as exc:
+            console.print(f"[yellow]•[/yellow] The experience library was not read: {escape(str(exc))}", soft_wrap=True)
+            choice = None
+        if choice is not None:
+            nearest = choice.matches[0]
+            settings.preset = choice.preset
+            workflow.write_state(run_dir, settings, generation_cost)
+            workflow.write_library_matches(run_dir, choice)
+            console.print(
+                f"Library: a similar collection (similarity {nearest.similarity:.2f}) adopted a harness for `{escape(nearest.entry.system_type)}`: comparing the `{choice.preset}` preset. "
+                f"{len(choice.matches)} lesson(s) in {run_dir / workflow.LIBRARY_NAME}.",
+                soft_wrap=True,
+            )
 
     # 3. The run: estimate, confirm, run every system, recommend. Systems an earlier attempt finished are not run again.
     try:

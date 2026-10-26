@@ -74,6 +74,23 @@ The output folder (`--out`, default `results/optimize_<system>_<time>`) holds:
 
 **Candidate diversity** is 1 minus the mean pairwise line-Jaccard similarity of the distinct candidates' harnesses. Near 0, the proposals collapsed onto one idea (Harness²'s collapse check), and a larger `k` or `--feedback labels` may help.
 
+## The experience library
+
+What one optimization learned is kept for the next one. When `ragbench optimize` **adopts** a harness (the test split confirmed the gain), it appends an entry to the experience library: the adopted harness, the verified gain with its confidence interval, and one lesson stated from what was measured (which fields changed, by how much the answers improved on held-out questions) and the proposer's own reason for the change. A run with "no reliable gain" writes nothing: a gain the test split did not confirm is not a lesson.
+
+Entries are keyed by a **corpus fingerprint** from the [dataset profile](cli.md#ragbench-inspect-dataset): the documents' language, the size of the corpus and of a typical document, how long the questions are, and whether they carry relevance labels. The key is coarse, so a collection a few percent larger shares it, and later runs compare the profile itself (`similarity`, 0 to 1) to find the **nearest** entries, at least 0.75 alike. Two things use them:
+
+- `ragbench optimize` puts the lessons of the nearest entries (up to three) in the `library/` folder of every evidence tree, so the proposer reads them next to the rollouts, as hints to check rather than rules. The run's notes and `optimization.md` say which entries it read.
+- `ragbench auto`, when you do not pass `--preset`, picks the preset that includes the system the nearest entry was optimized for (never smaller than `standard`) and writes the matches to `library.json` in the run folder.
+
+The rules that keep the library honest:
+
+- **Append-only and time-ordered.** `entries.jsonl` in the library folder gets one line per entry, in the order written. A run reads only entries **older than its own start** (a resumed run keeps its first start), so it never reads what it or a run alongside it wrote.
+- **Nothing held out is written.** The features describe the corpus and the *train* questions only. Every entry passes the leakage guard over the dev and test questions before it is stored, and one that quotes them is refused (the run says so in its notes). The gain's numbers come from the test split; its questions and answers never do.
+- **Mock and live stay apart.** Mock runs read only mock entries and live runs only live ones. A mock run writes only to a library you named (`library.path` or `RAGBENCH_LIBRARY`), never to the default folder in your home directory.
+
+The library lives in `~/.ragbench/library`, or in `RAGBENCH_LIBRARY`, or in the config's [`library.path`](configuration.md#library) (the config wins over the variable). `library.enabled: false` or `--no-library` skips it. Look at it with `ragbench library list`, `show ID`, `export [--out FILE]` (JSONL) and `clear [--fingerprint KEY]`; see the [command reference](cli.md#ragbench-library-list).
+
 ## Cost, caps and resuming
 
 `--max-cost-usd` (or `evaluation.max_cost_usd`) caps the whole optimization. Each probe runs with what is left of the cap, and a probe that reaches it stops the loop: the verdict is "stopped" and the base is kept. Costs are counted at standalone prices, as in every run. The [disk cache](configuration.md#caching) makes repeated unchanged calls free in a live run (ingestion of an unchanged corpus, a re-probed harness), so the real spend in `ledger.json` is usually below the charged total.

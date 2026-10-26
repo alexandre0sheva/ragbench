@@ -24,6 +24,7 @@ import json
 import re
 import shutil
 from collections import Counter, defaultdict
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -362,9 +363,11 @@ def build_evidence(
     feedback: Feedback = "contrast",
     out_dir: Path | None = None,
     trial: int | None = None,
+    library: Sequence[tuple[str, str]] = (),
 ) -> Path:
     """Write the evidence tree of `system` (required when the run has several) from the `split` questions of a finished run; returns its folder.
     `trial` keeps the target's rows of one trial of a repeated run (`evaluation.trials`), so each trial gives its own rollouts.
+    `library` is `(id, markdown)` lessons of the experience library for `library/<id>.md`, most similar first; they pass the guard like any passage.
 
     The default folder is `<run>/evidence/<system>-<feedback>`; an earlier tree there is replaced. Raises `LeakageError` (and leaves no
     folder) when held-out text reached the tree in a way no single passage shows, such as a harness prompt that holds a test question.
@@ -419,7 +422,12 @@ def build_evidence(
                 records = [record for record in contrasts.records if record["pair"] == summary["pair"]]
                 contrasted += [record["question_id"] for record in records]
                 writer.write(f"contrasts/{_safe_name(other)}.md", _contrast_file(writer, name, other, records, summary, feedback))
-        writer.write("library/README.md", "# Library\n\nNo lessons from earlier work on similar collections yet.")
+        if library:
+            writer.write("library/README.md", "# Library\n\nLessons from earlier work on similar collections, most similar first: " + ", ".join(f"`{_safe_name(name)}.md`" for name, _ in library) + ".")
+            for name, text in library:
+                writer.write(f"library/{_safe_name(name)}.md", writer.clean(text))
+        else:
+            writer.write("library/README.md", "# Library\n\nNo lessons from earlier work on similar collections yet.")
         focus = list(dict.fromkeys([*failed, *contrasted]))
         manifest = {
             "version": 1,

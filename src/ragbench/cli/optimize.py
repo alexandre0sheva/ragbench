@@ -79,6 +79,7 @@ def optimize_command(
     max_cost_usd: float | None = typer.Option(None, "--max-cost-usd", min=0, help="Spending cap for the whole optimization (default: `evaluation.max_cost_usd`). Required for a live run."),
     out: Path | None = typer.Option(None, "--out", help="Output folder (default: results/optimize_<system>_<time>). Re-running into the same folder resumes."),
     mock: bool = typer.Option(False, "--mock", help="Mock models and the scripted proposer: the whole loop offline, at no cost."),
+    no_library: bool = typer.Option(False, "--no-library", help="Do not read lessons from the experience library, and do not write one."),
     max_workers: int | None = typer.Option(None, "--max-workers", min=1, help="Questions answered at the same time in each probe."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before a live optimization whose estimate is above `evaluation.cost_confirm_threshold_usd`."),
     as_json: bool = typer.Option(False, "--json", help="Print the outcome as JSON on stdout."),
@@ -96,6 +97,7 @@ def optimize_command(
         finalists=finalists,
         select=_choice(select, SELECTIONS, "--select"),  # type: ignore[arg-type]
         test_trials=test_trials,
+        library=not no_library,
     )
     with json_output(as_json):
         load_project_env(config)

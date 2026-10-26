@@ -14,6 +14,8 @@ def _isolate_from_the_real_environment(monkeypatch, tmp_path_factory):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
     monkeypatch.setenv("RAGBENCH_CACHE_DIR", str(tmp_path_factory.mktemp("ragbench_cache")))
+    # The experience library lives in the home directory by default: a test must never write there.
+    monkeypatch.setenv("RAGBENCH_LIBRARY", str(tmp_path_factory.mktemp("ragbench_library")))
     # A synced OpenRouter catalog in the developer's cache must not change prices or capabilities in tests: only the bundled snapshot is seen.
     monkeypatch.setenv("RAGBENCH_OPENROUTER_CATALOG", str(tmp_path_factory.mktemp("openrouter") / "openrouter_models.json"))
 
