@@ -32,6 +32,9 @@ TOOL_AGENT_MARKER = "You are a research agent with tools"
 REACT_JSON_MARKER = "Reply with exactly one JSON object"
 FORCE_ANSWER_MARKER = "You cannot use any more tools"
 
+# The harness proposer (`optimize/proposer.py`): opens its system prompt; the mock answers with a scripted patch (`models/mock_proposer.py`).
+PROPOSE_HARNESS_MARKER = "Propose one change to the harness of a question-answering system"
+
 # The adaptive system's LLM router.
 ROUTE_QUESTION_MARKER = "Choose the route that should handle the question below"
 
