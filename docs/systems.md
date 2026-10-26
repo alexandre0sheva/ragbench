@@ -65,6 +65,8 @@ Best for: Cheap baseline and exact-term matching. Cost: low; latency: fast.
 | --- | --- | --- | --- |
 | `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`.
+
 ## `hybrid`
 
 **Hybrid (BM25 + vector).** BM25 + vector search fused with (optionally weighted) Reciprocal Rank Fusion.
@@ -89,6 +91,8 @@ Best for: Balanced lexical + semantic retrieval. Cost: low; latency: fast.
 | `vector_top_k` | `int` | `20` | Vector candidates per query (raised to the retrieval depth if smaller). |
 | `bm25_weight` | `float` | `1.0` | Weight of the BM25 ranking in weighted RRF; raise it to favor lexical evidence. |
 | `vector_weight` | `float` | `1.0` | Weight of the vector ranking in weighted RRF; raise it to favor semantic evidence. |
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`, `vector_weight`.
 
 ## `hybrid_rerank`
 
@@ -115,6 +119,8 @@ Best for: Recall of hybrid plus rerank precision. Cost: low; latency: fast.
 | `candidate_top_k` | `int` | `30` | Fused candidates handed to the reranker (raised to the retrieval depth if smaller). |
 | `reranker` | `str` | `local_relevance` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`, `reranker`, `vector_weight`.
+
 ## `no_retrieval`
 
 **No retrieval.** The model answers from its own knowledge with no documents at all (the floor baseline).
@@ -128,6 +134,8 @@ This system has no `retrieval:` options.
 This system takes no `chunker:` section.
 
 This system retrieves nothing, so its retrieval columns (recall, MRR, nDCG) are blank in every report, never 0.
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs none.
 
 ## `parent_doc`
 
@@ -154,6 +162,8 @@ Best for: Better answer context with precise retrieval. Cost: low; latency: fast
 | `child_chunk_size` | `int` | `250` | Child chunk size in words. |
 | `child_chunk_overlap` | `int` | `50` | Overlap between child chunks in words. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`.
+
 ## `rerank`
 
 **Vector + rerank.** Vector retrieval followed by a reranking pass.
@@ -174,6 +184,8 @@ Best for: Higher precision context selection. Cost: low; latency: fast.
 | `candidate_top_k` | `int` | `30` | Vector candidates handed to the reranker (raised to the retrieval depth if smaller). |
 | `reranker` | `str` | `simple_keyword_overlap` | `simple_keyword_overlap`, `local_relevance` (TF-IDF), `cross_encoder` (needs the `rerank` extra), or `llm`. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`, `reranker`.
+
 ## `sentence_window`
 
 **Sentence window.** Search single sentences, then hand the generator each matched sentence with the sentences around it.
@@ -192,6 +204,8 @@ Best for: Precise matching with enough surrounding text to answer from. Cost: lo
 
 This system takes no `chunker:` section.
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`.
+
 ## `vector`
 
 **Vector.** Embedding search with cosine similarity over a pluggable vector backend (exact NumPy by default).
@@ -208,6 +222,8 @@ Best for: Semantic baseline. Cost: low; latency: fast.
 | `top_k` | `int` | unset | Chunks given to the generator. Default 5; when unset the evaluator uses `evaluation.context_k`. |
 | `vector_store` | `str` | `numpy` | Vector backend: `numpy` (exact, no extra), `faiss` (exact) or `faiss_hnsw` (approximate) with `pip install 'ragbench[faiss]'`, `chroma` (approximate) with `ragbench[chroma]`, `qdrant` (exact, local mode) with `ragbench[qdrant]`. `in_memory` is a deprecated alias of `numpy`. A missing library is an error, never a silent fallback. |
 | `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`.
 
 ## `external_http`
 
@@ -242,6 +258,8 @@ Best for: Benchmarking a RAG you already run (any stack) against the built-in sy
 
 This system takes no `chunker:` section.
 
+This system takes no `harness:` (its prompts are its routes' or live outside RAGBench).
+
 ## `late_interaction`
 
 **Late interaction (ColBERT MaxSim).** Per-token embeddings scored by MaxSim (ColBERT): reranks hybrid or BM25 candidates, or searches every chunk exactly.
@@ -272,6 +290,8 @@ Best for: Questions whose wording must match precisely (names, terms of art) whe
 | `candidate_k` | `int` | `30` | First-stage candidates `rerank` mode scores (raised to the retrieval depth if smaller). |
 | `max_index_vectors` | `int` | `2000000` | Most token vectors `full` mode will hold (about 2 bytes per dimension each); a larger corpus is refused with a pointer to `rerank`. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`, `vector_weight`.
+
 ## `python_callable`
 
 **Python callable.** Your own pipeline, called in-process: a function `(question, top_k)` returning a dict (answer, passages, usage, cost) or an `AnswerResult`.
@@ -287,6 +307,8 @@ Best for: Benchmarking your own code or a framework pipeline against the built-i
 | `ingest_target` | `str` | unset | A function called once with the list of documents before the questions (same notation). |
 
 This system takes no `chunker:` section.
+
+This system takes no `harness:` (its prompts are its routes' or live outside RAGBench).
 
 ## `compression`
 
@@ -321,6 +343,8 @@ Best for: Long or noisy chunks where most of each passage is beside the point; s
 | `decision_model.provider` | `str` | `openai_decisions` | `openai_decisions` (OpenAI's Decisions API, `POST /v1/decisions`, needs `OPENAI_API_KEY`), `llm_json` (the same questions put to a chat model that replies with JSON; the like-for-like control for `openai_decisions`), `mock` (deterministic word-overlap probabilities, no key), or a registered third-party backend. Mock runs (`--mock`, or no key) always use `mock`. |
 | `decision_model.model` | `str` | unset | Model the backend calls: for `openai_decisions` a Decisions model (default `gpt-6-luna`, the only one served today), for `llm_json` a chat model ref (default `gpt-6-luna`). |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`, `vector_weight`.
+
 ## `decompose`
 
 **Question decomposition.** The LLM splits a complex question into sub-questions; each is searched (optionally in sequence, feeding earlier answers forward), then one answer is synthesized from all the evidence.
@@ -343,6 +367,8 @@ Best for: Multi-part, comparison and multi-hop questions. Cost: medium; latency:
 | `chunks_per_subquestion` | `int` | `3` | Chunks of a sub-question's ranking the LLM reads to answer it when `sequential` is on. |
 | `include_original` | `bool` | `false` | Also search the original question, as a safety net against a bad split. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `query_rewrite_prompt`, `few_shot`; knobs `top_k`, `chunk_size`.
+
 ## `hyde`
 
 **HyDE.** Hypothetical Document Embeddings: the LLM writes a hypothetical answer used as the search probe.
@@ -359,6 +385,8 @@ Best for: Short or vaguely-worded questions. Cost: medium; latency: medium.
 | `persist_directory` | `str` | unset | Directory for a persistent store (`chroma`, `qdrant`). Default: in memory. |
 | `probe_top_k` | `int` | unset | Results fetched per ranking before fusion. Default: twice the retrieval depth, at least 10. |
 | `fuse_with_question` | `bool` | `true` | Fuse the hypothetical-document ranking with the raw-question ranking via RRF. |
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `query_rewrite_prompt`, `few_shot`; knobs `top_k`, `chunk_size`.
 
 ## `rag_fusion`
 
@@ -379,6 +407,8 @@ Best for: Questions worded differently from the documents. Cost: medium; latency
 | `per_query_top_k` | `int` | `20` | Candidates per query before the rankings are merged (raised to the retrieval depth if smaller). |
 | `num_queries` | `int` | `4` | Alternative queries the LLM writes for each question. |
 | `include_original` | `bool` | `true` | Also search the original question and merge it in (standard RAG-Fusion). |
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `query_rewrite_prompt`, `few_shot`; knobs `top_k`, `chunk_size`.
 
 ## `contextual`
 
@@ -406,6 +436,8 @@ Best for: Corpora where chunks lose their meaning out of context (many similar d
 | `vector_weight` | `float` | `1.0` | Weight of the vector ranking in weighted RRF; raise it to favor semantic evidence. |
 | `document_max_chars` | `int` | `12000` | Characters of the source document shown to the LLM when it writes each chunk's context. A longer document is cut to a window around the chunk. Raise it for long documents whose chunks need context from far away; every call pays for the whole excerpt. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`, `vector_weight`.
+
 ## `hierarchical`
 
 **Hierarchical (summary-routed).** Choose documents first from LLM-written summaries and titles, then retrieve chunks only inside the chosen documents.
@@ -421,6 +453,8 @@ Best for: "Which document?" questions and corpora too large to search chunk by c
 | `docs_k` | `int` | `5` | Documents the first stage selects (by BM25 and embedding similarity over each document's title and summary). |
 | `chunks_per_doc` | `int` | `2` | Chunks taken from each selected document in the second stage; the best of them overall are returned. |
 | `summary_max_chars` | `int` | `6000` | Characters of each document shown to the LLM when it writes the summary. |
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`.
 
 ## `raptor`
 
@@ -441,6 +475,8 @@ Best for: Questions that need the gist of several related passages, and corpora 
 | `summary_input_chars` | `int` | `12000` | Most characters of members one summary prompt carries; a larger cluster is clustered again within itself until its parts fit, so members go in whole. |
 | `branch_k` | `int` | `3` | Nodes kept per level in `tree` mode. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`.
+
 ## `adaptive`
 
 **Adaptive router.** Routes each question to the best of several configured pipelines (exact identifiers to BM25, comparisons to decomposition, calculations to a tool agent, the rest to the default).
@@ -456,6 +492,8 @@ Best for: Mixed workloads where no single architecture is best for every questio
 | `route_descriptions` | `dict` | empty | `router: llm` only: what each route is for, shown to the model. Known role names have a built-in description. |
 
 This system takes no `chunker:` section.
+
+This system takes no `harness:` (its prompts are its routes' or live outside RAGBench).
 
 ## `decision_gate`
 
@@ -491,6 +529,8 @@ Best for: Corpora where many questions have no answer in the documents, and a co
 | `answerability_instructions` | `str` | unset | Overrides the per-chunk predicate. `{passage}` stands for the passage under judgment and is required in `batched` mode. Default: "Does {passage} help answer the query?" The wording sets how many chunks survive: a stricter predicate (see `configs/decision_gate.yaml`) drops chunks that carry only part of an answer. |
 | `sufficiency_instructions` | `str` | unset | Overrides the set-level predicate. Default: "Is this evidence enough to answer the query from the documents alone?" A stricter wording abstains more often, on answerable questions too. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`, `reranker`, `vector_weight`.
+
 ## `full_context`
 
 **Full context.** Puts whole documents (the whole corpus when it fits) in the prompt, most relevant first by BM25, up to a token budget (the ceiling baseline: do you need retrieval at all?).
@@ -504,6 +544,8 @@ Best for: Small corpora, and measuring how much a retrieval pipeline loses again
 | `context_token_budget` | `int` | `100000` | Most tokens of document text put in the prompt (counted with the chunking tokenizer; the small `[doc_id]` headers are not counted). Documents are ordered by BM25 relevance to the question; when they do not all fit, the first one that does not is cut at a token boundary and the rest are dropped (`truncated: true` in the retrieval metadata). You pay for every token you put in. |
 
 This system takes no `chunker:` section.
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs none.
 
 ## `graph_rag`
 
@@ -525,6 +567,8 @@ Best for: Questions that connect entities across documents (`local`) and corpus-
 | `max_entities_per_chunk` | `int` | `15` | Most entities the LLM may extract from one chunk at ingestion. |
 | `min_community_size` | `int` | `2` | Entities a community needs to get a report; smaller ones (a lone entity) get none. |
 | `community_max_entities` | `int` | `40` | Entities shown to the LLM when it writes a community's report: the best connected ones of a larger community. |
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `few_shot`; knobs `top_k`, `chunk_size`.
 
 ## `agent_search`
 
@@ -550,6 +594,8 @@ Best for: Questions that need computation, exact lookups, or several searches. C
 | `max_tool_calls` | `int` | unset | Most tool calls per question; further calls are refused and the agent is asked to answer. No cap by default. |
 
 This system accepts a `tools:` list (see [tools.md](tools.md)).
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `tool_guidance`, `few_shot`; knobs `top_k`, `chunk_size`, `max_steps`.
 
 ## `cli_agent`
 
@@ -580,6 +626,8 @@ Best for: Measuring a coding-agent harness as a RAG system: how well, how fast a
 
 This system takes no `chunker:` section.
 
+This system takes no `harness:` (its prompts are its routes' or live outside RAGBench).
+
 ## `corrective`
 
 **Corrective RAG.** Retrieve, grade each chunk with the LLM, and when too little is relevant rewrite the query and widen the search; optional answer self-check.
@@ -605,6 +653,8 @@ Best for: Corpora where the first search often misses and a bad context should b
 | `expand_to` | `hybrid` \| `full_doc` \| `none` | `hybrid` | How a retry widens the search besides rewriting the query: `hybrid` searches with BM25 + vector at twice the depth and grades twice as many chunks, `full_doc` also adds every chunk of the two best documents (right document, wrong chunk), `none` only rewrites. |
 | `self_check` | `bool` | `false` | After answering, ask the LLM whether the answer is supported by the context and, if not, regenerate once from the supported claims. Costs one or two extra calls. |
 
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `query_rewrite_prompt`, `few_shot`; knobs `top_k`, `chunk_size`, `max_rounds`.
+
 ## `grep_agent`
 
 **Grep agent (no index).** An index-free agent: it lists, greps and reads the raw documents with tools. No chunking, no embeddings, no vector store.
@@ -624,6 +674,8 @@ Best for: Small or exact-match-heavy corpora, and testing whether you need retri
 | `max_tool_calls` | `int` | unset | Most tool calls per question; further calls are refused and the agent is asked to answer. No cap by default. |
 
 This system takes no `chunker:` section.
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `tool_guidance`, `few_shot`; knobs `top_k`, `max_steps`.
 
 ## `iterative`
 
@@ -646,6 +698,8 @@ Best for: Multi-hop questions whose second search depends on what the first one 
 | `max_tokens` | `int` | unset | Stop the agent's extra work once this question has used this many LLM tokens (prompt + completion). No cap by default. |
 | `max_hops` | `int` | `3` | Most search rounds; each asks the LLM what is known, what is missing, and what to search next. |
 | `chunks_per_hop` | `int` | `3` | Top chunks of each round the LLM sees as evidence (the final answer reads the merged ranking). |
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `query_rewrite_prompt`, `few_shot`; knobs `top_k`, `chunk_size`, `max_hops`.
 
 ## `llm_heavy`
 
@@ -671,3 +725,5 @@ Best for: Higher-cost, quality-oriented experiments. Cost: high; latency: slow.
 | `enable_llm_ingestion` | `bool` | `false` | Enrich every chunk at ingestion with an LLM summary, entities, and hypothetical questions. |
 | `enable_query_rewrite` | `bool` | `true` | Rewrite each question into several search queries with the LLM. |
 | `enable_llm_rerank` | `bool` | `false` | Rerank candidates with an LLM call. |
+
+`harness:` ([configuration](configuration.md#harness)): prompts `system_prompt`, `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`, `query_rewrite_prompt`, `few_shot`; knobs `top_k`, `chunk_size`, `reranker`.

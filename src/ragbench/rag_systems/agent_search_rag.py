@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from ragbench.config.schema import SystemConfig, ToolRef
 from ragbench.documents.schema import Document
+from ragbench.harness.prompts import TOOL_AGENT_PROMPTS
 from ragbench.rag_systems.base import IngestionResult, RetrievalResult
 from ragbench.rag_systems.llm_query_base import LLMQueryRAG
 from ragbench.rag_systems.options import AgentSearchOptions
@@ -11,6 +15,8 @@ from ragbench.registry import SYSTEMS
 from ragbench.tools import CorpusView
 from ragbench.tools.base import Retriever
 from ragbench.tools.registry import tool_ref_names
+
+SEARCH_GUIDANCE = "Use `search` for questions in natural language; use the other tools to compute exact answers or look for exact strings and identifiers."
 
 
 @SYSTEMS.register("agent_search")
@@ -36,6 +42,10 @@ class AgentSearchRAG(ToolAgentRAG, LLMQueryRAG):
     options: AgentSearchOptions
 
     @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return {**TOOL_AGENT_PROMPTS, "tool_guidance": SEARCH_GUIDANCE}
+
+    @classmethod
     def tool_refs(cls, config: SystemConfig) -> list[ToolRef]:
         refs: list[ToolRef] = list(config.tools)
         return refs if "search" in {name for ref in refs for name in tool_ref_names(ref)} else ["search", *refs]
@@ -51,6 +61,3 @@ class AgentSearchRAG(ToolAgentRAG, LLMQueryRAG):
         """The `search` tool's retriever: untraced (the tool call is the step) and at least `per_query_top_k` deep, trimmed to what the agent asked for."""
         chunks, cost = self._rank(query, max(self.options.per_query_top_k, top_k))
         return RetrievalResult(question=query, chunks=chunks[:top_k], cost=cost)
-
-    def _instructions(self) -> str:
-        return "Use `search` for questions in natural language; use the other tools to compute exact answers or look for exact strings and identifiers."

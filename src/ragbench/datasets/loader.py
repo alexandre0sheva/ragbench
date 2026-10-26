@@ -60,10 +60,15 @@ def load_dataset(questions_path: Path, qrels_path: Path | None = None) -> Datase
     return dataset
 
 
+def configured_splits_path(config: DatasetConfig) -> Path:
+    """Where the dataset's `splits.json` is: `dataset.splits_path`, or next to the questions."""
+    return config.splits_path or config.questions_path.parent / SPLITS_NAME
+
+
 def load_configured_dataset(config: DatasetConfig) -> tuple[Dataset, dict[str, str] | None]:
     """The questions a run uses: `dataset.split` applied to the loaded dataset, and `{"name", "hash"}` of that split (None for `all`)."""
     dataset = load_dataset(config.questions_path, config.qrels_path)
     if config.split == "all":
         return dataset, None
-    splits = load_splits(config.splits_path or config.questions_path.parent / SPLITS_NAME)
+    splits = load_splits(configured_splits_path(config))
     return apply_split(dataset, splits, config.split), {"name": config.split, "hash": splits.digest}

@@ -19,8 +19,10 @@ from paid_fakes import install as install_paid_fakes
 
 import ragbench.documents.chunkers  # noqa: F401  (registers the built-in chunkers)
 import ragbench.rag_systems  # noqa: F401
+from ragbench.config.schema import ExperimentConfig
 from ragbench.documents.schema import Document
 from ragbench.evaluation.evaluator import run_benchmark
+from ragbench.evaluation.warm_up import modules_to_warm_up
 from ragbench.rag_systems import all_specs
 from ragbench.rag_systems.components import build_chunker, chunk_documents
 from ragbench.registry import CHUNKERS, SYSTEMS
@@ -160,3 +162,13 @@ def test_every_chunker_cuts_the_corpus_sanely_and_runs_end_to_end(kind, tmp_path
     run = run_once(tmp_path, [block], tiny_dataset, "chunker")
     summary = pd.read_csv(run / "metrics_summary.csv").iloc[0]
     assert summary["n_error"] == 0 and not _is_missing(summary["retrieval_recall@5"]) and summary["retrieval_recall@5"] > 0, f"{kind}: bm25 over its chunks finds nothing"
+
+
+def test_the_paid_fakes_keep_torch_out_of_a_live_run(monkeypatch, tiny_dataset, tmp_path):
+    """The fake ColBERT encoder needs no torch, so the live warm-up must not import it either: a test worker that later loads faiss would
+    abort on macOS (two OpenMP runtimes in one process)."""
+    install_paid_fakes(monkeypatch)
+    config = ExperimentConfig.model_validate(
+        {"run": {"name": "warm", "output_dir": str(tmp_path)}, "dataset": tiny_dataset, "systems": [{"type": "late_interaction", "models": dict(MODELS)}]}
+    )
+    assert not {"torch", "transformers"} & set(modules_to_warm_up(config, "live"))

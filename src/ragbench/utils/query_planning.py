@@ -96,10 +96,15 @@ def parse_string_list(text: str, keys: tuple[str, ...]) -> list[str]:
     return _dedupe(items)
 
 
-def plan_query_variants_llm(llm: LLM, question: str, num_queries: int) -> QueryPlan:
+# System messages of the planning calls: the default `query_rewrite_prompt` of `rag_fusion` and `decompose`.
+QUERY_VARIANTS_SYSTEM = "You write search queries for a document search system. Answer with JSON only."
+PLAN_SUBQUESTIONS_SYSTEM = "You plan how to answer questions from a document collection. Answer with JSON only."
+
+
+def plan_query_variants_llm(llm: LLM, question: str, num_queries: int, system: str = QUERY_VARIANTS_SYSTEM) -> QueryPlan:
     """Ask `llm` for up to `num_queries` alternative search queries (RAG-Fusion); the question itself is never among them."""
     messages = [
-        {"role": "system", "content": "You write search queries for a document search system. Answer with JSON only."},
+        {"role": "system", "content": system},
         {
             "role": "user",
             "content": (
@@ -116,10 +121,10 @@ def plan_query_variants_llm(llm: LLM, question: str, num_queries: int) -> QueryP
     return QueryPlan(items=[item for item in items if item.lower() != own][:num_queries], result=result, fallback=not items)
 
 
-def plan_subquestions_llm(llm: LLM, question: str, max_subquestions: int) -> QueryPlan:
+def plan_subquestions_llm(llm: LLM, question: str, max_subquestions: int, system: str = PLAN_SUBQUESTIONS_SYSTEM) -> QueryPlan:
     """Ask `llm` to split `question` into ordered sub-questions (at most `max_subquestions`); an unusable reply yields the question itself."""
     messages = [
-        {"role": "system", "content": "You plan how to answer questions from a document collection. Answer with JSON only."},
+        {"role": "system", "content": system},
         {
             "role": "user",
             "content": (

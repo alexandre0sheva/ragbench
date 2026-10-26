@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any, ClassVar
 
@@ -9,6 +9,8 @@ from pydantic import BaseModel, Field
 
 from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document, RetrievedChunk
+from ragbench.harness import HarnessPatch, PromptHarness
+from ragbench.harness.prompts import ANSWER_PROMPTS
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.defaults import DEFAULT_GENERATOR_MODEL
 from ragbench.models.llms import LLM, create_llm
@@ -63,16 +65,6 @@ class IngestionResult(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-ANSWER_SYSTEM_PROMPT = """You are answering questions using only the provided context.
-
-Rules:
-- Use only the provided context.
-- If the answer is not available in the context, say: "I could not find the answer in the provided documents."
-- Be concise but complete.
-- Cite source document IDs in square brackets when possible, for example [doc_014].
-"""
-
-
 class BaseRAGSystem(ABC):
     """Abstract interface every RAG strategy implements.
 
@@ -94,7 +86,14 @@ class BaseRAGSystem(ABC):
         self.name = config.resolved_name
         self.force_mock = force_mock
         self.options = (self.spec.options if self.spec is not None else PermissiveOptions).model_validate(config.retrieval)
+        self.harness = PromptHarness.resolve(self.default_harness(self.options), HarnessPatch.model_validate(config.harness))
         self.llm: LLM = create_llm(config.models.get("generator", DEFAULT_GENERATOR_MODEL), force_mock=force_mock)
+
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        """The prompt texts a `harness:` patch may edit, with their defaults (see `ragbench.harness.prompts`). `options` is the system's
+        validated `retrieval:` section (None for a system without an option model). A system that sends no prompt of its own returns `{}`."""
+        return ANSWER_PROMPTS
 
     @abstractmethod
     def ingest(self, documents: list[Document]) -> IngestionResult:
@@ -186,7 +185,7 @@ class BaseRAGSystem(ABC):
     def _generate_answer(self, question: str, chunks: list[RetrievedChunk]):
         context = self._format_context(chunks)
         messages = [
-            {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
+            {"role": "system", "content": self.harness.answer_system()},
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
         ]
         with self.trace.step("generate", "answer", context_chunks=len(chunks)) as step:

@@ -289,6 +289,51 @@ evaluation:
 
 Each system's `retrieval:`, `chunker:` and (for `llm_heavy`) `llm_features:` options, with types, defaults and descriptions, are listed in [systems.md](systems.md). A RAG that runs outside RAGBench (an HTTP endpoint or a Python function) is configured the same way, as an `external_http` or `python_callable` system: see [benchmarking external systems](benchmarking-external-systems.md). Unknown options, unknown system types, unknown chunker or reranker names, and duplicate system names are rejected when the config is loaded, with a suggestion when a name is close to a valid one.
 
+## Harness
+
+A system's **harness** is what you can tune without changing its pipeline: the prompt texts it sends and a few bounded knobs. Patch it with a `harness:` block; every field you leave out keeps its default, so a patch says only what it changes.
+
+```yaml
+systems:
+  - type: hybrid_rerank
+    name: hybrid_rerank_terse
+    harness:
+      answer_instructions: Answer in one sentence; give exact figures with their units.
+      citation_style: Cite every fact as [doc_id].
+      refusal_policy: ""          # an empty text drops that rule
+      top_k: 8                    # a knob: writes retrieval.final_top_k
+      few_shot:
+        - {question: "How much does HarborShield cost?", answer: "$200 per month for the marine module [doc_001]."}
+```
+
+- **Prompts.** The generator's system message is an opening (`system_prompt`) followed by one rule per field: `grounding`, `refusal_policy`, `answer_instructions`, `citation_style`. The tool-using agents (`agent_search`, `grep_agent`) put the same fields around their fixed tool protocol and add `tool_guidance`; systems that write search queries (`hyde`, `llm_heavy`, `rag_fusion`, `decompose`, `corrective`, `iterative`) take `query_rewrite_prompt`, the system message of that call (the reply format stays fixed, because the system parses it). Which fields each system has is listed under it in [systems.md](systems.md). A field a system does not use is rejected, with the fields it has. With no `harness:` the prompts are exactly those of earlier releases.
+- **Few-shot examples** close the system message as `Q:` / `A:` pairs. They must come from the train split: a run whose `dataset.split` is set stops before it starts when an example holds a dev or test question (its id, text or reference answer); without a split, no question of the dataset may be an example (see the leakage guard in [methodology.md](methodology.md)).
+- **Knobs** are options of the system's `retrieval:` / `chunker:` sections, bounded tighter than the options themselves. A knob wins over the same option in the section. `top_k` sets `final_top_k`, `top_k` or `top_k_parents`, whichever the system has.
+- **Not in the harness:** ingestion prompts (contextual, summary, graph and RAPTOR prompts) and control prompts (chunk grading, groundedness checks, the router, the LLM reranker, the decision gate), since changing them changes an index or a parsed verdict; external systems (`external_http`, `python_callable`, `cli_agent`) take no `harness:`, and an `adaptive` system's routes each take their own.
+- **Checkpoints and cache.** A system with a `harness:` adds its harness fingerprint to its checkpoint hash, so editing one system's prompt reruns that system only; a system without one keeps the hash it had before harnesses existed. The LLM cache key already holds the full prompt, so an edited prompt is a cache miss and an unchanged call (ingestion, say) is still a hit.
+
+`ragbench harness show SYSTEM` prints a system type's default harness as YAML you can paste into a `harness:` block (`--config C` shows a configured system with its patch, marked); `ragbench harness diff A.yaml B.yaml` compares two configs' harnesses field by field ([cli.md](cli.md)).
+
+<!-- harness:start -->
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `system_prompt` | `str` | unset | Opening of the generator's system message: who it is and what it answers from. |
+| `grounding` | `str` | unset | Rule: what the answer may draw on (the context, the tools' results, the model's own knowledge). |
+| `refusal_policy` | `str` | unset | Rule: when and how to say the answer is not available. |
+| `answer_instructions` | `str` | unset | Rule: the length, form and style of the answer. |
+| `citation_style` | `str` | unset | Rule: how to cite the source documents. |
+| `query_rewrite_prompt` | `str` | unset | System message of the call that writes search queries (`hyde`, `llm_heavy`, `rag_fusion`, `decompose`, `corrective`, `iterative`); the reply format stays fixed. |
+| `tool_guidance` | `str` | unset | Guidance on using the tools, after the rules of a tool-using agent. |
+| `few_shot` | `list` | unset | Worked `{question, answer}` examples at the end of the system message; train-split questions only. |
+| `top_k` | `int` | unset | 1 to 50. Chunks the generator reads (`final_top_k`, `top_k` or `top_k_parents`, whichever the system has). |
+| `chunk_size` | `int` | unset | 64 to 4096. `chunker.chunk_size`. |
+| `reranker` | `str` | unset | `retrieval.reranker` (one of the system's rerankers). |
+| `vector_weight` | `float` | unset | 0 to 4. `retrieval.vector_weight`: weight of the vector ranking in hybrid fusion. |
+| `max_hops` | `int` | unset | 1 to 10. `retrieval.max_hops` (`iterative`). |
+| `max_rounds` | `int` | unset | 0 to 10. `retrieval.max_rounds` (`corrective`). |
+| `max_steps` | `int` | unset | 1 to 50. `retrieval.max_steps` (tool-using agents). |
+<!-- harness:end -->
+
 ## Caching
 
 Two layers avoid paying twice for the same call:

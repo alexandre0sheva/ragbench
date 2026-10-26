@@ -1,24 +1,26 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from ragbench.documents.schema import RetrievedChunk
+from ragbench.harness.prompts import ANSWER_PROMPTS
 from ragbench.models.cost import CostBreakdown
-from ragbench.rag_systems.base import ANSWER_SYSTEM_PROMPT, RetrievalResult
+from ragbench.rag_systems.base import RetrievalResult
 from ragbench.rag_systems.llm_query_base import LLMQueryRAG
 from ragbench.rag_systems.options import DecomposeOptions
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.registry import SYSTEMS
 from ragbench.stores.hybrid_store import reciprocal_rank_fusion
-from ragbench.utils.query_planning import plan_subquestions_llm
+from ragbench.utils.query_planning import PLAN_SUBQUESTIONS_SYSTEM, plan_subquestions_llm
 from ragbench.utils.text import normalize_text
 from ragbench.utils.timing import timer
 
 SUB_ANSWER_MAX_TOKENS = 150
 CARRIED_FINDING_CHARS = 200
-DECOMPOSE_SYSTEM_PROMPT = (
-    ANSWER_SYSTEM_PROMPT
-    + "\nThe question was broken into sub-questions, and the evidence is listed under each one. Combine the evidence across sub-questions "
+# Appended to the answer prompt of the final synthesis (not part of the harness: it describes how the context is laid out).
+DECOMPOSE_NOTE = (
+    "\nThe question was broken into sub-questions, and the evidence is listed under each one. Combine the evidence across sub-questions "
     "to answer the full question, and cite the document IDs of the passages you rely on."
 )
 
@@ -44,6 +46,10 @@ class DecomposeRAG(LLMQueryRAG):
         options=DecomposeOptions,
     )
     options: DecomposeOptions
+
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return {**ANSWER_PROMPTS, "query_rewrite_prompt": PLAN_SUBQUESTIONS_SYSTEM}
 
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
         opts = self.options
@@ -87,7 +93,7 @@ class DecomposeRAG(LLMQueryRAG):
     def _answer_sub_question(self, sub_question: str, chunks: list[RetrievedChunk], findings: list[str], index: int) -> tuple[str, CostBreakdown]:
         earlier = "Findings so far:\n" + "\n".join(f"- {finding}" for finding in findings) + "\n\n" if findings else ""
         messages = [
-            {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
+            {"role": "system", "content": self.harness.answer_system()},
             {"role": "user", "content": f"{earlier}Context:\n{self._format_context(chunks)}\n\nQuestion: {sub_question}"},
         ]
         with self.trace.step("llm", "sub_answer", index=index) as step:
@@ -102,7 +108,7 @@ class DecomposeRAG(LLMQueryRAG):
             return super()._generate_from_retrieval(retrieval, question, chunks)
         context = self._format_evidence(subs, chunks)
         messages = [
-            {"role": "system", "content": DECOMPOSE_SYSTEM_PROMPT},
+            {"role": "system", "content": self.harness.answer_system() + DECOMPOSE_NOTE},
             {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
         ]
         with self.trace.step("generate", "answer", context_chunks=len(chunks), sub_questions=len(subs)) as step:

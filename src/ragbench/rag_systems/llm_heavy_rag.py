@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
+from typing import Any
 
 from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document, TextChunk
+from ragbench.harness.prompts import ANSWER_PROMPTS
 from ragbench.models.cost import CostBreakdown
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult, RetrievedChunk
 from ragbench.rag_systems.components import build_chunker, build_embedder, build_reranker, build_vector_index, chunk_documents
@@ -13,6 +16,8 @@ from ragbench.registry import SYSTEMS
 from ragbench.runtime.context import current_runtime
 from ragbench.runtime.parallel import ordered_parallel_map
 from ragbench.utils.timing import timer
+
+REWRITE_QUERIES_SYSTEM = "Rewrite the question into 3 to 5 concise search queries. Return JSON only."
 
 
 @SYSTEMS.register("llm_heavy")
@@ -30,6 +35,10 @@ class LLMHeavyRAG(BaseRAGSystem):
         llm_features=LLMHeavyFeatures,
     )
     options: LLMHeavyOptions
+
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return {**ANSWER_PROMPTS, "query_rewrite_prompt": REWRITE_QUERIES_SYSTEM}
 
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
@@ -147,7 +156,7 @@ class LLMHeavyRAG(BaseRAGSystem):
 
     def _rewrite_queries(self, question: str) -> tuple[list[str], CostBreakdown]:
         messages = [
-            {"role": "system", "content": "Rewrite the question into 3 to 5 concise search queries. Return JSON only."},
+            {"role": "system", "content": self.harness.rewrite_prompt},
             {"role": "user", "content": f"Question: {question}\nReturn JSON like {{\"queries\": [\"...\"]}}."},
         ]
         with self.trace.step("llm", "query_rewrite") as step:

@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import dataclasses
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
 from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document, RetrievedChunk, TextChunk
+from ragbench.harness.prompts import ANSWER_PROMPTS, REDUCE_PROMPTS
 from ragbench.models.cost import CostBreakdown
 from ragbench.models.llms import LLMResult
 from ragbench.models.prompts import EXTRACT_GRAPH_MARKER, MAP_COMMUNITY_MARKER, SUMMARIZE_COMMUNITY_MARKER
-from ragbench.rag_systems.base import ANSWER_SYSTEM_PROMPT, BaseRAGSystem, IngestionResult, RetrievalResult
+from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult
 from ragbench.rag_systems.components import build_chunker, build_embedder, chunk_documents
 from ragbench.rag_systems.graph_index import Extraction, KnowledgeGraph, detect_communities, parse_extraction
 from ragbench.rag_systems.llm_ingest import map_llm_calls
@@ -36,14 +39,6 @@ RANKED_CHUNKS = 50  # at least this many chunks of each ranking go into the fusi
 REDUCE_MAX_POINTS = 40
 MAP_WORKERS = 8  # map calls of one question in flight at once
 
-REDUCE_SYSTEM_PROMPT = """You are answering questions about a document collection from points that were drawn from reports on groups of related entities.
-
-Rules:
-- Use only the points provided; points with a higher score matter more.
-- If the points do not answer the question, say: "I could not find the answer in the provided documents."
-- Be concise but complete.
-- Cite source document IDs in square brackets when possible, for example [doc_014].
-"""
 
 
 @dataclass
@@ -85,6 +80,11 @@ class GraphRAG(BaseRAGSystem):
         options=GraphRAGOptions,
     )
     options: GraphRAGOptions
+
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        """`global` mode answers from scored points of community reports, so its answer prompt says so."""
+        return REDUCE_PROMPTS if options.mode == "global" else ANSWER_PROMPTS
 
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
@@ -357,7 +357,7 @@ class GraphRAG(BaseRAGSystem):
         if not notes:
             return super()._generate_from_retrieval(retrieval, question, chunks)
         messages = [
-            {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
+            {"role": "system", "content": self.harness.answer_system()},
             {"role": "user", "content": f"Graph notes (not evidence by themselves):\n{notes}\n\nContext:\n{self._format_context(chunks)}\n\nQuestion: {question}"},
         ]
         with self.trace.step("generate", "answer", context_chunks=len(chunks), matched_entities=len(retrieval.metadata.get("matched_entities", []))) as step:
@@ -388,7 +388,7 @@ class GraphRAG(BaseRAGSystem):
             points += [(score, index, report.doc_id, text) for score, text in _points(result.text) if score > 0]
         points.sort(key=lambda point: (-point[0], point[1]))
         context = "\n".join(f"[{doc_id} | community point] (score {score}) {text}" for score, _, doc_id, text in points[:REDUCE_MAX_POINTS])
-        messages = [{"role": "system", "content": REDUCE_SYSTEM_PROMPT}, {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}]
+        messages = [{"role": "system", "content": self.harness.answer_system()}, {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"}]
         with self.trace.step("generate", "reduce", reports=len(reports), points=len(points)) as step:
             answer = self.llm.generate(messages, temperature=0)
             step.set_llm(answer)

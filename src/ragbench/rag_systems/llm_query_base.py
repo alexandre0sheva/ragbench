@@ -20,7 +20,7 @@ class LLMQueryRAG(HybridRAG):
     def _plan(self, name: str, planner: Callable[..., QueryPlan], question: str, limit: int) -> tuple[QueryPlan, CostBreakdown]:
         """Run an LLM planner as one traced `llm` step; its spend is booked as query-rewrite cost."""
         with self.trace.step("llm", name) as step:
-            plan = planner(self.llm, question, limit)
+            plan = planner(self.llm, question, limit, self.harness.rewrite_prompt)
             cost = CostBreakdown(query_rewrite_cost=plan.result.cost.total_cost)
             step.set_llm(plan.result, cost=cost)
             step.set_input(question)

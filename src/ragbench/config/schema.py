@@ -178,10 +178,25 @@ class SystemConfig(BaseModel):
     models: dict[str, Any] = Field(default_factory=dict)
     llm_features: dict[str, Any] = Field(default_factory=dict)
     tools: list[ToolRef] = Field(default_factory=list)
+    # A patch over the system's prompts and a few bounded knobs (see docs/configuration.md#harness); omitted fields keep their defaults.
+    harness: dict[str, Any] = Field(default_factory=dict)
 
     @property
     def resolved_name(self) -> str:
         return self.name or self.type
+
+    @model_validator(mode="after")
+    def _apply_harness(self) -> SystemConfig:
+        """Check the `harness:` patch and write its knobs into `retrieval:` / `chunker:` (before those sections are checked)."""
+        if not self.harness:
+            return self
+        from ragbench.harness.apply import apply_harness
+        from ragbench.harness.schema import HarnessPatch
+
+        label = f"System '{self.resolved_name}' (type {self.type})"
+        _validate_section(label, "harness", HarnessPatch, self.harness)
+        apply_harness(self, label)
+        return self
 
     @model_validator(mode="after")
     def _validate_sections_against_spec(self) -> SystemConfig:

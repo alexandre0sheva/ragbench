@@ -43,6 +43,7 @@ $ ragbench [OPTIONS] COMMAND [ARGS]...
 * `runs`: List, inspect, remove and index the runs...
 * `models`: List the models RAGBench has prices for,...
 * `datasets`: Public benchmarks on demand: list them,...
+* `harness`: Show a system's editable harness (prompts...
 
 ## `ragbench run`
 
@@ -763,4 +764,64 @@ $ ragbench datasets pull [OPTIONS] {name}
 * `--seed <int>`: Seed of the subset sample.  [default: 42]
 * `--force`: Replace an earlier pull in the output folder.
 * `-y, --yes`: Download without asking first.
+* `--help`: Show this message and exit.
+
+## `ragbench harness`
+
+Show a system's editable harness (prompts and knobs) and compare the harnesses of two configs. Offline.
+
+**Usage**:
+
+```console
+$ ragbench harness [OPTIONS] COMMAND [ARGS]...
+```
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+**Commands**:
+
+* `show`: Print a system's harness as YAML: every...
+* `diff`: Compare the harnesses of the systems two...
+
+### `ragbench harness show`
+
+Print a system's harness as YAML: every prompt text it sends and its knobs, with what the config's patch changed marked.
+
+**Usage**:
+
+```console
+$ ragbench harness show [OPTIONS] {system}
+```
+
+**Arguments**:
+
+* `system`: A system type (its defaults), or with --config the name of a system in that config.  [required]
+
+**Options**:
+
+* `-c, --config <path>`: Config whose system to show, with its `harness:` patch applied.
+* `--json`: Print JSON on stdout instead of YAML.
+* `--help`: Show this message and exit.
+
+### `ragbench harness diff`
+
+Compare the harnesses of the systems two configs share (by name), field by field; list the systems only one of them has.
+
+**Usage**:
+
+```console
+$ ragbench harness diff [OPTIONS] {first} {second}
+```
+
+**Arguments**:
+
+* `first`: A config file.  [required]
+* `second`: Another config file (for example the optimized one).  [required]
+
+**Options**:
+
+* `-s, --system <str>`: Only this system (by name).
+* `--json`: Print JSON on stdout instead of text.
 * `--help`: Show this message and exit.

@@ -20,6 +20,7 @@ from typing import Any
 
 from ragbench import __version__
 from ragbench.config.schema import ExperimentConfig, SystemConfig
+from ragbench.harness.apply import harness_fingerprint
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,7 @@ def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest:
         del judge["panel"], judge["aggregate"]  # likewise for a one-judge run, from before judge panels
     payload = {
         "version": __version__,
-        "system": system.model_dump(mode="json"),
+        "system": _system_payload(system),
         "evaluation": evaluation,
         "pricing": {name: price.model_dump(mode="json") for name, price in sorted(config.pricing.items())},
         "tools": config.tools.model_dump(mode="json"),
@@ -55,6 +56,15 @@ def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest:
         **({"split": split} if split else {}),  # the questions a split keeps; the whole dataset leaves the hash as it was before splits existed
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode("utf-8")).hexdigest()
+
+
+def _system_payload(system: SystemConfig) -> dict[str, Any]:
+    """The system's config as hashed. A `harness:` patch adds its fingerprint (the prompts and knobs it resolves to); a system without one
+    hashes as it did before harnesses existed, so its checkpoints stay valid."""
+    payload = system.model_dump(mode="json")
+    if not payload.pop("harness"):
+        return payload
+    return {**payload, "harness": system.harness, "harness_fingerprint": harness_fingerprint(system)}
 
 
 def _plain(value: Any) -> Any:

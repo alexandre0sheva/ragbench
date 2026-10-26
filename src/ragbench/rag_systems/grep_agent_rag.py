@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from ragbench.config.schema import SystemConfig, ToolRef
 from ragbench.documents.schema import Document
+from ragbench.harness.prompts import TOOL_AGENT_PROMPTS
 from ragbench.rag_systems.base import IngestionResult
 from ragbench.rag_systems.options import GrepAgentOptions
 from ragbench.rag_systems.spec import SystemSpec
@@ -11,6 +15,10 @@ from ragbench.tools import CorpusView
 from ragbench.utils.timing import timer
 
 GREP_AGENT_TOOLS = ("list_documents", "corpus_grep", "read_document")
+GREP_GUIDANCE = (
+    "There is no search index. Use `corpus_grep` to find where names, identifiers and figures occur, `read_document` to read around a hit, "
+    "and `list_documents` to see what exists."
+)
 
 
 @SYSTEMS.register("grep_agent")
@@ -44,8 +52,7 @@ class GrepAgentRAG(ToolAgentRAG):
             self.corpus = CorpusView(documents)
         return IngestionResult(system=self.name, num_documents=len(documents), num_chunks=0, latency_ms=t.elapsed_ms, metadata={"index": "none"})
 
-    def _instructions(self) -> str:
-        return (
-            "There is no search index. Use `corpus_grep` to find where names, identifiers and figures occur, `read_document` to read around a hit, "
-            "and `list_documents` to see what exists."
-        )
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return {**TOOL_AGENT_PROMPTS, "tool_guidance": GREP_GUIDANCE}
+

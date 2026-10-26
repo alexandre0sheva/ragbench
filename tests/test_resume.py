@@ -203,3 +203,21 @@ def test_a_run_with_trials_resumes_from_its_checkpoints_and_a_changed_trial_coun
     changed = Recorder()
     run_benchmark(_config(tmp_path, trials=3), force_mock=True, run_dir=run_dir, progress=changed)
     assert changed.restored == [] and sorted(changed.started) == ["bm25", "hybrid", "vector"]
+
+
+def test_a_changed_harness_prompt_invalidates_exactly_that_systems_checkpoint(tmp_path):
+    config, run_dir, _ = _first_run(tmp_path)
+    raw = yaml.safe_load(config.read_text())
+    raw["systems"][1]["harness"] = {"system_prompt": "You answer questions about marine insurance products."}
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    recorder = Recorder()
+    run_benchmark(config, force_mock=True, run_dir=run_dir, progress=recorder)
+    assert recorder.started == ["vector"] and sorted(recorder.restored) == ["bm25", "hybrid"]
+
+    raw["systems"][1]["harness"] = {"system_prompt": "You answer questions about marine insurance products, briefly."}
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    again = Recorder()
+    run_benchmark(config, force_mock=True, run_dir=run_dir, progress=again)
+    assert again.started == ["vector"]
+
+    assert sorted(again.restored) == ["bm25", "hybrid"]

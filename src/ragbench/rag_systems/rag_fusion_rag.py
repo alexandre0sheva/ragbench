@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
+from ragbench.harness.prompts import ANSWER_PROMPTS
 from ragbench.models.cost import CostBreakdown
 from ragbench.rag_systems.base import RetrievalResult
 from ragbench.rag_systems.llm_query_base import LLMQueryRAG
@@ -7,7 +11,7 @@ from ragbench.rag_systems.options import RagFusionOptions
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.registry import SYSTEMS
 from ragbench.stores.hybrid_store import reciprocal_rank_fusion
-from ragbench.utils.query_planning import plan_query_variants_llm
+from ragbench.utils.query_planning import QUERY_VARIANTS_SYSTEM, plan_query_variants_llm
 from ragbench.utils.timing import timer
 
 
@@ -31,6 +35,10 @@ class RagFusionRAG(LLMQueryRAG):
         options=RagFusionOptions,
     )
     options: RagFusionOptions
+
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return {**ANSWER_PROMPTS, "query_rewrite_prompt": QUERY_VARIANTS_SYSTEM}
 
     def fetch_context(self, question: str, top_k: int | None = None) -> RetrievalResult:
         opts = self.options

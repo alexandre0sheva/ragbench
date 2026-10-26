@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 import yaml
 from paid_fakes import EMBEDDING, GENERATOR, JUDGE
-from paid_fakes import install as install_paid_fakes
 
 from ragbench.config.schema import ExperimentConfig
 from ragbench.errors import UsageError
@@ -83,7 +82,7 @@ def test_kmp_duplicate_lib_ok_does_not_switch_the_check_off(macos, monkeypatch):
 
 
 def test_the_run_is_refused_before_anything_is_written(macos, monkeypatch, tmp_path):
-    install_paid_fakes(monkeypatch)  # a (fake) key, so the run is live
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")  # a (fake) key, so the run is live; it is refused before any client is used
     config = _config(LATE, FAISS)
     config["run"]["output_dir"] = str(tmp_path / "results")
     path = tmp_path / "omp.yaml"

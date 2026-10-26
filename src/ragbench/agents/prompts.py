@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ragbench.harness import PromptHarness
 from ragbench.models.prompts import (
     CHECK_GROUNDED_MARKER,
     FORCE_ANSWER_MARKER,
@@ -12,11 +13,14 @@ from ragbench.models.prompts import (
     REACT_JSON_MARKER,
     REWRITE_QUERY_MARKER,
     ROUTE_QUESTION_MARKER,
-    TOOL_AGENT_MARKER,
 )
 
 Messages = list[dict[str, Any]]
 PASSAGE_CHARS = 700
+COMPUTE_WITH_TOOLS_RULE = "If a tool can compute something exactly (arithmetic, dates), use it instead of working it out yourself."
+# System messages of the query-writing calls: the default `query_rewrite_prompt` of `corrective` and `iterative`.
+REWRITE_QUERY_SYSTEM = "You write search queries for a document search system. Answer with JSON only."
+NEXT_HOP_SYSTEM = "You research a question step by step in a document collection. Answer with JSON only."
 
 
 def _passage(text: str) -> str:
@@ -40,9 +44,9 @@ def grade_chunks(question: str, passages: list[str]) -> Messages:
     ]
 
 
-def rewrite_query(question: str, previous_query: str, found: str) -> Messages:
+def rewrite_query(question: str, previous_query: str, found: str, system: str = REWRITE_QUERY_SYSTEM) -> Messages:
     return [
-        {"role": "system", "content": "You write search queries for a document search system. Answer with JSON only."},
+        {"role": "system", "content": system},
         {
             "role": "user",
             "content": (
@@ -55,9 +59,9 @@ def rewrite_query(question: str, previous_query: str, found: str) -> Messages:
     ]
 
 
-def next_hop(question: str, evidence: str, hop: int, max_hops: int) -> Messages:
+def next_hop(question: str, evidence: str, hop: int, max_hops: int, system: str = NEXT_HOP_SYSTEM) -> Messages:
     return [
-        {"role": "system", "content": "You research a question step by step in a document collection. Answer with JSON only."},
+        {"role": "system", "content": system},
         {
             "role": "user",
             "content": (
@@ -91,19 +95,16 @@ def regenerate_note(unsupported_claims: list[str]) -> str:
     return f"\nA previous draft of this answer contained claims the context does not support ({listed}). Answer again using only what the context states."
 
 
-def tool_agent_system(react_tools: str | None = None, instructions: str = "") -> str:
-    """System prompt of the tool-using agents. `react_tools` (a description of the tools) switches on the JSON-action protocol for models without native tool calling."""
-    text = (
-        f"{TOOL_AGENT_MARKER}, answering a question about a collection of documents.\n"
-        "Use the tools to find the facts you need, then answer. Rules:\n"
-        "- Base the answer only on what the tools returned; never guess or use outside knowledge.\n"
-        "- If a tool can compute something exactly (arithmetic, dates), use it instead of working it out yourself.\n"
-        "- Cite the source document ID in square brackets, for example [doc_014], after each fact taken from a document.\n"
-        '- If the documents do not contain the answer, say: "I could not find the answer in the provided documents."\n'
-        "- When you have enough, reply with the final answer as plain text and no tool call. Be concise but complete."
-    )
-    if instructions:
-        text += "\n" + instructions
+def tool_agent_system(harness: PromptHarness, react_tools: str | None = None) -> str:
+    """System prompt of the tool-using agents: the harness's opening and rules around the fixed tool protocol. `react_tools` (a description of
+    the tools) switches on the JSON-action protocol for models without native tool calling."""
+    final_answer = f"When you have enough, reply with the final answer as plain text and no tool call. {harness.answer_instructions or ''}".rstrip()
+    rules = (harness.grounding, COMPUTE_WITH_TOOLS_RULE, harness.citation_style, harness.refusal_policy, final_answer)
+    text = f"{harness.system_prompt}\nUse the tools to find the facts you need, then answer. Rules:\n" + "\n".join(f"- {rule}" for rule in rules if rule)
+    if harness.tool_guidance:
+        text += "\n" + harness.tool_guidance
+    if harness.few_shot:
+        text += "\n" + harness.examples()
     if react_tools is not None:
         text += (
             f"\n\nYou cannot call functions directly. {REACT_JSON_MARKER} and nothing else each turn.\n"

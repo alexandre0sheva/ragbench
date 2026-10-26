@@ -9,6 +9,7 @@ reports, else its token usage at the declared model's price, else unknown ($0, a
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import PurePath
 from typing import Any
@@ -47,6 +48,11 @@ def unscored_retrieval(metadata: dict[str, Any]) -> bool:
 
 class ExternalRAG(BaseRAGSystem):
     options: ExternalOptions
+
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        """Its prompts live outside RAGBench."""
+        return {}
 
     def __init__(self, config, force_mock: bool = False):
         super().__init__(config, force_mock=True)  # RAGBench calls no model for an external system, so it gets the inert mock, never a real client

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from ragbench.agents import prompts
 from ragbench.agents.router import RouteDecision, decide_from_reply, describe_routes, heuristic_route
 from ragbench.config.schema import SystemConfig
@@ -38,6 +41,11 @@ class AdaptiveRAG(BaseRAGSystem):
         chunker=None,
     )
     options: AdaptiveOptions
+
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        """The routes answer, each with its own `harness:`; the router's prompt is not part of a harness."""
+        return {}
 
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)

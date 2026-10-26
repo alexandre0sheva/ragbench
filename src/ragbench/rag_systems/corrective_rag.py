@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from ragbench.agents import BUDGET, Abort, AgentAction, AgentLoop, AgentState, Continue, Finish, prompts
 from ragbench.agents.replies import AMBIGUOUS, IRRELEVANT, RELEVANT, parse_grades, parse_groundedness, parse_query
 from ragbench.documents.schema import RetrievedChunk
+from ragbench.harness.prompts import ANSWER_PROMPTS
 from ragbench.models.llms import LLMResult
 from ragbench.rag_systems.agentic_base import AgenticRAG
-from ragbench.rag_systems.base import ANSWER_SYSTEM_PROMPT, RetrievalResult
+from ragbench.rag_systems.base import RetrievalResult
 from ragbench.rag_systems.options import CorrectiveOptions
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.rag_systems.trace import Tracer
@@ -43,6 +47,10 @@ class CorrectiveRAG(AgenticRAG):
     )
     options: CorrectiveOptions
 
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return {**ANSWER_PROMPTS, "query_rewrite_prompt": prompts.REWRITE_QUERY_SYSTEM}
+
     def _agent(self, question: str, final_top_k: int, tracer: Tracer) -> tuple[AgentState, list[RetrievedChunk], dict]:
         opts = self.options
         per_query_k = max(opts.per_query_top_k, final_top_k)
@@ -77,7 +85,7 @@ class CorrectiveRAG(AgenticRAG):
             if state.over_budget():
                 return Abort(BUDGET)
             new_query, _ = self._ask(
-                "llm", "rewrite_query", prompts.rewrite_query(question, state.query, self._found(batch)), parse_query, max_tokens=REWRITE_MAX_TOKENS, round=state.iteration
+                "llm", "rewrite_query", prompts.rewrite_query(question, state.query, self._found(batch), self.harness.rewrite_prompt), parse_query, max_tokens=REWRITE_MAX_TOKENS, round=state.iteration
             )
             if new_query is None or new_query.lower() in {normalize_text(q).lower() for q in queries}:  # no new query: another round would repeat itself
                 state.info["rewrite_failed"] = True
@@ -149,7 +157,7 @@ class CorrectiveRAG(AgenticRAG):
             self.trace.steps[-1].metadata["supported"] = verdict[0]
         if verdict is not None and not verdict[0] and not self._over_budget():
             messages = [
-                {"role": "system", "content": ANSWER_SYSTEM_PROMPT + prompts.regenerate_note(verdict[1])},
+                {"role": "system", "content": self.harness.answer_system() + prompts.regenerate_note(verdict[1])},
                 {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {question}"},
             ]
             with self.trace.step("generate", "answer_regenerated", context_chunks=len(chunks)) as step:

@@ -26,8 +26,8 @@ REWRITE_QUERY_MARKER = "Write a better search query that finds the missing infor
 NEXT_HOP_MARKER = "Decide what to do next to answer the question from the evidence so far"
 CHECK_GROUNDED_MARKER = "Check whether the answer below is fully supported by the context"
 
-# Tool-using agents (`agent_search`, `grep_agent`): the system prompt carries the first marker; ReAct-JSON mode adds the second; the last
-# introduces the "answer now" turn sent when the budget ran out.
+# Tool-using agents (`agent_search`, `grep_agent`): the first opens their default system prompt (an editable harness text, so the mock does
+# not rely on it); ReAct-JSON mode adds the second; the last introduces the "answer now" turn sent when the budget ran out.
 TOOL_AGENT_MARKER = "You are a research agent with tools"
 REACT_JSON_MARKER = "Reply with exactly one JSON object"
 FORCE_ANSWER_MARKER = "You cannot use any more tools"

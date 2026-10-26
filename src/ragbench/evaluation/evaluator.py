@@ -38,6 +38,7 @@ from ragbench.evaluation.rows import RunRows
 from ragbench.evaluation.run_stats import cheapest_system
 from ragbench.evaluation.summary import failed_systems
 from ragbench.evaluation.warm_up import modules_to_warm_up, openmp_conflict, openmp_hint
+from ragbench.harness.leakage import assert_few_shot_from_train
 from ragbench.models import cost as pricing
 from ragbench.models.embeddings import EMBEDDING_CACHE
 from ragbench.models.errors import ModelInitError
@@ -155,6 +156,7 @@ class BenchmarkEvaluator:
         """Execute the configured benchmark and return the output directory path."""
         if (conflict := openmp_conflict(self.config, self.mode)) is not None:
             raise UsageError(conflict, hint=openmp_hint())
+        assert_few_shot_from_train(self.config)
         if self.credential_problems:
             raise ModelInitError("Cannot start a live run: " + "; ".join(self.credential_problems) + ". Set them, pass --mock, or change the model refs.")
         pricing.clear_pricing_overrides()

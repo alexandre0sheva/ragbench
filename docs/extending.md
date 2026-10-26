@@ -67,6 +67,22 @@ Use the shared builders (`build_chunker`, `build_embedder`, `build_vector_index`
 
 The `top_k` passed to `fetch_context` is the retrieval **depth**: return that many ranked chunks (the evaluator scores retrieval on all of them), while only the first `context_k` are given to the generator. Make sure any internal candidate pool is at least `top_k` deep.
 
+**Prompts belong in the harness.** The default `answer_question` sends `self.harness.answer_system()` as the generator's system message, so a new system that only changes retrieval gets an editable [harness](configuration.md#harness) for free. A system that sends a prompt of its own declares its default texts with `default_harness` and reads them from `self.harness`, so a `harness:` patch (and the optimizer) can edit them:
+
+```python
+from ragbench.harness.prompts import ANSWER_PROMPTS
+
+    @classmethod
+    def default_harness(cls, options):
+        return {**ANSWER_PROMPTS, "query_rewrite_prompt": "Rewrite the question as a keyword query."}
+
+    def _rewrite(self, question: str) -> str:
+        messages = [{"role": "system", "content": self.harness.rewrite_prompt}, {"role": "user", "content": f"Question: {question}"}]
+        ...
+```
+
+Return `{}` from `default_harness` for a system whose prompts live elsewhere. Knobs need nothing: a `harness:` knob sets the `retrieval:` / `chunker:` option of the same name when your option model has it.
+
 ### Record steps
 
 `answer_question()` traces every question. Wrap each piece of work in `self.trace.step(kind, name)` so the report can show where time and money go (kinds: `retrieve`, `rerank`, `llm`, `tool`, `embed`, `route`, `grade`, `generate`; the final `generate` step is recorded for you):

@@ -24,7 +24,6 @@ from ragbench.models.prompts import (
     ROUTE_QUESTION_MARKER,
     SITUATE_CHUNK_MARKER,
     SUMMARIZE_DOCUMENT_MARKER,
-    TOOL_AGENT_MARKER,
 )
 from ragbench.models.refs import parse_model_ref, provider_reachable
 from ragbench.models.usage import note_llm
@@ -147,8 +146,9 @@ class MockLLM(LLM):
 
     def _generate(self, messages: list[dict[str, Any]], json_mode: bool, tools: list[dict[str, Any]] | None) -> LLMResult:
         prompt = "\n".join(m.get("content") or "" for m in messages)
-        if TOOL_AGENT_MARKER in prompt and (tools or REACT_JSON_MARKER in prompt):
-            return self._tool_agent_turn(messages, prompt, tools)  # the tool-using agents' turns; any other prompt ignores `tools`
+        if tools or REACT_JSON_MARKER in prompt:
+            # A tool-using agent's turn: only the agents offer tools, and the ReAct block is protocol (the agent's opening is an editable harness text).
+            return self._tool_agent_turn(messages, prompt, tools)
         text = next((respond(prompt) for _, predicate, respond in self._responders if predicate(prompt, json_mode)), None)
         if text is None:
             text = self._answer_from_prompt(prompt)

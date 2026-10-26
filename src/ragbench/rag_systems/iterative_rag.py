@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from ragbench.agents import BUDGET, Abort, AgentAction, AgentLoop, AgentState, Continue, Finish, prompts
 from ragbench.agents.replies import parse_next_hop
 from ragbench.documents.schema import RetrievedChunk
+from ragbench.harness.prompts import ANSWER_PROMPTS
 from ragbench.models.llms import LLMResult
 from ragbench.rag_systems.agentic_base import AgenticRAG
-from ragbench.rag_systems.base import ANSWER_SYSTEM_PROMPT, RetrievalResult
+from ragbench.rag_systems.base import RetrievalResult
 from ragbench.rag_systems.options import IterativeOptions
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.rag_systems.trace import Tracer
@@ -41,6 +43,10 @@ class IterativeRAG(AgenticRAG):
     )
     options: IterativeOptions
 
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return {**ANSWER_PROMPTS, "query_rewrite_prompt": prompts.NEXT_HOP_SYSTEM}
+
     def _agent(self, question: str, final_top_k: int, tracer: Tracer) -> tuple[AgentState, list[RetrievedChunk], dict]:
         opts = self.options
         per_query_k = max(opts.per_query_top_k, final_top_k)
@@ -58,7 +64,7 @@ class IterativeRAG(AgenticRAG):
             if state.over_budget():
                 return Abort(BUDGET)
             reply, _ = self._ask(
-                "llm", "next_hop", prompts.next_hop(question, self._evidence_text(evidence), state.iteration, opts.max_hops), parse_next_hop,
+                "llm", "next_hop", prompts.next_hop(question, self._evidence_text(evidence), state.iteration, opts.max_hops, self.harness.rewrite_prompt), parse_next_hop,
                 max_tokens=NEXT_HOP_MAX_TOKENS, hop=state.iteration,
             )
             if reply is None:  # an unreadable plan: answer from what has been found
@@ -92,7 +98,7 @@ class IterativeRAG(AgenticRAG):
             return super()._generate_from_retrieval(retrieval, question, chunks)
         found = "\n".join(f"- Round {note['hop']}: {note['known']}" for note in notes)
         messages = [
-            {"role": "system", "content": ANSWER_SYSTEM_PROMPT},
+            {"role": "system", "content": self.harness.answer_system()},
             {"role": "user", "content": f"Notes from the search (not evidence by themselves):\n{found}\n\nContext:\n{self._format_context(chunks)}\n\nQuestion: {question}"},
         ]
         with self.trace.step("generate", "answer", context_chunks=len(chunks), rounds=len(notes)) as step:

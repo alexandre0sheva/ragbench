@@ -16,6 +16,7 @@ from ragbench.agents.budget import AgentBudget
 from ragbench.agents.loop import BUDGET, Abort, AgentAction, AgentLoop, AgentState, Continue, Finish
 from ragbench.agents.react_json import describe_tools, parse_action
 from ragbench.documents.schema import RetrievedChunk
+from ragbench.harness import PromptHarness
 from ragbench.models.llms import LLM, LLMResult
 from ragbench.tools.base import ToolContext, ToolResult
 from ragbench.tools.registry import ToolBox
@@ -76,12 +77,12 @@ def evidence_from(tool: str, result: ToolResult) -> list[RetrievedChunk]:
 
 
 class ToolAgent:
-    def __init__(self, llm: LLM, box: ToolBox, budget: AgentBudget, *, mode: str = "native", instructions: str = ""):
+    def __init__(self, llm: LLM, box: ToolBox, budget: AgentBudget, harness: PromptHarness, *, mode: str = "native"):
         if mode not in ("native", "react_json"):
             raise ValueError(f"agent_mode must be 'native' or 'react_json', not {mode!r}")
         self.llm, self.box, self.budget, self.mode = llm, box, budget, mode
         react_tools = describe_tools(box) if mode == "react_json" else None
-        self.system_message = {"role": "system", "content": prompts.tool_agent_system(react_tools, instructions)}
+        self.system_message = {"role": "system", "content": prompts.tool_agent_system(harness, react_tools)}
 
     def run(self, question: str, ctx: ToolContext, tracer: Tracer) -> ToolAgentRun:
         messages: list[dict[str, Any]] = [self.system_message, {"role": "user", "content": prompts.question_message(question)}]

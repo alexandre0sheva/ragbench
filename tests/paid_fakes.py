@@ -84,6 +84,7 @@ def install(monkeypatch: Any) -> None:
     import ragbench.models.colbert as colbert
     import ragbench.models.decisions.openai_decisions as decisions_provider
     import ragbench.models.providers.openai as openai_provider
+    from ragbench.rag_systems.late_interaction_rag import LateInteractionRAG
 
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test-not-real")
     monkeypatch.setattr(openai_provider, "OpenAILLM", lambda model_name: PaidMockLLM(model_name))
@@ -91,4 +92,5 @@ def install(monkeypatch: Any) -> None:
     monkeypatch.setattr(decisions_provider, "OpenAIDecisionModel", lambda model_name: PaidMockDecisionModel(model_name))
     # `late_interaction` loads a local ColBERT model in live runs: the hashing token encoder stands in (no torch, no download).
     monkeypatch.setattr(colbert, "ColBERTEncoder", lambda name: colbert.HashingTokenEncoder())
+    monkeypatch.setattr(LateInteractionRAG, "import_modules", ())  # nor its warm-up: torch next to faiss in one test worker aborts on macOS
     monkeypatch.setattr(colbert, "_ENCODERS", {})

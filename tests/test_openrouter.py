@@ -200,9 +200,9 @@ def test_tool_agents_fall_back_to_react_json_for_a_model_without_tools(monkeypat
     modes: list[str] = []
     original = tool_agent.ToolAgent.__init__
 
-    def spy(self, llm, box, budget, *, mode="native", instructions=""):
+    def spy(self, llm, box, budget, harness, *, mode="native"):
         modes.append(mode)
-        original(self, llm, box, budget, mode=mode, instructions=instructions)
+        original(self, llm, box, budget, harness, mode=mode)
 
     monkeypatch.setattr(tool_agent.ToolAgent, "__init__", spy)
     system.ingest([])

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from ragbench.config.schema import SystemConfig
 from ragbench.documents.schema import Document
+from ragbench.harness.prompts import ANSWER_PROMPTS
 from ragbench.models.cost import CostBreakdown
 from ragbench.rag_systems.base import BaseRAGSystem, IngestionResult, RetrievalResult
 from ragbench.rag_systems.components import build_chunker, build_embedder, build_vector_index, chunk_documents
@@ -41,6 +45,10 @@ class HyDERAG(BaseRAGSystem):
         options=HyDEOptions,
     )
     options: HyDEOptions
+
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return {**ANSWER_PROMPTS, "query_rewrite_prompt": HYDE_SYSTEM_PROMPT}
 
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
@@ -97,7 +105,7 @@ class HyDERAG(BaseRAGSystem):
 
     def _generate_hypothetical(self, question: str) -> tuple[str, CostBreakdown]:
         messages = [
-            {"role": "system", "content": HYDE_SYSTEM_PROMPT},
+            {"role": "system", "content": self.harness.rewrite_prompt},
             {"role": "user", "content": f"Question: {question}"},
         ]
         with self.trace.step("llm", "hypothetical_document") as step:

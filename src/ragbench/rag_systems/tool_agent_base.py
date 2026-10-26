@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Mapping
 from typing import Any
 
 from ragbench.agents import AgentBudget, llm_calls
 from ragbench.agents.tool_agent import ToolAgent, ToolAgentRun
 from ragbench.config.schema import SystemConfig, ToolRef
 from ragbench.documents.schema import RetrievedChunk
+from ragbench.harness.prompts import TOOL_AGENT_PROMPTS
 from ragbench.rag_systems.base import AnswerResult, BaseRAGSystem, RetrievalResult
 from ragbench.rag_systems.options import ToolAgentOptions
 from ragbench.rag_systems.trace import Tracer, activate, reconcile_steps, sum_costs
@@ -30,6 +32,10 @@ class ToolAgentRAG(BaseRAGSystem):
 
     options: ToolAgentOptions
 
+    @classmethod
+    def default_harness(cls, options: Any) -> Mapping[str, str]:
+        return TOOL_AGENT_PROMPTS
+
     def __init__(self, config: SystemConfig, force_mock: bool = False):
         super().__init__(config, force_mock=force_mock)
         self.box = ToolBox.from_refs(self.tool_refs(config), current_runtime().tools, mock=force_mock)
@@ -47,16 +53,13 @@ class ToolAgentRAG(BaseRAGSystem):
     def _retrievers(self) -> dict[str, Retriever]:
         return {}
 
-    def _instructions(self) -> str:
-        return ""
-
     def _run_agent(self, question: str, tracer: Tracer) -> ToolAgentRun:
         opts = self.options
         budget = AgentBudget(max_steps=opts.max_steps, max_cost_usd=opts.max_cost_usd, max_tokens=opts.max_tokens, max_tool_calls=opts.max_tool_calls)
         ctx = ToolContext.for_question(self.corpus, self._retrievers())  # a fresh context per question: concurrent questions share nothing
         # A model without native function calling (per the provider's catalog) gets the tools described in the prompt instead.
         mode = "react_json" if opts.agent_mode == "native" and not self.llm.supports_tools else opts.agent_mode
-        return ToolAgent(self.llm, self.box, budget, mode=mode, instructions=self._instructions()).run(question, ctx, tracer)
+        return ToolAgent(self.llm, self.box, budget, self.harness, mode=mode).run(question, ctx, tracer)
 
     def _retrieval(self, question: str, run: ToolAgentRun, tracer: Tracer, first_step: int, depth: int) -> RetrievalResult:
         chunks: list[RetrievedChunk] = reciprocal_rank_fusion(run.rankings, top_k=depth, rrf_k=60) if run.rankings else []
