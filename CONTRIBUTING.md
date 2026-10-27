@@ -52,6 +52,41 @@ ragbench compare --config configs/all.yaml --mock --max-workers 4
 - Do not commit `results/`, `.env`, caches or local vector-store state.
 - Every change adds a bullet under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
 
+## Good first issues
+
+Small, self-contained and testable offline. Each names where to start; open an issue (or comment on one) before you begin so two people do not build the same thing. Maintainers tag these `good first issue`.
+
+- **An agent-harness preset.** `cli_agent` knows Claude Code, Codex and OpenCode (`CliPreset` in `src/ragbench/rag_systems/options.py`, parsers in `cli_trajectory.py`). Add another harness (Gemini CLI, Aider, Goose) with a fake binary like `tests/fake_cli_agent.py`, and document it in [benchmarking-external-systems.md](docs/benchmarking-external-systems.md).
+- **A dataset for `ragbench datasets pull`.** One `HubDataset` in `src/ragbench/datasets/hub/` with its files' checksums, licence and a reader; `tests/test_hub_catalog.py` and `tests/test_hub_pull.py` show the checks (no download in tests).
+- **An agent tool.** A typed function such as a unit converter or a table lookup, registered like the tools in `src/ragbench/tools/` and described in [docs/tools.md](docs/tools.md#your-own-tools), with a test in the style of `tests/test_tools.py`.
+- **A chunker for a format that has structure** (source code, HTML, subtitles): [docs/extending.md](docs/extending.md#chunkers-and-rerankers) and `tests/test_chunkers.py`.
+- **A harder question type for the bundled hard suite.** Add a category to `scripts/generate_hard_suite.py`, regenerate `data/hard`, and extend `tests/test_hard_suite.py`.
+- **A price or a model that moved.** `ragbench models sync`, the price table in `src/ragbench/models/cost.py` and the shortlist in [docs/models.md](docs/models.md) must agree; fix whichever drifted and say where you read the price.
+- **Raise the coverage of one module.** `pytest --cov` lists the modules furthest below the floor; add tests for the behaviour they miss, then raise `fail_under` if the total allows.
+- **A walk-through for your own corpus.** A short guide in the style of [choosing-an-architecture.md](docs/choosing-an-architecture.md) for a kind of data it does not cover yet (support tickets, source code, legal text), from a real mock run.
+
+Larger, and wanted (`help wanted`): a Postgres / pgvector vector backend ([extending.md](docs/extending.md#vector-backends)) and multilingual evaluation.
+
+## Issue labels
+
+`.github/labels.yml` is the list; `python scripts/sync_labels.py --apply` (maintainers, needs the `gh` CLI) creates or updates them on the repository, and without `--apply` it prints what it would do.
+
+| Label | Use |
+| --- | --- |
+| `bug`, `enhancement`, `question` | What kind of issue it is (the issue templates set the first two) |
+| `good first issue`, `help wanted` | Starting points for new contributors; larger wanted work |
+| `area: systems`, `area: evaluation`, `area: models`, `area: adapters`, `area: optimize`, `area: reporting`, `area: docs` | Which part of the code it touches |
+| `cost`, `mock-mode` | Spends or may spend money; breaks or lacks the deterministic mock path |
+| `needs repro`, `needs decision`, `wontfix` | Waiting for a reproduction or a maintainer decision; closed as out of scope |
+
+## Commit messages
+
+One short subject, then a body only when the *why* is not obvious from the diff.
+
+- **Subject:** imperative, at most 72 characters, no trailing full stop, optionally prefixed with the area (`optimize: keep the base when dev disagrees`). The areas are the `area:` labels above without the prefix.
+- **Body:** wrap at 80 characters; say what changed for the user and why, mention a golden or report-snapshot change, and give any API-cost implication. Reference an issue as `Fixes #123`.
+- **One change per commit**, with its tests and its `CHANGELOG.md` bullet. Do not mix a refactor with a behaviour change.
+
 ## Documentation
 
 Each piece of knowledge has one owner; everywhere else links to it. `scripts/audit_docs.py` (also a test) fails on broken links, option tables and system descriptions outside their owners, metric definitions outside the methodology, and counts that will go stale.
@@ -73,6 +108,7 @@ Each piece of knowledge has one owner; everywhere else links to it. `scripts/aud
 | Exporting a run's traces (`ragbench export-traces`): formats, backends, what is and is not exported | `docs/observability.md` |
 | Result-file schemas, the cross-run page (`ragbench runs site`), the docs site and its Leaderboard | `docs/results.md` |
 | Optimizing a system's harness (`ragbench optimize`): the loop, its budget, outputs, resuming | `docs/optimization.md` |
+| How RAGBench differs from RAGAS, ARES, TruLens, DeepEval, promptfoo and Harness² | `docs/comparison.md` |
 | Release history | `CHANGELOG.md` |
 | Releasing | `docs/release-checklist.md` |
 

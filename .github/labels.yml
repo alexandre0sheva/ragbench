@@ -1,0 +1,18 @@
+# The issue labels of the repository: `python scripts/sync_labels.py --apply` creates or updates them (see CONTRIBUTING.md).
+- {name: bug, color: "d73a4a", description: "Something does not work as documented"}
+- {name: enhancement, color: "a2eeef", description: "A new capability or an improvement"}
+- {name: question, color: "d876e3", description: "A usage question, not a defect"}
+- {name: good first issue, color: "7057ff", description: "Small, self-contained, testable offline"}
+- {name: help wanted, color: "008672", description: "Larger work a contributor could take"}
+- {name: "area: systems", color: "1d76db", description: "RAG systems, chunkers, rerankers, stores"}
+- {name: "area: evaluation", color: "1d76db", description: "Metrics, judges, statistics, splits, cost accounting"}
+- {name: "area: models", color: "1d76db", description: "Providers, prices, OpenRouter, embeddings"}
+- {name: "area: adapters", color: "1d76db", description: "external_http, python_callable, frameworks, agent harnesses, MCP"}
+- {name: "area: optimize", color: "1d76db", description: "ragbench optimize, the harness surface, the experience library"}
+- {name: "area: reporting", color: "1d76db", description: "Reports, leaderboards, the docs site, trace export"}
+- {name: "area: docs", color: "1d76db", description: "Documentation only"}
+- {name: cost, color: "fbca04", description: "Spends or may spend money on live runs"}
+- {name: mock-mode, color: "fbca04", description: "Breaks or lacks the deterministic offline path"}
+- {name: needs repro, color: "ededed", description: "Waiting for a way to reproduce it"}
+- {name: needs decision, color: "ededed", description: "Waiting for a maintainer decision"}
+- {name: wontfix, color: "ffffff", description: "Out of scope or will not be changed"}

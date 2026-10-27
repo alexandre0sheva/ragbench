@@ -52,6 +52,7 @@ nav:
   - Choose and run:
       - Where the results are: finding-results.md
       - Choosing an architecture: choosing-an-architecture.md
+      - How RAGBench compares: comparison.md
       - Leaderboard: leaderboard.md
       - "Benchmark: MultiHop-RAG": benchmarks/multihop-rag.md
       - Example run: example-run.md

@@ -2,7 +2,7 @@
 
 [systems.md](systems.md) is the reference: each system's options, defaults and cost/latency profile, generated from the code. This page is the explanation: what each system does with a document and with a question, step by step, with diagrams, so you can predict where it will win, where it will fail, and what its trace in `per_question_results.jsonl` will show.
 
-Contents: [the shared anatomy](#the-shared-anatomy) · [chunkers](#chunkers) · [retrieval building blocks](#retrieval-building-blocks) · [agent building blocks](#agent-building-blocks) · [the systems](#the-systems), grouped by idea · [a side-by-side view of where the LLM is called](#where-the-llm-is-called).
+Contents: [the shared anatomy](#the-shared-anatomy) · [chunkers](#chunkers) · [retrieval building blocks](#retrieval-building-blocks) · [agent building blocks](#agent-building-blocks) · [the systems](#the-systems), grouped by idea · [the optimize loop](#the-optimize-loop) · [a side-by-side view of where the LLM is called](#where-the-llm-is-called).
 
 Diagrams are [Mermaid](https://mermaid.js.org/); GitHub renders them. In every diagram a rounded box is a step recorded in the trace, a hexagon is an LLM call, and a cylinder is an index built once at ingestion.
 
@@ -804,6 +804,35 @@ flowchart LR
 **Details.** The whole answer is one `external` step, unless a `python_callable` records its own steps (retrieve, generate, ...), which then replace it; there is no chunker and no index on RAGBench's side (with `post_documents_to` or `ingest_target` the corpus is handed to your system once). The judge reads the passages your system reports. Setup, id matching, cost and secrets: [benchmarking external systems](benchmarking-external-systems.md); options: [systems.md](systems.md#external_http).
 
 **Watch out:** latency includes the network between RAGBench and your service, and an endpoint that keeps state between questions (a conversation memory, a cache) is not answering each question fresh.
+
+## The optimize loop
+
+`ragbench optimize` is not a system: it improves one system's harness (its prompt texts and bounded knobs), and the improved system is then an ordinary entry in a comparison. The loop is a port of Harness²'s Propose → Probe → Compose; [optimization.md](optimization.md) owns its options, budget and outputs, and [methodology.md](methodology.md#verifying-an-optimized-harness) the decision rule. In this diagram a rounded box is a run of the harness, a hexagon is the proposer (an LLM call), and a slanted box is an evidence tree the proposer reads.
+
+```mermaid
+flowchart TD
+    BASE("base harness<br/>k rollouts on train") --> EV1[/"evidence tree<br/>traces, answers, failures"/]
+    EV1 --> INV{{"proposer: k INV candidates<br/>(help on any collection)"}}
+    EV1 --> DOM{{"proposer: k DOM candidates<br/>(made for this collection)"}}
+    INV --> PROBE1("probe each candidate on train<br/>2k probes")
+    DOM --> PROBE1
+    PROBE1 --> EV2[/"evidence tree<br/>each candidate contrasted with the base"/]
+    EV2 --> COMP{{"proposer: k compositions<br/>keep what helped, drop what hurt"}}
+    COMP --> PROBE2("probe each composition on train<br/>k probes")
+    PROBE2 --> DEV("dev: the best finalists on train<br/>against the base")
+    DEV -->|"best on dev beats the base"| TEST("test: the pick against the base<br/>paired bootstrap")
+    DEV -->|"none beats the base"| KEEP["no reliable gain:<br/>the base is kept"]
+    TEST -->|"significantly better"| ADOPT["adopt: optimized.yaml"]
+    TEST -->|"not significant"| KEEP
+    ADOPT --> LIB[("experience library<br/>harness, verified gain, lesson")]
+    LIB -.->|"hints for later runs"| EV1
+    GUARD["leakage guard: dev and test questions<br/>never reach a file or a request"] -.- EV1
+    GUARD -.- EV2
+```
+
+**Details.** Everything above the dev box uses the train split only, so the proposer cannot fit the questions that decide the verdict. Both modes spend exactly `4k` train probes (`k` base rollouts, `2k` candidates, `k` compositions) and `3k` proposer requests, and `ledger.json` asserts it. In `parallel` mode the loop runs once with width `k`; in `sequential` mode it runs `k` rounds of width one, each starting from the best harness so far. A candidate whose harness was already probed is read back instead of run again. Only an **adopted** result is written to the experience library, so a gain the test split did not confirm is never taught as a lesson.
+
+**Watch out:** the test comparison has the power of your test split. With a few dozen questions only a large gain can be shown, so "no reliable gain" can also mean "not enough questions".
 
 ## Where the LLM is called
 

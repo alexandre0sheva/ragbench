@@ -10,6 +10,42 @@
 
 It is not a demo chatbot, and it needs no API key to try: without one it runs on deterministic mock models so you can see the whole pipeline first.
 
+<p align="center">
+  <img src="docs/assets/auto-to-report.gif" alt="A terminal running ragbench auto on the bundled demo documents with mock models: the documents are profiled, questions written, each system runs, the recommendation prints, and then the report of a published run opens" width="760">
+</p>
+
+<sub>A real `ragbench auto --mock` run on the bundled demo documents (no key, a few seconds), then the report of the [published benchmark](docs/benchmarks/multihop-rag.md). Remake it with `python scripts/make_demo_gif.py`.</sub>
+
+## Three things it does
+
+1. **Trust the numbers.** Every score comes with a confidence interval, repeated trials show run-to-run noise, an independent judge (never the generator's own model family) can be a panel, answers can be compared pairwise, faithfulness is checked claim by claim, and a held-out test split keeps tuning honest. Statistically tied systems are called ties. See the [methodology](docs/methodology.md).
+2. **Benchmark anything.** Built-in architectures run next to what you already have: an HTTP endpoint, a Python function, LangChain, LlamaIndex and Haystack pipelines, agent harnesses (Claude Code, Codex, OpenCode, any command), and any model through OpenRouter. See [benchmarking external systems](docs/benchmarking-external-systems.md) and [models](docs/models.md).
+3. **Improve the winner.** `ragbench optimize` rewrites a system's prompts and knobs on the train split (Propose → Probe → Compose, after Google's [Harness²](docs/comparison.md#harness2-the-closest-relative)) and keeps a change only when a held-out test split confirms it. See [optimization](docs/optimization.md).
+
+How it differs from RAGAS, ARES, TruLens, DeepEval and promptfoo, and when to use them instead: [comparison](docs/comparison.md).
+
+### Benchmark your own RAG, agent or model in 3 commands
+
+```bash
+ragbench init my_bench --docs ./my_docs                  # writes my_bench/ragbench.yaml and a questions.jsonl to edit
+# add your system to my_bench/ragbench.yaml next to the built-in ones (see below), and edit the questions
+ragbench run --config my_bench/ragbench.yaml --mock      # 1. check the wiring offline: no key, no cost
+ragbench estimate --config my_bench/ragbench.yaml        # 2. what a live run would cost
+ragbench run --config my_bench/ragbench.yaml             # 3. the real run: it shows the estimate and asks before spending
+```
+
+What you add is a few lines of YAML, whichever of these you are measuring:
+
+```yaml
+systems:
+  - {type: external_http, name: my_rag, retrieval: {url: "https://rag.internal.example/ask"}}                    # a RAG you already run
+  - {type: python_callable, name: my_fn, retrieval: {target: "my_pkg.rag:answer"}}                              # a Python function of yours
+  - {type: cli_agent, name: claude_code, retrieval: {preset: claude_code, model: "anthropic:claude-haiku-5-5"}} # an agent harness
+  - {type: hybrid_rerank, name: glm, models: {generator: "openrouter:z-ai/glm-5.3"}}                            # a pipeline on another model
+```
+
+The details of each, and how your system's documents and ids must line up with the labels, are in [benchmarking external systems](docs/benchmarking-external-systems.md).
+
 *Not to be confused with* Galileo's [RAGBench](https://arxiv.org/abs/2407.11005) (arXiv 2407.11005, `rungalileo/ragbench`), a labelled dataset for RAG evaluation. This project is a tool that benchmarks RAG systems on your own data; it can read datasets like that one, and it shares only the name.
 
 ## Quickstart
@@ -48,6 +84,8 @@ Each run writes one directory: a **recommendation** (which system to deploy unde
 ### A published result
 
 <!-- results:multihop-rag:start -->
+**The headline: a plain pipeline is the pick.** The best-scoring system, `llm_heavy_default`, answers 3.83 at $0.00983 a question; `hybrid_rerank_default` is statistically tied with it at 3.73 and costs 9× less.
+
 Every RAG solution RAGBench can run, on 300 questions of the public [MultiHop-RAG](https://github.com/yixuantt/MultiHop-RAG) dataset (multi-hop questions over a corpus of news articles, null queries included), `gpt-6-luna` generating and `claude-haiku-5-5` judging. The top five, the recommended system, the floor and the 50k-token long-context entry, the three framework pipelines and the three agent harnesses:
 
 | System | Answer score | Recall@5 | $ / question |
@@ -126,6 +164,7 @@ Every system implements the same interface and runs on any dataset. Options and 
 - [System wiki](docs/system-wiki.md): how every system, chunker, reranker and agent works, with diagrams
 - [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*
 - [Extending RAGBench](docs/extending.md): new systems, tools, chunkers, rerankers, loaders, vector backends and model providers
+- [How RAGBench compares](docs/comparison.md): RAGAS, ARES, TruLens, DeepEval, promptfoo and Harness², what each is for and when to use it instead
 - [Where the results are](docs/finding-results.md): which benchmark is current, which page and folder holds what, and how to read a leaderboard
 - [MultiHop-RAG benchmark](docs/benchmarks/multihop-rag.md): the current published benchmark, every system on one public dataset
 - [Example run](docs/example-run.md): one live run on the demo dataset, end to end with its result files
@@ -138,10 +177,8 @@ Live runs spend real money, and LLM-heavy and agentic systems spend the most; se
 
 Not built yet:
 
-- GraphRAG-style retrieval over an entity graph
 - Persistent vector store adapters for Postgres / pgvector
 - Multilingual evaluation: language-aware chunking, and question sets and judges per language
-- Tools that call MCP servers
 - A web dashboard server for comparing runs (today: the static `results/index.html` from `ragbench runs index`)
 
 ## Contributing and license

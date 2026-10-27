@@ -8,6 +8,12 @@
 {% macro line(row, note="", mark="") -%}
 | `{{ row.system }}`{{ mark }}{{ note }} | {{ ci(row, "answer_score") }} | {{ row["retrieval_recall@5"] | score(3) }} | {{ row.avg_cost_per_question | money }} |
 {%- endmacro %}
+{% set best = ranked[0] %}
+{% set win = run.row(run.recommendation.winner) %}
+{% if run.recommendation.winner != best.system and best.system in run.recommendation.tied_with_winner %}
+**The headline: a plain pipeline is the pick.** The best-scoring system, `{{ best.system }}`, answers {{ best.answer_score | score }} at {{ best.avg_cost_per_question | money }} a question; `{{ win.system }}` is statistically tied with it at {{ win.answer_score | score }} and costs {{ "%.0f" | format(best.avg_cost_per_question / win.avg_cost_per_question) }}× less.
+
+{% endif %}
 Every RAG solution RAGBench can run, on {{ n }} questions of the public [MultiHop-RAG](https://github.com/yixuantt/MultiHop-RAG) dataset (multi-hop questions over a corpus of news articles, null queries included), `gpt-6-luna` generating and `claude-haiku-5-5` judging. The top five, the recommended system, the floor and the 50k-token long-context entry, the three framework pipelines and the three agent harnesses:
 
 | System | Answer score | Recall@5 | $ / question |
