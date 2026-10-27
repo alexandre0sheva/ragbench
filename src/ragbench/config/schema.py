@@ -254,6 +254,13 @@ class JudgeConfig(BaseModel):
             "answers, and the report warns when no other judge could score them. Set false to accept that."
         ),
     )
+    scorers: Literal["all", "first"] = Field(
+        default="all",
+        description=(
+            "Which panel judges score an answer: `all` of those `independent` allows, or only the `first` of them in panel order, so every "
+            "answer has one judge (the lead, or the next judge for systems of the lead's family) and nothing is paid twice."
+        ),
+    )
 
 
 class PairwiseConfig(BaseModel):

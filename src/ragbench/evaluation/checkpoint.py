@@ -2,8 +2,14 @@
 
 When a run is given its own directory, every system that finishes cleanly (all questions answered, none failed) is written to
 `checkpoints/<system>.json` at once. A resumed run loads the checkpoints whose *context hash* still matches (the system's config,
-every setting that changes its results, the dataset, the run mode) and runs only the rest. A system with failed questions is never
-checkpointed: re-running it is the point of resuming.
+every setting that changes its results, the dataset, the run mode) and runs only the rest.
+
+A system that did not finish cleanly (the spending cap stopped it partway, or some of its questions failed) gets a *partial*
+checkpoint instead, `checkpoints/<system>.partial.json`: the answers it gave without an error, under the same context hash. A resumed
+run gives the system those answers back and asks only the missing and failed questions. Failed questions are never kept: re-running
+them is the point of resuming. Good answers are, because they were paid for, the hash proves they were made in the same context, and
+a question's answer does not depend on which other questions were asked with it (agent harnesses, which no cache serves, would pay for
+them again in full).
 """
 
 from __future__ import annotations
@@ -25,6 +31,7 @@ from ragbench.harness.apply import harness_fingerprint
 logger = logging.getLogger(__name__)
 
 CHECKPOINT_DIR = "checkpoints"
+PARTIAL_SUFFIX = ".partial.json"
 FORMAT_VERSION = 1
 # Evaluation settings that change how fast or how safely a run goes, never what a system answers or scores.
 NEUTRAL_EVALUATION_KEYS = frozenset(
@@ -44,6 +51,8 @@ def context_hash(system: SystemConfig, config: ExperimentConfig, dataset_digest:
     judge = evaluation["judge"]
     if not judge["panel"] and judge["aggregate"] == "mean":
         del judge["panel"], judge["aggregate"]  # likewise for a one-judge run, from before judge panels
+    if judge["scorers"] == "all":
+        del judge["scorers"]  # the default keeps the hash it had before `scorers` existed
     payload = {
         "version": __version__,
         "system": _system_payload(system),
@@ -101,12 +110,26 @@ class CheckpointStore:
         self.directory = run_dir / CHECKPOINT_DIR
         self._lock = threading.Lock()
 
-    def path_for(self, system: str) -> Path:
+    def path_for(self, system: str, partial: bool = False) -> Path:
         slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", system).strip("_")[:60] or "system"
-        return self.directory / f"{slug}-{hashlib.sha256(system.encode('utf-8')).hexdigest()[:8]}.json"
+        return self.directory / f"{slug}-{hashlib.sha256(system.encode('utf-8')).hexdigest()[:8]}{PARTIAL_SUFFIX if partial else '.json'}"
 
     def save(self, checkpoint: Checkpoint, hash_: str) -> None:
-        payload = {
+        """Checkpoint a system that finished cleanly; its partial checkpoint, if an earlier attempt left one, is no longer needed."""
+        self._write(self.path_for(checkpoint.system), self._payload(checkpoint, hash_))
+        self.discard_partial(checkpoint.system)
+
+    def save_partial(self, checkpoint: Checkpoint, hash_: str) -> None:
+        """Checkpoint the answers of a system that did not finish cleanly (`checkpoint.results` holds only the ones to keep)."""
+        self._write(self.path_for(checkpoint.system, partial=True), self._payload(checkpoint, hash_))
+
+    def discard_partial(self, system: str) -> None:
+        with self._lock:
+            self.path_for(system, partial=True).unlink(missing_ok=True)
+
+    @staticmethod
+    def _payload(checkpoint: Checkpoint, hash_: str) -> dict[str, Any]:
+        return {
             "format": FORMAT_VERSION,
             "context_hash": hash_,
             "system": checkpoint.system,
@@ -118,10 +141,8 @@ class CheckpointStore:
             "generator_model": list(checkpoint.generator_model) if checkpoint.generator_model else None,
             "probe": checkpoint.probe,
         }
-        self._write(checkpoint.system, payload)
 
-    def _write(self, system: str, payload: dict[str, Any]) -> None:
-        path = self.path_for(system)
+    def _write(self, path: Path, payload: dict[str, Any]) -> None:
         with self._lock:
             self.directory.mkdir(parents=True, exist_ok=True)
             temporary = path.with_suffix(".tmp")
@@ -130,7 +151,13 @@ class CheckpointStore:
 
     def load(self, system: str, hash_: str) -> Checkpoint | None:
         """The checkpoint of `system` if it exists, is readable and was made in the same context; None otherwise (the system is re-run)."""
-        path = self.path_for(system)
+        return self._load(self.path_for(system), system, hash_)
+
+    def load_partial(self, system: str, hash_: str) -> Checkpoint | None:
+        """The partial checkpoint of `system` (the answers to keep), on the same terms as `load`."""
+        return self._load(self.path_for(system, partial=True), system, hash_)
+
+    def _load(self, path: Path, system: str, hash_: str) -> Checkpoint | None:
         if not path.exists():
             return None
         try:
@@ -160,4 +187,4 @@ class CheckpointStore:
         except (OSError, ValueError):
             return
         payload["probe"] = probe
-        self._write(system, payload)
+        self._write(path, payload)

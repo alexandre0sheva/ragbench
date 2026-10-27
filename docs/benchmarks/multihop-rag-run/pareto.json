@@ -1,0 +1,384 @@
+{
+  "maximize": [
+    "answer_score"
+  ],
+  "minimize": [
+    "avg_cost_per_question",
+    "avg_latency_ms"
+  ],
+  "front": [
+    "bm25_default",
+    "vector_default",
+    "rerank_default",
+    "hybrid_rerank_default",
+    "llm_heavy_default",
+    "no_retrieval_floor",
+    "sentence_window_default",
+    "vector_mmr",
+    "contextual_default",
+    "hierarchical_default",
+    "raptor_collapsed",
+    "rag_fusion_default",
+    "decompose_default",
+    "corrective_default",
+    "adaptive_default",
+    "decision_gate_default",
+    "decision_gate_strict"
+  ],
+  "dominated_by": {
+    "hybrid_default": [
+      "bm25_default",
+      "vector_default",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "raptor_collapsed",
+      "late_interaction_rerank",
+      "graph_rag_local"
+    ],
+    "hyde_default": [
+      "bm25_default",
+      "vector_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "adaptive_default"
+    ],
+    "parent_doc_default": [
+      "vector_mmr",
+      "hierarchical_default"
+    ],
+    "full_context_50k": [
+      "bm25_default",
+      "vector_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "decision_gate_default"
+    ],
+    "compression_llm_extract": [
+      "hybrid_rerank_default"
+    ],
+    "late_interaction_rerank": [
+      "hierarchical_default"
+    ],
+    "iterative_default": [
+      "bm25_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "contextual_default",
+      "compression_llm_extract",
+      "rag_fusion_default",
+      "decompose_default",
+      "corrective_default",
+      "adaptive_default"
+    ],
+    "agent_search_plain": [
+      "bm25_default",
+      "vector_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "hyde_default",
+      "parent_doc_default",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "raptor_collapsed",
+      "compression_llm_extract",
+      "late_interaction_rerank",
+      "rag_fusion_default",
+      "decompose_default",
+      "corrective_default",
+      "adaptive_default",
+      "decision_gate_default"
+    ],
+    "agent_search_tools": [
+      "bm25_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "contextual_default",
+      "compression_llm_extract",
+      "rag_fusion_default",
+      "decompose_default",
+      "corrective_default",
+      "adaptive_default",
+      "decision_gate_default"
+    ],
+    "grep_agent_default": [
+      "bm25_default",
+      "vector_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "hyde_default",
+      "parent_doc_default",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "raptor_collapsed",
+      "compression_llm_extract",
+      "late_interaction_rerank",
+      "rag_fusion_default",
+      "decompose_default",
+      "corrective_default",
+      "adaptive_default",
+      "decision_gate_default"
+    ],
+    "graph_rag_local": [
+      "hierarchical_default",
+      "raptor_collapsed"
+    ],
+    "graph_rag_global": [
+      "sentence_window_default"
+    ],
+    "langchain_default": [
+      "sentence_window_default",
+      "hierarchical_default",
+      "raptor_collapsed",
+      "late_interaction_rerank",
+      "decompose_default",
+      "adaptive_default"
+    ],
+    "llamaindex_default": [
+      "bm25_default",
+      "vector_default",
+      "hybrid_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "hyde_default",
+      "parent_doc_default",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "raptor_collapsed",
+      "late_interaction_rerank",
+      "decompose_default",
+      "adaptive_default",
+      "decision_gate_strict",
+      "graph_rag_local"
+    ],
+    "haystack_default": [
+      "bm25_default",
+      "vector_default",
+      "hybrid_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "hyde_default",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "raptor_collapsed",
+      "compression_llm_extract",
+      "late_interaction_rerank",
+      "rag_fusion_default",
+      "decompose_default",
+      "adaptive_default",
+      "graph_rag_local",
+      "langchain_default"
+    ]
+  },
+  "points": [
+    {
+      "system": "bm25_default",
+      "answer_score": 3.6236666666666664,
+      "avg_cost_per_question": 0.0010430156666666668,
+      "avg_latency_ms": 2020.3862247988582
+    },
+    {
+      "system": "vector_default",
+      "answer_score": 3.475,
+      "avg_cost_per_question": 0.0010596762666666667,
+      "avg_latency_ms": 1786.4149420056492
+    },
+    {
+      "system": "hybrid_default",
+      "answer_score": 3.248,
+      "avg_cost_per_question": 0.0010637424666666668,
+      "avg_latency_ms": 2347.8629333898425
+    },
+    {
+      "system": "rerank_default",
+      "answer_score": 3.6466666666666674,
+      "avg_cost_per_question": 0.0010833358,
+      "avg_latency_ms": 2055.371550191194
+    },
+    {
+      "system": "hybrid_rerank_default",
+      "answer_score": 3.7263333333333337,
+      "avg_cost_per_question": 0.0010873444666666668,
+      "avg_latency_ms": 2241.6663420386612
+    },
+    {
+      "system": "hyde_default",
+      "answer_score": 3.4352,
+      "avg_cost_per_question": 0.0011091302666666667,
+      "avg_latency_ms": 3419.5467331446707
+    },
+    {
+      "system": "parent_doc_default",
+      "answer_score": 3.3969333333333336,
+      "avg_cost_per_question": 0.0012280192666666667,
+      "avg_latency_ms": 1724.4812085758895
+    },
+    {
+      "system": "llm_heavy_default",
+      "answer_score": 3.8347333333333338,
+      "avg_cost_per_question": 0.009827782333333333,
+      "avg_latency_ms": 6603.7775420583785
+    },
+    {
+      "system": "no_retrieval_floor",
+      "answer_score": 1.9019999999999997,
+      "avg_cost_per_question": 0.00020927866666666664,
+      "avg_latency_ms": 1299.615441588685
+    },
+    {
+      "system": "full_context_50k",
+      "answer_score": 3.411666666666667,
+      "avg_cost_per_question": 0.00581403,
+      "avg_latency_ms": 2328.5103663336486
+    },
+    {
+      "system": "sentence_window_default",
+      "answer_score": 3.4366666666666665,
+      "avg_cost_per_question": 0.0005076712666666666,
+      "avg_latency_ms": 2044.3067748099566
+    },
+    {
+      "system": "vector_mmr",
+      "answer_score": 3.4393333333333334,
+      "avg_cost_per_question": 0.0010217746000000002,
+      "avg_latency_ms": 1671.2433582171798
+    },
+    {
+      "system": "contextual_default",
+      "answer_score": 3.595666666666666,
+      "avg_cost_per_question": 0.0010414066000000001,
+      "avg_latency_ms": 2128.565741609782
+    },
+    {
+      "system": "hierarchical_default",
+      "answer_score": 3.4469999999999996,
+      "avg_cost_per_question": 0.0007625239333333333,
+      "avg_latency_ms": 1714.1217413824052
+    },
+    {
+      "system": "raptor_collapsed",
+      "answer_score": 3.3646666666666665,
+      "avg_cost_per_question": 0.0007616862666666666,
+      "avg_latency_ms": 1741.5071503724903
+    },
+    {
+      "system": "compression_llm_extract",
+      "answer_score": 3.715933333333333,
+      "avg_cost_per_question": 0.0011187802666666666,
+      "avg_latency_ms": 5666.4962669834495
+    },
+    {
+      "system": "late_interaction_rerank",
+      "answer_score": 3.4067333333333334,
+      "avg_cost_per_question": 0.0007640766,
+      "avg_latency_ms": 1936.08716619201
+    },
+    {
+      "system": "rag_fusion_default",
+      "answer_score": 3.5836000000000006,
+      "avg_cost_per_question": 0.0008458693333333333,
+      "avg_latency_ms": 5087.954533286393
+    },
+    {
+      "system": "decompose_default",
+      "answer_score": 3.605666666666667,
+      "avg_cost_per_question": 0.0008661358666666667,
+      "avg_latency_ms": 4535.5495918076485
+    },
+    {
+      "system": "corrective_default",
+      "answer_score": 3.682066666666666,
+      "avg_cost_per_question": 0.0010045409333333333,
+      "avg_latency_ms": 6527.639400074258
+    },
+    {
+      "system": "iterative_default",
+      "answer_score": 3.5176666666666674,
+      "avg_cost_per_question": 0.0012342333999999999,
+      "avg_latency_ms": 9514.783808263019
+    },
+    {
+      "system": "agent_search_plain",
+      "answer_score": 3.3543333333333334,
+      "avg_cost_per_question": 0.0022596197333333333,
+      "avg_latency_ms": 8633.116133185104
+    },
+    {
+      "system": "agent_search_tools",
+      "answer_score": 3.5280000000000005,
+      "avg_cost_per_question": 0.0025920619333333335,
+      "avg_latency_ms": 10057.637433614582
+    },
+    {
+      "system": "grep_agent_default",
+      "answer_score": 3.296,
+      "avg_cost_per_question": 0.0030922736666666667,
+      "avg_latency_ms": 8169.457267038524
+    },
+    {
+      "system": "adaptive_default",
+      "answer_score": 3.5680000000000005,
+      "avg_cost_per_question": 0.0008757597333333333,
+      "avg_latency_ms": 2914.633525023237
+    },
+    {
+      "system": "decision_gate_default",
+      "answer_score": 3.549333333333334,
+      "avg_cost_per_question": 0.0018077794666666665,
+      "avg_latency_ms": 1985.906958207488
+    },
+    {
+      "system": "decision_gate_strict",
+      "answer_score": 2.5966666666666662,
+      "avg_cost_per_question": 0.0015432971333333334,
+      "avg_latency_ms": 1314.245208306238
+    },
+    {
+      "system": "graph_rag_local",
+      "answer_score": 3.2593333333333336,
+      "avg_cost_per_question": 0.0009245019333333334,
+      "avg_latency_ms": 1889.746758248657
+    },
+    {
+      "system": "graph_rag_global",
+      "answer_score": 2.0376666666666665,
+      "avg_cost_per_question": 0.0006091469333333333,
+      "avg_latency_ms": 2736.1779584083706
+    },
+    {
+      "system": "langchain_default",
+      "answer_score": 2.855,
+      "avg_cost_per_question": 0.0008836580000000002,
+      "avg_latency_ms": 5014.879025006667
+    },
+    {
+      "system": "llamaindex_default",
+      "answer_score": 2.595666666666667,
+      "avg_cost_per_question": 0.0017642326666666667,
+      "avg_latency_ms": 4539.956792024896
+    },
+    {
+      "system": "haystack_default",
+      "answer_score": 2.708666666666667,
+      "avg_cost_per_question": 0.0011532463333333335,
+      "avg_latency_ms": 5951.959191821516
+    }
+  ]
+}

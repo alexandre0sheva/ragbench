@@ -92,6 +92,21 @@ def test_when_every_judge_shares_the_generators_family_all_of_them_score():
     assert scoring_judges([LUNA], "gpt-6-luna", independent=True) == [LUNA]
 
 
+def test_a_first_scorer_panel_asks_only_the_first_judge_free_to_score():
+    # `scorers: first`: one judge per answer, the lead unless it shares the generator's family, then the next one that does not.
+    assert scoring_judges([HAIKU, LUNA, QWEN], "gpt-6.1-sol", independent=True, first=True) == [HAIKU]
+    assert scoring_judges([HAIKU, LUNA, QWEN], "openrouter:anthropic/claude-haiku-5.5", independent=True, first=True) == [LUNA]
+    assert scoring_judges([HAIKU, LUNA], "openrouter:z-ai/glm-5.3", independent=True, first=True) == [HAIKU]
+    assert scoring_judges([HAIKU, LUNA], HAIKU, independent=False, first=True) == [HAIKU]
+
+
+def test_scorers_is_all_by_default_and_first_is_accepted():
+    assert EvaluationConfig().judge.scorers == "all"
+    assert EvaluationConfig(judge={"panel": [HAIKU, LUNA], "scorers": "first"}).judge.scorers == "first"
+    with pytest.raises(ValidationError):
+        EvaluationConfig(judge={"panel": [HAIKU, LUNA], "scorers": "some"})
+
+
 # -- estimate -------------------------------------------------------------------------------------
 
 
@@ -125,6 +140,13 @@ def test_the_estimate_leaves_out_a_judge_that_sits_out_a_system(tmp_path):
     luna_alone = _estimate(tmp_path / "l", {"model": LUNA}, systems)
     assert panel["luna"] == pytest.approx(haiku_alone["luna"])
     assert panel["claude"] == pytest.approx(luna_alone["claude"]) and panel["claude"] > 10 * panel["luna"]
+
+
+def test_the_estimate_charges_one_judge_per_system_with_first_scorers(tmp_path):
+    systems = [{"type": "bm25", "name": "luna", "models": {"generator": "gpt-6-luna"}}, {"type": "bm25", "name": "glm", "models": {"generator": "openrouter:z-ai/glm-5.3"}}]
+    first = _estimate(tmp_path / "f", {"panel": [HAIKU, LUNA], "scorers": "first"}, systems)
+    haiku_alone = _estimate(tmp_path / "h", {"model": HAIKU}, systems)
+    assert first["glm"] == pytest.approx(haiku_alone["glm"]) and first["luna"] == pytest.approx(haiku_alone["luna"])
 
 
 # -- the panel ------------------------------------------------------------------------------------
@@ -269,6 +291,17 @@ def test_a_mock_run_with_a_panel_records_each_judge_and_the_agreement(tmp_path):
     assert "panel of 3" in (out / "report.html").read_text(encoding="utf-8")
 
 
+def test_a_first_scorer_panel_records_one_judge_per_answer_and_no_agreement(tmp_path):
+    from ragbench.evaluation.evaluator import run_benchmark
+
+    systems = [{"type": "bm25", "name": "luna"}, {"type": "bm25", "name": "haiku", "models": {"generator": HAIKU}}]
+    out = run_benchmark(_config_file(tmp_path, {"max_questions": 2, "max_workers": 1, "judge": {"panel": [HAIKU, LUNA], "scorers": "first"}}, systems), force_mock=True)
+    rows = [json.loads(line) for line in (out / "per_question_results.jsonl").read_text().splitlines()]
+    assert {row["system"]: tuple(row["answer_judge"]["metadata"]["judges"]) for row in rows} == {"luna": (HAIKU,), "haiku": (LUNA,)}
+    judge = json.loads((out / "run_summary.json").read_text())["judge"]
+    assert judge["scorers"] == "first" and judge["agreement"] == {}  # no answer has two judges, so there is nothing to agree on
+
+
 def test_a_run_with_one_judge_has_no_panel_block(tmp_path):
     from ragbench.evaluation.evaluator import run_benchmark
 
@@ -284,7 +317,7 @@ def test_shipped_configs_judge_every_system_with_another_model_family(path):
     config = load_config(path)
     for system in config.systems:
         generator = answering_model(system)
-        judges = scoring_judges(config.evaluation.judge_models, generator, independent=config.evaluation.judge.independent)
+        judges = scoring_judges(config.evaluation.judge_models, generator, independent=config.evaluation.judge.independent, first=config.evaluation.judge.scorers == "first")
         assert all(model_family(judge) != model_family(generator) for judge in judges), f"{system.resolved_name}: {generator} judged by {judges}"
 
 

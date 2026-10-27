@@ -1,0 +1,2063 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>RAGBench report all_solutions_harnesses_multihop</title>
+<style>
+/* RAGBench report. One stylesheet; every color is a token, redefined for dark mode, print and forced-colors. No external resources. */
+:root {
+  color-scheme: light;
+  --page: #f9f9f7; --surface: #fcfcfb; --track: #f0efec;
+  --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #6b6a66; --muted: #898781;
+  --grid: #e1e0d9; --axis: #c3c2b7; --hair: rgba(11, 11, 11, 0.10);
+  --accent: #2a78d6; --accent-ink: #ffffff; --accent-wash: rgba(42, 120, 214, 0.09);
+  --good-text: #006300; --warn: #fab219; --warn-wash: rgba(250, 178, 25, 0.13); --critical: #d03b3b;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300; --s7: #4a3aa7; --s8: #e34948; --s9: #8a6d3b;
+  --c0: #cde2fb; --c1: #9ec5f4; --c2: #6da7ec; --c3: #3987e5; --c4: #256abf; --c5: #184f95; --c6: #0d366b;
+  --cell-lo: #0b0b0b; --cell-hi: #ffffff; --lat-long: #9ec5f4;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19; --track: #262624;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #a9a8a0; --muted: #898781;
+    --grid: #2c2c2a; --axis: #383835; --hair: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5; --accent-ink: #0b0b0b; --accent-wash: rgba(57, 135, 229, 0.14);
+    --good-text: #0ca30c; --warn-wash: rgba(250, 178, 25, 0.12);
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767; --s9: #b8956a;
+    --c0: #0d366b; --c1: #104281; --c2: #184f95; --c3: #256abf; --c4: #3987e5; --c5: #6da7ec; --c6: #9ec5f4;
+    --cell-lo: #ffffff; --cell-hi: #0b0b0b; --lat-long: #184f95;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d; --surface: #1a1a19; --track: #262624;
+  --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #a9a8a0; --muted: #898781;
+  --grid: #2c2c2a; --axis: #383835; --hair: rgba(255, 255, 255, 0.10);
+  --accent: #3987e5; --accent-ink: #0b0b0b; --accent-wash: rgba(57, 135, 229, 0.14);
+  --good-text: #0ca30c; --warn-wash: rgba(250, 178, 25, 0.12);
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300; --s7: #9085e9; --s8: #e66767; --s9: #b8956a;
+  --c0: #0d366b; --c1: #104281; --c2: #184f95; --c3: #256abf; --c4: #3987e5; --c5: #6da7ec; --c6: #9ec5f4;
+  --cell-lo: #ffffff; --cell-hi: #0b0b0b; --lat-long: #184f95;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--page); color: var(--ink); font: 15px/1.55 var(--sans); }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px 72px; }
+a { color: inherit; }
+code, pre, .mono { font-family: var(--mono); }
+.skip { position: absolute; left: -999px; top: 8px; background: var(--ink); color: var(--page); padding: 8px 12px; border-radius: 6px; z-index: 10; }
+.skip:focus { left: 8px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* masthead */
+.masthead { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 0 14px; border-bottom: 2px solid var(--ink); }
+.brand { display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: var(--ink-2); letter-spacing: 0.02em; }
+.brand strong { color: var(--ink); font-size: 15px; letter-spacing: -0.01em; }
+.btn { font: inherit; font-size: 13px; color: var(--ink); background: transparent; border: 1px solid var(--hair); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.btn:hover { background: var(--accent-wash); }
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+
+/* banner */
+.banner { padding: 34px 0 8px; }
+.eyebrow { margin: 0 0 6px; font: 600 12px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 0 0 18px; font-size: clamp(26px, 4vw, 40px); line-height: 1.1; letter-spacing: -0.025em; font-weight: 650; overflow-wrap: anywhere; }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 0; margin: 0; border-top: 1px solid var(--hair); }
+.facts > div { padding: 12px 18px 12px 0; border-bottom: 1px solid var(--hair); }
+.facts dt { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.facts dd { margin: 2px 0 0; font-size: 15px; }
+.facts dd small { display: block; color: var(--ink-3); font-size: 13px; }
+.pill { display: inline-block; font: 600 11px/1 var(--mono); letter-spacing: 0.1em; padding: 5px 9px; border-radius: 999px; border: 1px solid var(--ink); }
+.pill.mock { border-color: var(--warn); background: var(--warn-wash); }
+.notice { display: flex; gap: 10px; margin: 12px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--warn-wash); border: 1px solid color-mix(in srgb, var(--warn) 60%, transparent); font-size: 14px; }
+.notice .icon { font-weight: 700; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 22px 0 0; padding: 12px 0 0; border-top: 1px solid var(--hair); font-size: 13.5px; color: var(--ink-2); }
+.toc a { text-decoration: none; }
+.toc a:hover { color: var(--accent); text-decoration: underline; }
+.toc .mono { color: var(--ink-3); margin-right: 4px; }
+
+/* sections */
+section.block { margin-top: 56px; }
+section.block > header { display: flex; align-items: baseline; gap: 14px; padding-top: 14px; border-top: 2px solid var(--ink); margin-bottom: 16px; }
+.num { font: 600 12px/1 var(--mono); color: var(--accent); letter-spacing: 0.08em; }
+h2 { margin: 0; font-size: 22px; letter-spacing: -0.015em; }
+.lede { margin: 0 0 14px; color: var(--ink-2); max-width: 70ch; }
+.muted { color: var(--ink-3); }
+
+/* recommendation */
+.hero { background: var(--surface); border: 1px solid var(--hair); border-radius: 16px; padding: clamp(18px, 4vw, 36px); }
+.kicker { margin: 0; font: 600 12px/1 var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
+.hero-name { margin: 10px 0 8px; font-size: clamp(38px, 8vw, 72px); line-height: 1; letter-spacing: -0.035em; font-weight: 650; overflow-wrap: anywhere; }
+.hero-name.none { font-size: clamp(26px, 5vw, 40px); }
+.hero-summary { margin: 0; max-width: 62ch; font-size: 17px; color: var(--ink-2); }
+.hero-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px 24px; margin: 24px 0 0; }
+.hero-facts dt { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.hero-facts dd { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+.hero-facts dd small { font-size: 13px; font-weight: 400; color: var(--ink-3); letter-spacing: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 18px; font-size: 13.5px; color: var(--ink-2); }
+.chip { border: 1px solid var(--hair); border-radius: 999px; padding: 3px 11px; background: var(--page); color: var(--ink); }
+details.more { margin-top: 16px; }
+details.more > summary, details.tableview > summary, details.picker > summary { cursor: pointer; color: var(--ink-2); font-size: 13.5px; width: fit-content; }
+details.more ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); max-width: 74ch; }
+.yaml { position: relative; margin-top: 22px; border: 1px solid var(--hair); border-radius: 12px; overflow: hidden; background: var(--page); }
+.yaml-head { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--hair); font: 600 12px/1 var(--mono); color: var(--ink-3); letter-spacing: 0.04em; }
+.yaml pre { margin: 0; padding: 14px 16px; max-height: 280px; overflow: auto; font-size: 12.5px; line-height: 1.5; }
+
+/* chart cards */
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 16px; }
+.card { background: var(--surface); border: 1px solid var(--hair); border-radius: 14px; padding: 18px 18px 14px; min-width: 0; }
+.card h3 { margin: 0 0 2px; font-size: 16px; letter-spacing: -0.01em; }
+.card .sub { margin: 0 0 12px; font-size: 13.5px; color: var(--ink-3); max-width: 76ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0 0 10px; padding: 0; list-style: none; font-size: 13px; color: var(--ink-2); }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.sw.dot { border-radius: 50%; }
+.sw.ring { background: var(--surface); border: 2.5px solid var(--accent); }
+.sw.line { height: 0; width: 18px; border-radius: 0; border-top: 2px solid var(--ink-2); }
+.chart-scroll { position: relative; overflow-x: auto; padding-bottom: 4px; }
+.chart-scroll:focus-visible { outline-offset: -2px; }
+.toggle { display: inline-flex; gap: 0; margin: 0 0 10px; border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; }
+.toggle button { border: 0; border-radius: 0; }
+.ramp { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 12.5px; color: var(--ink-3); }
+.ramp .steps { display: inline-flex; border-radius: 4px; overflow: hidden; }
+.ramp .steps i { width: 22px; height: 10px; }
+.empty { margin: 0; padding: 18px; border: 1px dashed var(--axis); border-radius: 10px; color: var(--ink-2); }
+
+/* svg chart styling (colors only here) */
+svg.chart { display: block; width: 100%; height: auto; font: 11px var(--sans); overflow: visible; }
+.chart .tick { fill: var(--ink-3); }
+.chart .axis-title, .chart .row-label, .chart .col-label, .chart .label { fill: var(--ink-2); }
+.chart .label { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.chart .label.strong { fill: var(--ink); font-weight: 600; }
+.chart .value { fill: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chart .muted { fill: var(--ink-3); }
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .axis { stroke: var(--axis); stroke-width: 1; }
+.chart .frontier { stroke: var(--ink-2); stroke-width: 1.5; stroke-linejoin: round; opacity: 0.75; }
+.chart .hit { fill: transparent; }
+.chart .mark { cursor: default; outline: none; }
+.chart .dot { stroke: var(--surface); stroke-width: 2; transition: stroke 0.12s; }
+.chart .mk-winner .dot { fill: var(--accent); }
+.chart .mk-tie .dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2.5; }
+.chart .mk-pareto .dot { fill: var(--ink-2); }
+.chart .mk-other .dot { fill: var(--muted); opacity: 0.75; }
+.chart .mark:hover .dot, .chart .mark:focus-visible .dot { stroke: var(--ink); }
+.chart .cell rect { fill: var(--c0); }
+.chart .cell.c0 rect { fill: var(--c0); } .chart .cell.c1 rect { fill: var(--c1); } .chart .cell.c2 rect { fill: var(--c2); }
+.chart .cell.c3 rect { fill: var(--c3); } .chart .cell.c4 rect { fill: var(--c4); } .chart .cell.c5 rect { fill: var(--c5); } .chart .cell.c6 rect { fill: var(--c6); }
+.chart .cell.na rect { fill: none; stroke: var(--grid); }
+.chart .cell-text { font-variant-numeric: tabular-nums; font-size: 11px; }
+.chart .cell-text.lo { fill: var(--cell-lo); } .chart .cell-text.hi { fill: var(--cell-hi); } .chart .cell-text.na { fill: var(--ink-3); }
+.chart .cell:hover rect, .chart .cell:focus-visible rect { stroke: var(--ink); stroke-width: 2; }
+.chart .track { fill: var(--track); }
+.chart .s1 { fill: var(--s1); } .chart .s2 { fill: var(--s2); } .chart .s3 { fill: var(--s3); } .chart .s4 { fill: var(--s4); }
+.chart .s5 { fill: var(--s5); } .chart .s6 { fill: var(--s6); } .chart .s7 { fill: var(--s7); } .chart .s8 { fill: var(--s8); } .chart .s9 { fill: var(--s9); } .chart .sgray { fill: var(--muted); }
+.chart .seg:hover path:first-of-type, .chart .seg:focus-visible path:first-of-type { filter: brightness(1.12); }
+.chart .tex { fill: none; opacity: 0; }
+.chart .hatch-line { stroke: var(--ink); stroke-width: 1.2; opacity: 0.55; }
+.chart .lat-p95 { fill: var(--lat-long); } .chart .lat-p50 { fill: var(--accent); }
+.sw.s1 { background: var(--s1); } .sw.s2 { background: var(--s2); } .sw.s3 { background: var(--s3); } .sw.s4 { background: var(--s4); }
+.sw.s5 { background: var(--s5); } .sw.s6 { background: var(--s6); } .sw.s7 { background: var(--s7); } .sw.s8 { background: var(--s8); } .sw.s9 { background: var(--s9); } .sw.sgray { background: var(--muted); }
+.sw.fill-accent { background: var(--accent); } .sw.fill-ink { background: var(--ink-2); } .sw.fill-muted { background: var(--muted); opacity: 0.75; }
+.sw.lat-long { background: var(--lat-long); } .sw.lat-short { background: var(--accent); }
+.steps i.c0 { background: var(--c0); } .steps i.c1 { background: var(--c1); } .steps i.c2 { background: var(--c2); } .steps i.c3 { background: var(--c3); }
+.steps i.c4 { background: var(--c4); } .steps i.c5 { background: var(--c5); } .steps i.c6 { background: var(--c6); }
+svg.whisker { display: block; margin-top: 3px; margin-left: auto; }
+.whisker-line, .whisker-cap { stroke: var(--ink-3); stroke-width: 1; }
+.whisker-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 1.5; }
+
+/* tables */
+.table-scroll { position: relative; overflow-x: auto; border: 1px solid var(--hair); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+th, td { padding: 9px 12px; border-bottom: 1px solid var(--hair); text-align: left; vertical-align: top; }
+tbody tr:last-child > * { border-bottom: 0; }
+thead th { position: sticky; top: 0; background: var(--surface); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+th button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; text-transform: inherit; letter-spacing: inherit; }
+th button:hover { color: var(--accent); }
+th button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+th[aria-sort="ascending"] button::after { content: "↑"; } th[aria-sort="descending"] button::after { content: "↓"; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.n .cellwrap { display: inline-flex; flex-direction: column; align-items: flex-end; }
+td.n.best { background: var(--accent-wash); font-weight: 650; }
+tbody tr:hover > * { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+tbody th[scope="row"] { font-weight: 600; white-space: nowrap; }
+#leaderboard tbody th[scope="row"], #leaderboard thead th.sys { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+#leaderboard tbody th[scope="row"] { white-space: normal; min-width: 148px; max-width: 220px; overflow-wrap: anywhere; }
+#leaderboard thead th.sys { z-index: 2; }
+.badges { display: block; margin-top: 3px; }
+.badges .badge { margin: 0 4px 3px 0; }
+table.plain tbody th[scope="row"], .tableview tbody th[scope="row"] { position: static; }
+.sig { margin-left: 5px; font-size: 11px; color: var(--ink-3); cursor: help; }
+.badge { display: inline-block; margin-left: 0; padding: 1px 7px; border-radius: 999px; font: 600 10.5px/1.5 var(--mono); letter-spacing: 0.04em; border: 1px solid var(--axis); color: var(--ink-2); vertical-align: 1px; }
+.badge.recommended { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.badge.tie { border-color: var(--accent); color: var(--ink); }
+.badge.failed { border-color: var(--critical); color: var(--critical); }
+.tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin: 0 0 10px; }
+details.picker { position: relative; }
+details.picker .list { position: absolute; z-index: 5; margin-top: 6px; padding: 10px 14px; max-height: 320px; overflow: auto; background: var(--surface); border: 1px solid var(--hair); border-radius: 10px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12); min-width: 220px; }
+details.picker label { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: 13.5px; white-space: nowrap; }
+details.tableview { margin-top: 10px; }
+details.tableview .table-scroll { margin-top: 8px; max-height: 360px; overflow: auto; }
+.hint { margin: 8px 0 0; font-size: 13px; color: var(--ink-3); max-width: 90ch; }
+.bar-cell { display: inline-block; height: 8px; border-radius: 4px; background: var(--accent); vertical-align: middle; margin-right: 6px; min-width: 2px; }
+
+/* question explorer */
+.q-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin: 0 0 10px; }
+.q-field { display: flex; flex-direction: column; gap: 3px; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+.q-field input, .q-field select { font: inherit; font-size: 13.5px; letter-spacing: 0; text-transform: none; color: var(--ink); background: var(--surface); border: 1px solid var(--hair); border-radius: 8px; padding: 6px 9px; max-width: 220px; }
+.q-field.q-search { flex: 1 1 240px; } .q-field.q-search input { max-width: none; width: 100%; }
+.q-inline { display: inline-flex; gap: 6px; } .q-inline input { width: 72px; }
+.q-check { display: flex; align-items: center; gap: 6px; font-size: 13.5px; padding-bottom: 6px; }
+.q-status { margin: 0 0 8px; }
+.q-legend { margin: 8px 0 10px; }
+.sw.ctx-relevant { background: var(--s3); } .sw.ctx-good { background: var(--s4); } .sw.ctx-plain { background: var(--axis); } .sw.ctx-out { background: transparent; border: 1.5px dashed var(--muted); }
+kbd { font: 12px var(--mono); padding: 1px 6px; border: 1px solid var(--axis); border-bottom-width: 2px; border-radius: 5px; background: var(--surface); }
+#q-table { table-layout: auto; }
+#q-table tbody tr.q-row { cursor: pointer; }
+#q-table tr.q-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#q-table tr.q-row[aria-expanded="true"] > * { background: var(--accent-wash); }
+#q-table .q-id { white-space: nowrap; color: var(--ink-3); }
+#q-table .q-text { min-width: 220px; max-width: 460px; }
+#q-table .q-text span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+#q-table .q-cat { white-space: nowrap; color: var(--ink-2); }
+#q-table .q-chips { min-width: 150px; }
+#q-table .q-spread.wide { font-weight: 650; color: var(--critical); }
+.q-chip { display: inline-block; min-width: 30px; margin: 0 3px 3px 0; padding: 1px 6px; border-radius: 6px; border: 2px solid transparent; font: 600 12px/1.5 var(--mono); text-align: center; font-variant-numeric: tabular-nums; color: var(--cell-lo); }
+.q-chip.sc-0 { background: var(--c0); } .q-chip.sc-1 { background: var(--c1); } .q-chip.sc-2 { background: var(--c2); }
+.q-chip.sc-3 { background: var(--c3); color: var(--cell-hi); } .q-chip.sc-4 { background: var(--c4); color: var(--cell-hi); }
+.q-chip.sc-5 { background: var(--c5); color: var(--cell-hi); } .q-chip.sc-6 { background: var(--c6); color: var(--cell-hi); }
+.q-chip.na, .q-chip.err { background: transparent; border: 2px dashed var(--axis); color: var(--ink-3); }
+.q-chip.failed { border-color: var(--critical); border-style: solid; }
+.q-detail-row > td { padding: 0; background: var(--page); }
+tbody tr.q-detail-row:hover > * { background: var(--page); }
+.q-detail { position: sticky; left: 0; width: min(calc(100vw - 34px), 1086px); padding: 14px 16px 18px; } /* as wide as the page, not the table: on a phone the table scrolls sideways, the open question must not */
+.q-detail h3 { margin: 0 0 8px; font-size: 17px; letter-spacing: -0.01em; white-space: normal; }
+.q-ref { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 22px; margin: 0 0 14px; }
+.q-ref dt { font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.q-judge dt { font-size: 11.5px; color: var(--ink-3); }
+.q-ref dd { margin: 0; overflow-wrap: anywhere; white-space: normal; }
+.q-systems { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(300px, 380px); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
+.q-systems:focus-visible { outline-offset: 2px; }
+.q-card { background: var(--surface); border: 1px solid var(--hair); border-radius: 12px; padding: 12px 14px; min-width: 0; white-space: normal; }
+.q-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.q-card-head h4 { margin: 0 4px 0 0; font-size: 15px; overflow-wrap: anywhere; }
+.q-facts { margin: 4px 0 8px; font-size: 12.5px; }
+.q-error { margin: 0; padding: 8px 10px; border: 1px solid var(--critical); border-radius: 8px; color: var(--ink); overflow-wrap: anywhere; }
+.badge.failed { margin-left: 0; }
+details.q-sec { margin-top: 8px; }
+details.q-sec > summary { cursor: pointer; font-size: 12.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-2); }
+.q-answer, .q-reason, .ctx-text, .step-io { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; }
+.q-reason { color: var(--ink-2); font-size: 13px; }
+.q-claims { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; }
+.q-unsupported { padding: 2px 6px; margin: 3px 0; border-radius: 6px; background: var(--warn-wash); border-left: 3px solid var(--warn); list-style-position: inside; }
+.q-judge { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 4px 8px; margin: 6px 0 0; }
+.q-judge dd { margin: 0; font: 600 14px var(--mono); }
+.q-ctx, .q-trace { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.ctx { padding: 6px 9px; border-left: 4px solid var(--axis); background: var(--page); border-radius: 0 8px 8px 0; font-size: 13px; }
+.ctx.relevant { border-left-color: var(--s3); } .ctx.good { border-left-color: var(--s4); }
+.ctx.out { border-left-style: dashed; opacity: 0.8; }
+.ctx-head, .step-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: 12.5px; }
+.ctx-text { font-size: 13px; color: var(--ink-2); }
+.step { padding: 6px 9px; border: 1px solid var(--hair); border-radius: 8px; background: var(--page); }
+.step.k-tool { border-color: var(--s4); }
+.step .kind { font: 600 10.5px/1.5 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; padding: 0 6px; border-radius: 4px; border: 1px solid var(--axis); color: var(--ink-2); }
+.step-bar { display: block; height: 4px; margin-top: 5px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
+.step-io { font: 12px/1.45 var(--mono); color: var(--ink-2); }
+.step-io b { color: var(--ink-3); font-weight: 600; }
+.step-meta { margin: 4px 0 0; font: 12px var(--mono); overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .q-field input, .q-field select { max-width: 100%; }
+  .q-systems { grid-auto-columns: minmax(260px, 86%); }
+}
+@media print { .q-controls, #q-more, .q-legend { display: none !important; } .q-systems { overflow: visible; grid-auto-flow: row; grid-auto-columns: 1fr; } }
+@media (forced-colors: active) { .q-chip, .ctx, .step, .q-card { border: 1px solid CanvasText; } .q-chip.failed { border-width: 3px; } }
+
+/* tooltip */
+.tip { position: fixed; z-index: 20; pointer-events: none; max-width: 320px; padding: 8px 11px; border-radius: 8px; background: var(--ink); color: var(--page); font-size: 12.5px; line-height: 1.4; box-shadow: 0 6px 22px rgba(0, 0, 0, 0.25); opacity: 0; transition: opacity 0.1s; }
+.tip.on { opacity: 1; }
+
+footer { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--hair); font-size: 13px; color: var(--ink-3); }
+dl.repro { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px 24px; margin: 0 0 12px; }
+dl.repro dt { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+dl.repro dd { margin: 0; font: 13px/1.4 var(--mono); overflow-wrap: anywhere; color: var(--ink); }
+pre.config { margin: 8px 0 0; padding: 14px 16px; max-height: 360px; overflow: auto; border: 1px solid var(--hair); border-radius: 10px; background: var(--surface); font-size: 12.5px; color: var(--ink); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+@media (max-width: 640px) {
+  body { font-size: 14.5px; }
+  .card { padding: 14px 12px 10px; }
+  .facts > div { padding-right: 8px; }
+  .hero-facts dd { font-size: 22px; }
+  section.block { margin-top: 44px; }
+  th, td { padding: 8px 9px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+/* print and forced colors: texture carries identity where hue cannot */
+@media print, (forced-colors: active) {
+  .chart .tex.t0 { fill: url(#hatch-a); opacity: 0.45; }
+  .chart .tex.t1 { fill: url(#hatch-b); opacity: 0.45; }
+}
+@media print {
+  :root { color-scheme: light; --page: #fff; --surface: #fff; }
+  body { font-size: 11pt; }
+  .masthead .tools, .toc, .btn, .skip, details.picker, .toggle, .tip { display: none !important; }
+  .wrap { max-width: none; padding: 0; }
+  section.block, .card, .hero { break-inside: avoid; }
+  details.tableview > summary { display: none; }
+  details.tableview:not([open]) > .table-scroll { display: block; }
+  .table-scroll, .chart-scroll, pre, .yaml pre, pre.config { overflow: visible !important; max-height: none !important; }
+  .chart-scroll svg { min-width: 0 !important; }
+  [data-heat][hidden] { display: none !important; }
+}
+@media (forced-colors: active) {
+  .card, .hero, .table-scroll, .chip, .badge, .pill { border: 1px solid CanvasText; }
+  .chart .mark:focus-visible .dot, .chart .cell:focus-visible rect { stroke: Highlight; }
+}
+
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the report</a>
+<div class="wrap">
+  <header class="masthead">
+    <div class="brand"><strong>RAGBench</strong><span>evaluation report</span></div>
+    <div class="tools"><button type="button" class="btn" id="theme-toggle" aria-pressed="false">Theme: auto</button></div>
+  </header>
+
+  <main id="main">
+    <!-- run banner -->
+    <section class="banner" aria-labelledby="run-title">
+      <p class="eyebrow">Run</p>
+      <h1 id="run-title">all_solutions_harnesses_multihop</h1>
+      <dl class="facts">
+        <div><dt>Mode</dt><dd><span class="pill ">LIVE</span></dd></div>
+        <div><dt>Date</dt><dd>26 Oct 2026, 22:33 UTC<small>took 1843.4 s</small></dd></div>
+        <div><dt>Dataset</dt><dd>150 questions · 0 categories<small>132 with relevance labels</small></dd></div>
+        <div><dt>Systems</dt><dd>6 compared · <strong>1 failed questions</strong><small>claude-haiku-5-5, gpt-6-luna, text-embedding-3-small</small></dd></div>
+        <div><dt>Judge</dt><dd>panel of 2 · mean<small>anthropic:claude-haiku-5-5, gpt-6-luna</small></dd></div>
+        <div><dt>Spend</dt><dd>$6.61 charged<small>real spend $6.71 · cap $7.00</small></dd></div>
+        <div><dt>Versions</dt><dd>ragbench 0.3.0<small>Python 3.12.12 · prices as of 2026-10-24</small></dd></div>
+      </dl>
+      
+      
+      
+      <nav class="toc" aria-label="Sections"><a href="#recommendation"><span class="mono">01</span>Recommendation</a><a href="#tradeoff"><span class="mono">02</span>Quality vs cost</a><a href="#leaderboard-section"><span class="mono">03</span>Leaderboard</a><a href="#costs"><span class="mono">04</span>Cost and latency</a><a href="#agents"><span class="mono">05</span>Agents and tools</a><a href="#repro"><span class="mono">06</span>Reproducibility</a></nav>
+    </section>
+
+    
+    <section class="block" id="recommendation" aria-labelledby="h-recommendation">
+      <header><span class="num">01</span><h2 id="h-recommendation">Recommendation</h2></header>
+      <div class="hero">
+        
+        <p class="kicker">Deploy · balanced profile</p>
+        <p class="hero-name">hybrid_rerank_default</p>
+        <p class="hero-summary">hybrid_rerank_default is recommended under the balanced profile (quality first, then the best mix of cost and speed among systems that are equally good): answer score 3.65, $0.00109 per question, p95 latency 3305 ms.</p>
+        <dl class="hero-facts">
+          <div><dt>Answer score</dt><dd>3.65 <small>/ 5</small></dd></div>
+          <div><dt>Cost per question</dt><dd>$0.00109</dd></div>
+          <div><dt>Latency p95</dt><dd>3305 <small>ms</small></dd></div>
+          <div><dt>Faithfulness</dt><dd>4.00 <small>/ 5</small></dd></div>
+        </dl>
+        
+        <div class="chips">
+          <span>Statistically tied on quality:</span><span class="chip">agent_search_tools</span><span class="chip">opencode_glm</span><span class="chip">claude_code</span>
+        </div>
+        <div class="chips">
+          <span>Constraints:</span><span class="chip">none set</span>
+        </div>
+        
+        <details class="more"><summary>All the reasons</summary>
+          <ul><li>hybrid_rerank_default is recommended under the balanced profile (quality first, then the best mix of cost and speed among systems that are equally good): answer score 3.65, $0.00109 per question, p95 latency 3305 ms.</li><li>hybrid_rerank_default ties with agent_search_tools, opencode_glm and claude_code on answer score: they are statistically indistinguishable from the best (hybrid_rerank_default) by a paired bootstrap on the same questions (Holm-adjusted p ≥ 0.05). Quality does not separate them, so it wins on cost and latency ($0.00109 per question against up to $0.01353; p95 latency 3305 ms against up to 31459 ms).</li><li>hybrid_rerank_default vs no_retrieval_floor (the cheapest feasible system): +1.71 answer score (95% CI +1.49 to +1.91, significant), 5.2× cost</li></ul>
+        </details>
+        
+        
+        <div class="yaml">
+          <div class="yaml-head"><span>winner.yaml</span><button type="button" class="btn" id="copy-yaml">Copy</button></div>
+          <pre id="winner-yaml" tabindex="0"># The winner of all_solutions_harnesses_multihop: &#39;hybrid_rerank_default&#39;. Run it with `ragbench run --config &lt;this file&gt;`.
+# `dataset:` is the benchmark&#39;s data; replace it with your production documents before deploying.
+run:
+  name: all_solutions_harnesses_multihop_winner
+  output_dir: results
+dataset:
+  documents_path: data/multihop-rag-150/docs
+  questions_path: data/multihop-rag-150/questions.jsonl
+  qrels_path: data/multihop-rag-150/qrels.jsonl
+systems:
+- type: hybrid_rerank
+  name: hybrid_rerank_default
+  chunker:
+    type: word
+    chunk_size: 500
+    chunk_overlap: 80
+  retrieval:
+    vector_store: numpy
+    bm25_top_k: 20
+    vector_top_k: 20
+    candidate_top_k: 30
+    final_top_k: 5
+    rrf_k: 60
+    reranker: local_relevance
+    multi_query: true
+    max_query_variants: 4
+  models:
+    embedding: text-embedding-3-small
+    generator: gpt-6-luna
+openrouter:
+  provider:
+    data_collection: deny
+limits:
+  tokens_per_minute: 900000
+evaluation:
+  k_values:
+  - 1
+  - 3
+  - 5
+  - 10
+  judge_enabled: true
+  judge:
+    panel:
+    - anthropic:claude-haiku-5-5
+    - gpt-6-luna
+    independent: true
+    scorers: first
+  trials: 1
+  max_questions: null
+  max_workers: 4
+  max_cost_usd: 7.0
+</pre>
+        </div>
+        
+      </div>
+    </section>
+    
+
+    <section class="block" id="tradeoff" aria-labelledby="h-tradeoff">
+      <header><span class="num">02</span><h2 id="h-tradeoff">Quality against cost</h2></header>
+      <div class="card">
+        <p class="sub">Higher is better answers; further left is cheaper. Bubble area is average latency. The line is the cost-quality frontier: what extra spend buys.</p>
+        <ul class="legend">
+          <li><span class="sw dot fill-accent"></span>Recommended</li>
+          <li><span class="sw dot ring"></span>Statistically tied with it</li>
+          <li><span class="sw dot fill-ink"></span>Pareto-optimal</li>
+          <li><span class="sw dot fill-muted"></span>Other systems</li>
+          <li><span class="sw line"></span>Frontier</li>
+        </ul>
+        <div class="chart-scroll" tabindex="0" role="region" aria-label="Scatter chart of answer score against cost"><svg xmlns="http://www.w3.org/2000/svg" class="chart scatter" viewBox="0 0 900 440" style="min-width:700px" role="img" aria-label="Answer score (0-5) against Cost per question (USD), one mark per system"><title>Answer score (0-5) against Cost per question (USD), one mark per system</title><line class="grid" x1="66" x2="872" y1="339.7" y2="339.7"/><text x="58" y="343.2" class="tick" text-anchor="end">2.0</text><line class="grid" x1="66" x2="872" y1="253.2" y2="253.2"/><text x="58" y="256.7" class="tick" text-anchor="end">2.5</text><line class="grid" x1="66" x2="872" y1="166.7" y2="166.7"/><text x="58" y="170.2" class="tick" text-anchor="end">3.0</text><line class="grid" x1="66" x2="872" y1="80.2" y2="80.2"/><text x="58" y="83.7" class="tick" text-anchor="end">3.5</text><line class="grid" x1="178.5" x2="178.5" y1="18" y2="384"/><text x="178.5" y="402" class="tick" text-anchor="middle">$0.00030</text><line class="grid" x1="372.2" x2="372.2" y1="18" y2="384"/><text x="372.2" y="402" class="tick" text-anchor="middle">$0.00100</text><line class="grid" x1="548.9" x2="548.9" y1="18" y2="384"/><text x="548.9" y="402" class="tick" text-anchor="middle">$0.00300</text><line class="grid" x1="742.5" x2="742.5" y1="18" y2="384"/><text x="742.5" y="402" class="tick" text-anchor="middle">$0.01000</text><line class="axis" x1="66" x2="872" y1="384" y2="384"/><text x="469" y="432" class="axis-title" text-anchor="middle">Cost per question (USD) (log scale)</text><text class="axis-title" text-anchor="middle" transform="translate(14 201) rotate(-90)">Answer score (0-5)</text><path class="frontier" d="M120.1,348.6 H385.7 V53.4" fill="none"/><g class="mark mk-other" tabindex="0" data-tip="codex · answer 2.92 · $0.01598/question · 28510 ms" aria-label="codex · answer 2.92 · $0.01598/question · 28510 ms"><circle class="hit" cx="817.9" cy="180" r="17"/><circle class="dot" cx="817.9" cy="180" r="13"/></g><g class="mark mk-pareto" tabindex="0" data-tip="no_retrieval_floor · answer 1.95 · $0.00021/question · 1402 ms" aria-label="no_retrieval_floor · answer 1.95 · $0.00021/question · 1402 ms"><circle class="hit" cx="120.1" cy="348.6" r="14"/><circle class="dot" cx="120.1" cy="348.6" r="4.5"/></g><g class="mark mk-tie" tabindex="0" data-tip="agent_search_tools · answer 3.44 · $0.00264/question · 11136 ms" aria-label="agent_search_tools · answer 3.44 · $0.00264/question · 11136 ms"><circle class="hit" cx="528.1" cy="91.1" r="14"/><circle class="dot" cx="528.1" cy="91.1" r="9.6"/></g><g class="mark mk-tie" tabindex="0" data-tip="opencode_glm · answer 3.64 · $0.01023/question · 12188 ms" aria-label="opencode_glm · answer 3.64 · $0.01023/question · 12188 ms"><circle class="hit" cx="746.2" cy="56.3" r="14"/><circle class="dot" cx="746.2" cy="56.3" r="9.9"/></g><g class="mark mk-tie" tabindex="0" data-tip="claude_code · answer 3.55 · $0.01353/question · 23102 ms" aria-label="claude_code · answer 3.55 · $0.01353/question · 23102 ms"><circle class="hit" cx="791.2" cy="70.7" r="16.1"/><circle class="dot" cx="791.2" cy="70.7" r="12.1"/></g><g class="mark mk-winner" tabindex="0" data-tip="hybrid_rerank_default · answer 3.65 · $0.00109/question · 2485 ms" aria-label="hybrid_rerank_default · answer 3.65 · $0.00109/question · 2485 ms"><circle class="hit" cx="385.7" cy="53.4" r="14"/><circle class="dot" cx="385.7" cy="53.4" r="6.2"/></g><text x="397.9" y="57.4" class="label strong" text-anchor="start">hybrid_rerank_default</text><text x="543.7" y="95.1" class="label" text-anchor="start">agent_search_tools</text><text x="730.3" y="60.3" class="label" text-anchor="end">opencode_glm</text><text x="809.3" y="74.7" class="label" text-anchor="start">claude_code</text><text x="130.6" y="352.6" class="label" text-anchor="start">no_retrieval_floor</text></svg></div>
+        <details class="tableview"><summary>Table view</summary>
+          <div class="table-scroll"><table>
+            <thead><tr><th>System</th><th>Mark</th><th class="n">Answer score</th><th class="n">Cost per question</th><th class="n">Latency (ms)</th></tr></thead>
+            <tbody><tr><th scope="row">hybrid_rerank_default</th><td>recommended</td><td class="n">3.65</td><td class="n">$0.00109</td><td class="n">2485</td></tr><tr><th scope="row">agent_search_tools</th><td>tied</td><td class="n">3.44</td><td class="n">$0.00264</td><td class="n">11136</td></tr><tr><th scope="row">opencode_glm</th><td>tied</td><td class="n">3.64</td><td class="n">$0.01023</td><td class="n">12188</td></tr><tr><th scope="row">claude_code</th><td>tied</td><td class="n">3.55</td><td class="n">$0.01353</td><td class="n">23102</td></tr><tr><th scope="row">no_retrieval_floor</th><td>Pareto-optimal</td><td class="n">1.95</td><td class="n">$0.00021</td><td class="n">1402</td></tr><tr><th scope="row">codex</th><td>—</td><td class="n">2.92</td><td class="n">$0.01598</td><td class="n">28510</td></tr></tbody>
+          </table></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="block" id="leaderboard-section" aria-labelledby="h-leaderboard">
+      <header><span class="num">03</span><h2 id="h-leaderboard">Leaderboard</h2></header>
+      <p class="lede">Ordered as the recommendation ranks them. Whiskers are 95% bootstrap confidence intervals over your questions. Markers compare each system with <strong>hybrid_rerank_default</strong>: ▲ better, ▼ worse, ≈ no clear difference (paired bootstrap, Holm-adjusted). Hover a marker for the numbers.</p>
+      <div class="controls">
+        <details class="picker" id="column-picker"><summary class="btn">Columns</summary>
+          <div class="list"><label><input type="checkbox" value="retrieval_recall@5" checked> Recall@5</label><label><input type="checkbox" value="retrieval_mrr@10" checked> MRR@10</label><label><input type="checkbox" value="retrieval_ndcg@10" checked> nDCG@10</label><label><input type="checkbox" value="answer_score" checked> Answer</label><label><input type="checkbox" value="faithfulness" checked> Faithful</label><label><input type="checkbox" value="token_f1" checked> F1</label><label><input type="checkbox" value="context_recall" checked> Ctx recall</label><label><input type="checkbox" value="avg_cost_per_question" checked> $/Q</label><label><input type="checkbox" value="cost_per_correct" checked> $/correct</label><label><input type="checkbox" value="avg_latency_ms" checked> Latency</label><label><input type="checkbox" value="latency_ms_p95" checked> p95</label><label><input type="checkbox" value="correctness" > Correct</label><label><input type="checkbox" value="completeness" > Complete</label><label><input type="checkbox" value="relevance" > Relevant</label><label><input type="checkbox" value="citation_quality" > Cites</label><label><input type="checkbox" value="exact_match" > EM</label><label><input type="checkbox" value="keyword_recall" > Keywords</label><label><input type="checkbox" value="context_precision" > Ctx prec</label><label><input type="checkbox" value="abstain_precision" > Abstain prec</label><label><input type="checkbox" value="abstain_recall" > Abstain recall</label><label><input type="checkbox" value="false_refusal_rate" > False refusals</label><label><input type="checkbox" value="judge_fallback_rate" > Judge fallback</label><label><input type="checkbox" value="avg_steps" > Steps</label><label><input type="checkbox" value="avg_llm_calls" > LLM calls</label><label><input type="checkbox" value="avg_tool_calls" > Tool calls</label><label><input type="checkbox" value="tool_error_rate" > Tool errors</label><label><input type="checkbox" value="redundant_search_rate" > Redundant searches</label><label><input type="checkbox" value="avg_steps_to_evidence" > Steps to evidence</label><label><input type="checkbox" value="budget_exhausted_rate" > Budget hit</label><label><input type="checkbox" value="n_ok" > Answered</label><label><input type="checkbox" value="n_error" > Failed</label></div>
+        </details>
+        <span class="hint" style="margin:0">Click a column header to sort.</span>
+      </div>
+      <div class="table-scroll" tabindex="0" role="region" aria-label="Leaderboard table">
+        <table id="leaderboard">
+          <thead><tr>
+            <th scope="col" class="sys"><button type="button" data-sort data-kind="text">System</button></th>
+            <th scope="col" class="n" data-col="retrieval_recall@5" ><button type="button" data-sort data-kind="num" title="Higher is better">Recall@5</button></th><th scope="col" class="n" data-col="retrieval_mrr@10" ><button type="button" data-sort data-kind="num" title="Higher is better">MRR@10</button></th><th scope="col" class="n" data-col="retrieval_ndcg@10" ><button type="button" data-sort data-kind="num" title="Higher is better">nDCG@10</button></th><th scope="col" class="n" data-col="answer_score" ><button type="button" data-sort data-kind="num" title="Higher is better">Answer</button></th><th scope="col" class="n" data-col="faithfulness" ><button type="button" data-sort data-kind="num" title="Higher is better">Faithful</button></th><th scope="col" class="n" data-col="token_f1" ><button type="button" data-sort data-kind="num" title="Higher is better">F1</button></th><th scope="col" class="n" data-col="context_recall" ><button type="button" data-sort data-kind="num" title="Higher is better">Ctx recall</button></th><th scope="col" class="n" data-col="avg_cost_per_question" ><button type="button" data-sort data-kind="num" title="Lower is better">$/Q</button></th><th scope="col" class="n" data-col="cost_per_correct" ><button type="button" data-sort data-kind="num" title="Lower is better">$/correct</button></th><th scope="col" class="n" data-col="avg_latency_ms" ><button type="button" data-sort data-kind="num" title="Lower is better">Latency</button></th><th scope="col" class="n" data-col="latency_ms_p95" ><button type="button" data-sort data-kind="num" title="Lower is better">p95</button></th><th scope="col" class="n" data-col="correctness" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Correct</button></th><th scope="col" class="n" data-col="completeness" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Complete</button></th><th scope="col" class="n" data-col="relevance" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Relevant</button></th><th scope="col" class="n" data-col="citation_quality" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Cites</button></th><th scope="col" class="n" data-col="exact_match" hidden><button type="button" data-sort data-kind="num" title="Higher is better">EM</button></th><th scope="col" class="n" data-col="keyword_recall" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Keywords</button></th><th scope="col" class="n" data-col="context_precision" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Ctx prec</button></th><th scope="col" class="n" data-col="abstain_precision" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Abstain prec</button></th><th scope="col" class="n" data-col="abstain_recall" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Abstain recall</button></th><th scope="col" class="n" data-col="false_refusal_rate" hidden><button type="button" data-sort data-kind="num" title="Lower is better">False refusals</button></th><th scope="col" class="n" data-col="judge_fallback_rate" hidden><button type="button" data-sort data-kind="num" title="Lower is better">Judge fallback</button></th><th scope="col" class="n" data-col="avg_steps" hidden><button type="button" data-sort data-kind="num" title="Lower is better">Steps</button></th><th scope="col" class="n" data-col="avg_llm_calls" hidden><button type="button" data-sort data-kind="num" title="Lower is better">LLM calls</button></th><th scope="col" class="n" data-col="avg_tool_calls" hidden><button type="button" data-sort data-kind="num" title="Lower is better">Tool calls</button></th><th scope="col" class="n" data-col="tool_error_rate" hidden><button type="button" data-sort data-kind="num" title="Lower is better">Tool errors</button></th><th scope="col" class="n" data-col="redundant_search_rate" hidden><button type="button" data-sort data-kind="num" title="Lower is better">Redundant searches</button></th><th scope="col" class="n" data-col="avg_steps_to_evidence" hidden><button type="button" data-sort data-kind="num" title="Lower is better">Steps to evidence</button></th><th scope="col" class="n" data-col="budget_exhausted_rate" hidden><button type="button" data-sort data-kind="num" title="Lower is better">Budget hit</button></th><th scope="col" class="n" data-col="n_ok" hidden><button type="button" data-sort data-kind="num" title="Higher is better">Answered</button></th><th scope="col" class="n" data-col="n_error" hidden><button type="button" data-sort data-kind="num" title="Lower is better">Failed</button></th>
+          </tr></thead>
+          <tbody>
+            
+            <tr>
+              <th scope="row"><span class="sysname">hybrid_rerank_default</span><span class="badges"><span class="badge recommended">recommended</span><span class="badge pareto">pareto</span><span class="badge baseline">baseline</span></span></th>
+              
+              <td class="n" data-col="retrieval_recall@5" data-value="0.6527777777777777" >
+                <span class="cellwrap"><span>0.653</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="41.8" x2="64.4" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="41.8" x2="41.8" y1="2" y2="8"/><line class="whisker-cap" x1="64.4" x2="64.4" y1="2" y2="8"/><circle class="whisker-dot" cx="53" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.5972083333333333 to 0.7088888888888889</span>
+              </td>
+              
+              <td class="n best" data-col="retrieval_mrr@10" data-value="0.7369999999999999" >
+                <span class="cellwrap"><span>0.737</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="48.5" x2="71.6" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="48.5" x2="48.5" y1="2" y2="8"/><line class="whisker-cap" x1="71.6" x2="71.6" y1="2" y2="8"/><circle class="whisker-dot" cx="60.2" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.6764416666666666 to 0.7955694444444443</span>
+              </td>
+              
+              <td class="n" data-col="retrieval_ndcg@10" data-value="0.6407569515844203" >
+                <span class="cellwrap"><span>0.641</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="40.8" x2="64.1" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="40.8" x2="40.8" y1="2" y2="8"/><line class="whisker-cap" x1="64.1" x2="64.1" y1="2" y2="8"/><circle class="whisker-dot" cx="52.7" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.5878514595496646 to 0.6914526386426963</span>
+              </td>
+              
+              <td class="n best" data-col="answer_score" data-value="3.654666666666667" >
+                <span class="cellwrap"><span>3.65</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="61.7" x2="72" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="61.7" x2="61.7" y1="2" y2="8"/><line class="whisker-cap" x1="72" x2="72" y1="2" y2="8"/><circle class="whisker-dot" cx="66.9" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 3.4966666666666666 to 3.8093333333333326</span>
+              </td>
+              
+              <td class="n best" data-col="faithfulness" data-value="4.003333333333333" >
+                <span class="cellwrap"><span>4.00</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="62.1" x2="72" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="62.1" x2="62.1" y1="2" y2="8"/><line class="whisker-cap" x1="72" x2="72" y1="2" y2="8"/><circle class="whisker-dot" cx="67.2" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 3.856583333333333 to 4.1433333333333335</span>
+              </td>
+              
+              <td class="n" data-col="token_f1" data-value="0.0727910997128567" >
+                <span class="cellwrap"><span>0.07</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_recall" data-value="0.6868686868686869" >
+                <span class="cellwrap"><span>0.69</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_cost_per_question" data-value="0.0010878358666666665" >
+                <span class="cellwrap"><span>$0.00109</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="cost_per_correct" data-value="0.0021756717333333325" >
+                <span class="cellwrap"><span>$0.00218</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_latency_ms" data-value="2484.9291394433626" >
+                <span class="cellwrap"><span>2485 ms</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="latency_ms_p95" data-value="3304.938783019315" >
+                <span class="cellwrap"><span>3305 ms</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="5.6" x2="13.7" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="5.6" x2="5.6" y1="2" y2="8"/><line class="whisker-cap" x1="13.7" x2="13.7" y1="2" y2="8"/><circle class="whisker-dot" cx="6.1" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 3011.3247071858495 to 7940.830833278596</span>
+              </td>
+              
+              <td class="n" data-col="correctness" data-value="3.6066666666666665" hidden>
+                <span class="cellwrap"><span>3.61</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="completeness" data-value="3.3233333333333333" hidden>
+                <span class="cellwrap"><span>3.32</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="relevance" data-value="4.01" hidden>
+                <span class="cellwrap"><span>4.01</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="citation_quality" data-value="3.33" hidden>
+                <span class="cellwrap"><span>3.33</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="exact_match" data-value="0.007575757575757576" hidden>
+                <span class="cellwrap"><span>0.01</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="keyword_recall" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_precision" data-value="0.5287878787878788" hidden>
+                <span class="cellwrap"><span>0.53</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="abstain_precision" data-value="0.5483870967741935" hidden>
+                <span class="cellwrap"><span>0.55</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="abstain_recall" data-value="0.9444444444444444" hidden>
+                <span class="cellwrap"><span>0.94</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="false_refusal_rate" data-value="0.10606060606060606" hidden>
+                <span class="cellwrap"><span>0.11</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="judge_fallback_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_llm_calls" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_tool_calls" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="tool_error_rate" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="redundant_search_rate" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps_to_evidence" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="budget_exhausted_rate" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_ok" data-value="150.0" hidden>
+                <span class="cellwrap"><span>150</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_error" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0</span></span>
+                
+              </td>
+              
+            </tr>
+            
+            <tr>
+              <th scope="row"><span class="sysname">agent_search_tools</span><span class="badges"><span class="badge tie">tie</span></span></th>
+              
+              <td class="n best" data-col="retrieval_recall@5" data-value="0.691111111111111" >
+                <span class="cellwrap"><span>0.691<span class="sig" title="vs hybrid_rerank_default: +0.038 (95% CI +0.003 to +0.074); Holm-adjusted p = 0.114; no clear difference" aria-hidden="true">≈</span><span class="sr">vs hybrid_rerank_default: +0.038 (95% CI +0.003 to +0.074); Holm-adjusted p = 0.114; no clear difference</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="49.8" x2="72" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="49.8" x2="49.8" y1="2" y2="8"/><line class="whisker-cap" x1="72" x2="72" y1="2" y2="8"/><circle class="whisker-dot" cx="60.8" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.6366527777777778 to 0.7466944444444443</span>
+              </td>
+              
+              <td class="n" data-col="retrieval_mrr@10" data-value="0.6994444444444444" >
+                <span class="cellwrap"><span>0.699</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="41" x2="64.7" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="41" x2="41" y1="2" y2="8"/><line class="whisker-cap" x1="64.7" x2="64.7" y1="2" y2="8"/><circle class="whisker-dot" cx="53" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.6374361111111111 to 0.7597999999999999</span>
+              </td>
+              
+              <td class="n" data-col="retrieval_ndcg@10" data-value="0.647202833779578" >
+                <span class="cellwrap"><span>0.647</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="42.6" x2="66.4" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="42.6" x2="42.6" y1="2" y2="8"/><line class="whisker-cap" x1="66.4" x2="66.4" y1="2" y2="8"/><circle class="whisker-dot" cx="54.2" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.5959696740077833 to 0.7013069507585158</span>
+              </td>
+              
+              <td class="n" data-col="answer_score" data-value="3.4366666666666665" >
+                <span class="cellwrap"><span>3.44<span class="sig" title="vs hybrid_rerank_default: -0.218 (95% CI -0.397 to -0.031); Holm-adjusted p = 0.072; no clear difference" aria-hidden="true">≈</span><span class="sr">vs hybrid_rerank_default: -0.218 (95% CI -0.397 to -0.031); Holm-adjusted p = 0.072; no clear difference</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="53.8" x2="65.6" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="53.8" x2="53.8" y1="2" y2="8"/><line class="whisker-cap" x1="65.6" x2="65.6" y1="2" y2="8"/><circle class="whisker-dot" cx="59.8" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 3.25465 to 3.6147</span>
+              </td>
+              
+              <td class="n" data-col="faithfulness" data-value="3.57" >
+                <span class="cellwrap"><span>3.57</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="45.9" x2="58.6" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="45.9" x2="45.9" y1="2" y2="8"/><line class="whisker-cap" x1="58.6" x2="58.6" y1="2" y2="8"/><circle class="whisker-dot" cx="52.3" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 3.3833333333333333 to 3.7534166666666664</span>
+              </td>
+              
+              <td class="n" data-col="token_f1" data-value="0.04775018490825845" >
+                <span class="cellwrap"><span>0.05</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_recall" data-value="0.6931818181818182" >
+                <span class="cellwrap"><span>0.69</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_cost_per_question" data-value="0.002635931866666667" >
+                <span class="cellwrap"><span>$0.00264</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="cost_per_correct" data-value="0.006082919692307693" >
+                <span class="cellwrap"><span>$0.00608</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_latency_ms" data-value="11136.401667386914" >
+                <span class="cellwrap"><span>11136 ms</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="latency_ms_p95" data-value="16176.52671078685" >
+                <span class="cellwrap"><span>16177 ms</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="24.7" x2="31.3" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="24.7" x2="24.7" y1="2" y2="8"/><line class="whisker-cap" x1="31.3" x2="31.3" y1="2" y2="8"/><circle class="whisker-dot" cx="27.2" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 14659.218749031425 to 18697.9550011456</span>
+              </td>
+              
+              <td class="n" data-col="correctness" data-value="3.486666666666667" hidden>
+                <span class="cellwrap"><span>3.49</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="completeness" data-value="3.1" hidden>
+                <span class="cellwrap"><span>3.10</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="relevance" data-value="3.99" hidden>
+                <span class="cellwrap"><span>3.99</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="citation_quality" data-value="3.0366666666666666" hidden>
+                <span class="cellwrap"><span>3.04</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="exact_match" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="keyword_recall" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="context_precision" data-value="0.593939393939394" hidden>
+                <span class="cellwrap"><span>0.59</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="abstain_precision" data-value="0.53125" hidden>
+                <span class="cellwrap"><span>0.53</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="abstain_recall" data-value="0.9444444444444444" hidden>
+                <span class="cellwrap"><span>0.94</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="false_refusal_rate" data-value="0.11363636363636363" hidden>
+                <span class="cellwrap"><span>0.11</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="judge_fallback_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps" data-value="4.806666666666667" hidden>
+                <span class="cellwrap"><span>4.8</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_llm_calls" data-value="5.613333333333333" hidden>
+                <span class="cellwrap"><span>5.6</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="avg_tool_calls" data-value="5.28" hidden>
+                <span class="cellwrap"><span>5.3</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="tool_error_rate" data-value="0.0012626262626262627" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="redundant_search_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="avg_steps_to_evidence" data-value="1.121212121212121" hidden>
+                <span class="cellwrap"><span>1.1</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="budget_exhausted_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_ok" data-value="150.0" hidden>
+                <span class="cellwrap"><span>150</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_error" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0</span></span>
+                
+              </td>
+              
+            </tr>
+            
+            <tr>
+              <th scope="row"><span class="sysname">opencode_glm</span><span class="badges"><span class="badge tie">tie</span></span></th>
+              
+              <td class="n" data-col="retrieval_recall@5" data-value="0.6560402684563759" >
+                <span class="cellwrap"><span>0.656<span class="sig" title="vs hybrid_rerank_default: -0.001 (95% CI -0.054 to +0.050); Holm-adjusted p = 0.964; no clear difference" aria-hidden="true">≈</span><span class="sr">vs hybrid_rerank_default: -0.001 (95% CI -0.054 to +0.050); Holm-adjusted p = 0.964; no clear difference</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="41.5" x2="65.4" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="41.5" x2="41.5" y1="2" y2="8"/><line class="whisker-cap" x1="65.4" x2="65.4" y1="2" y2="8"/><circle class="whisker-dot" cx="53.7" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.5956236017897092 to 0.7142197986577179</span>
+              </td>
+              
+              <td class="n" data-col="retrieval_mrr@10" data-value="0.7369580270586982" >
+                <span class="cellwrap"><span>0.737</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="48" x2="72" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="48" x2="48" y1="2" y2="8"/><line class="whisker-cap" x1="72" x2="72" y1="2" y2="8"/><circle class="whisker-dot" cx="60.2" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.6738743741344413 to 0.7976710477255778</span>
+              </td>
+              
+              <td class="n best" data-col="retrieval_ndcg@10" data-value="0.6702952752788985" >
+                <span class="cellwrap"><span>0.670</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="45.9" x2="72" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="45.9" x2="45.9" y1="2" y2="8"/><line class="whisker-cap" x1="72" x2="72" y1="2" y2="8"/><circle class="whisker-dot" cx="59.4" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.61063383570917 to 0.7263066537260465</span>
+              </td>
+              
+              <td class="n" data-col="answer_score" data-value="3.6382550335570465" >
+                <span class="cellwrap"><span>3.64<span class="sig" title="vs hybrid_rerank_default: -0.010 (95% CI -0.179 to +0.154); Holm-adjusted p = 0.903; no clear difference" aria-hidden="true">≈</span><span class="sr">vs hybrid_rerank_default: -0.010 (95% CI -0.179 to +0.154); Holm-adjusted p = 0.903; no clear difference</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="61.8" x2="70.8" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="61.8" x2="61.8" y1="2" y2="8"/><line class="whisker-cap" x1="70.8" x2="70.8" y1="2" y2="8"/><circle class="whisker-dot" cx="66.4" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 3.5 to 3.773842281879195</span>
+              </td>
+              
+              <td class="n" data-col="faithfulness" data-value="3.0268456375838926" >
+                <span class="cellwrap"><span>3.03</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="27" x2="39.7" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="27" x2="27" y1="2" y2="8"/><line class="whisker-cap" x1="39.7" x2="39.7" y1="2" y2="8"/><circle class="whisker-dot" cx="33.6" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 2.835570469798658 to 3.204697986577181</span>
+              </td>
+              
+              <td class="n" data-col="token_f1" data-value="0.026800526189311048" >
+                <span class="cellwrap"><span>0.03</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="context_recall" data-value="0.9526515151515151" >
+                <span class="cellwrap"><span>0.95</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_cost_per_question" data-value="0.010229014079865772" >
+                <span class="cellwrap"><span>$0.01023</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="cost_per_correct" data-value="0.022748105938805968" >
+                <span class="cellwrap"><span>$0.02275</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_latency_ms" data-value="12187.703166576102" >
+                <span class="cellwrap"><span>12188 ms</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="latency_ms_p95" data-value="22541.40008329414" >
+                <span class="cellwrap"><span>22541 ms</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="correctness" data-value="4.016778523489933" hidden>
+                <span class="cellwrap"><span>4.02</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="completeness" data-value="3.6879194630872485" hidden>
+                <span class="cellwrap"><span>3.69</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="relevance" data-value="4.429530201342282" hidden>
+                <span class="cellwrap"><span>4.43</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="citation_quality" data-value="3.030201342281879" hidden>
+                <span class="cellwrap"><span>3.03</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="exact_match" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="keyword_recall" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_precision" data-value="0.1284900040635347" hidden>
+                <span class="cellwrap"><span>0.13</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="abstain_precision" data-value="1.0" hidden>
+                <span class="cellwrap"><span>1.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="abstain_recall" data-value="0.7058823529411765" hidden>
+                <span class="cellwrap"><span>0.71</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="false_refusal_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="judge_fallback_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps" data-value="5.436241610738255" hidden>
+                <span class="cellwrap"><span>5.4</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_llm_calls" data-value="5.436241610738255" hidden>
+                <span class="cellwrap"><span>5.4</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_tool_calls" data-value="7.731543624161074" hidden>
+                <span class="cellwrap"><span>7.7</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="tool_error_rate" data-value="0.0008680555555555555" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="redundant_search_rate" data-value="0.0026041666666666665" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps_to_evidence" data-value="1.9393939393939394" hidden>
+                <span class="cellwrap"><span>1.9</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="budget_exhausted_rate" data-value="0.03355704697986577" hidden>
+                <span class="cellwrap"><span>0.03</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="n_ok" data-value="149.0" hidden>
+                <span class="cellwrap"><span>149</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="n_error" data-value="1.0" hidden>
+                <span class="cellwrap"><span>1</span></span>
+                
+              </td>
+              
+            </tr>
+            
+            <tr>
+              <th scope="row"><span class="sysname">claude_code</span><span class="badges"><span class="badge tie">tie</span></span></th>
+              
+              <td class="n" data-col="retrieval_recall@5" data-value="0.6322222222222222" >
+                <span class="cellwrap"><span>0.632<span class="sig" title="vs hybrid_rerank_default: -0.021 (95% CI -0.073 to +0.028); Holm-adjusted p = 0.826; no clear difference" aria-hidden="true">≈</span><span class="sr">vs hybrid_rerank_default: -0.021 (95% CI -0.073 to +0.028); Holm-adjusted p = 0.826; no clear difference</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="37.1" x2="60.9" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="37.1" x2="37.1" y1="2" y2="8"/><line class="whisker-cap" x1="60.9" x2="60.9" y1="2" y2="8"/><circle class="whisker-dot" cx="48.9" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.5738749999999999 to 0.6916666666666667</span>
+              </td>
+              
+              <td class="n" data-col="retrieval_mrr@10" data-value="0.6934708994708995" >
+                <span class="cellwrap"><span>0.693</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="39.8" x2="64.3" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="39.8" x2="39.8" y1="2" y2="8"/><line class="whisker-cap" x1="64.3" x2="64.3" y1="2" y2="8"/><circle class="whisker-dot" cx="51.8" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.6312916666666666 to 0.7579554232804233</span>
+              </td>
+              
+              <td class="n" data-col="retrieval_ndcg@10" data-value="0.6330175292701054" >
+                <span class="cellwrap"><span>0.633</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="38.8" x2="63.1" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="38.8" x2="38.8" y1="2" y2="8"/><line class="whisker-cap" x1="63.1" x2="63.1" y1="2" y2="8"/><circle class="whisker-dot" cx="51" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.5788732611976463 to 0.6869563117485562</span>
+              </td>
+              
+              <td class="n" data-col="answer_score" data-value="3.554666666666667" >
+                <span class="cellwrap"><span>3.55<span class="sig" title="vs hybrid_rerank_default: -0.100 (95% CI -0.335 to +0.144); Holm-adjusted p = 0.854; no clear difference" aria-hidden="true">≈</span><span class="sr">vs hybrid_rerank_default: -0.100 (95% CI -0.335 to +0.144); Holm-adjusted p = 0.854; no clear difference</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="57" x2="70.4" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="57" x2="57" y1="2" y2="8"/><line class="whisker-cap" x1="70.4" x2="70.4" y1="2" y2="8"/><circle class="whisker-dot" cx="63.6" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 3.3533333333333335 to 3.76</span>
+              </td>
+              
+              <td class="n" data-col="faithfulness" data-value="3.5" >
+                <span class="cellwrap"><span>3.50</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="42.1" x2="57.9" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="42.1" x2="42.1" y1="2" y2="8"/><line class="whisker-cap" x1="57.9" x2="57.9" y1="2" y2="8"/><circle class="whisker-dot" cx="49.9" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 3.2733333333333334 to 3.7333333333333334</span>
+              </td>
+              
+              <td class="n" data-col="token_f1" data-value="0.02150842399785907" >
+                <span class="cellwrap"><span>0.02</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_recall" data-value="0.9387626262626262" >
+                <span class="cellwrap"><span>0.94</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_cost_per_question" data-value="0.013530883333333335" >
+                <span class="cellwrap"><span>$0.01353</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="cost_per_correct" data-value="0.026358863636363646" >
+                <span class="cellwrap"><span>$0.02636</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_latency_ms" data-value="23101.87709154561" >
+                <span class="cellwrap"><span>23102 ms</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="latency_ms_p95" data-value="31459.486525086686" >
+                <span class="cellwrap"><span>31459 ms</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="correctness" data-value="3.62" hidden>
+                <span class="cellwrap"><span>3.62</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="completeness" data-value="3.66" hidden>
+                <span class="cellwrap"><span>3.66</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="relevance" data-value="4.526666666666666" hidden>
+                <span class="cellwrap"><span>4.53</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="citation_quality" data-value="2.466666666666667" hidden>
+                <span class="cellwrap"><span>2.47</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="exact_match" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="keyword_recall" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_precision" data-value="0.16935944146508353" hidden>
+                <span class="cellwrap"><span>0.17</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="abstain_precision" data-value="1.0" hidden>
+                <span class="cellwrap"><span>1.00</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="abstain_recall" data-value="0.9444444444444444" hidden>
+                <span class="cellwrap"><span>0.94</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="false_refusal_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="judge_fallback_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps" data-value="6.513333333333334" hidden>
+                <span class="cellwrap"><span>6.5</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_llm_calls" data-value="6.513333333333334" hidden>
+                <span class="cellwrap"><span>6.5</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_tool_calls" data-value="9.106666666666667" hidden>
+                <span class="cellwrap"><span>9.1</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="tool_error_rate" data-value="0.0007320644216691069" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="redundant_search_rate" data-value="0.0007320644216691069" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps_to_evidence" data-value="3.549618320610687" hidden>
+                <span class="cellwrap"><span>3.5</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="budget_exhausted_rate" data-value="0.03333333333333333" hidden>
+                <span class="cellwrap"><span>0.03</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_ok" data-value="150.0" hidden>
+                <span class="cellwrap"><span>150</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_error" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0</span></span>
+                
+              </td>
+              
+            </tr>
+            
+            <tr>
+              <th scope="row"><span class="sysname">no_retrieval_floor</span><span class="badges"><span class="badge pareto">pareto</span></span></th>
+              
+              <td class="n" data-col="retrieval_recall@5" data-value="" >
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="retrieval_mrr@10" data-value="" >
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="retrieval_ndcg@10" data-value="" >
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="answer_score" data-value="1.9486666666666663" >
+                <span class="cellwrap"><span>1.95<span class="sig" title="vs hybrid_rerank_default: -1.706 (95% CI -1.908 to -1.491); Holm-adjusted p = 0.005; worse" aria-hidden="true">▼</span><span class="sr">vs hybrid_rerank_default: -1.706 (95% CI -1.908 to -1.491); Holm-adjusted p = 0.005; worse</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="4" x2="18.2" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="4" x2="4" y1="2" y2="8"/><line class="whisker-cap" x1="18.2" x2="18.2" y1="2" y2="8"/><circle class="whisker-dot" cx="10.9" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 1.7398999999999996 to 2.1713499999999994</span>
+              </td>
+              
+              <td class="n" data-col="faithfulness" data-value="2.506666666666667" >
+                <span class="cellwrap"><span>2.51</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="4" x2="27.3" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="4" x2="4" y1="2" y2="8"/><line class="whisker-cap" x1="27.3" x2="27.3" y1="2" y2="8"/><circle class="whisker-dot" cx="15.7" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 2.166583333333333 to 2.8434999999999993</span>
+              </td>
+              
+              <td class="n best" data-col="token_f1" data-value="0.15993619837472392" >
+                <span class="cellwrap"><span>0.16</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_recall" data-value="" >
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="avg_cost_per_question" data-value="0.0002086373333333334" >
+                <span class="cellwrap"><span>$0.00021</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="cost_per_correct" data-value="0.002407353846153847" >
+                <span class="cellwrap"><span>$0.00241</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="avg_latency_ms" data-value="1402.299183906677" >
+                <span class="cellwrap"><span>1402 ms</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="latency_ms_p95" data-value="2150.2071935450654" >
+                <span class="cellwrap"><span>2150 ms</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="4" x2="4.8" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="4" x2="4" y1="2" y2="8"/><line class="whisker-cap" x1="4.8" x2="4.8" y1="2" y2="8"/><circle class="whisker-dot" cx="4.2" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 2003.331916872412 to 2482.3144990950823</span>
+              </td>
+              
+              <td class="n" data-col="correctness" data-value="2.066666666666667" hidden>
+                <span class="cellwrap"><span>2.07</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="completeness" data-value="1.8233333333333333" hidden>
+                <span class="cellwrap"><span>1.82</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="relevance" data-value="2.7133333333333334" hidden>
+                <span class="cellwrap"><span>2.71</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="citation_quality" data-value="0.6333333333333333" hidden>
+                <span class="cellwrap"><span>0.63</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="exact_match" data-value="0.10606060606060606" hidden>
+                <span class="cellwrap"><span>0.11</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="keyword_recall" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_precision" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="abstain_precision" data-value="0.20967741935483872" hidden>
+                <span class="cellwrap"><span>0.21</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="abstain_recall" data-value="0.7222222222222222" hidden>
+                <span class="cellwrap"><span>0.72</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="false_refusal_rate" data-value="0.3712121212121212" hidden>
+                <span class="cellwrap"><span>0.37</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="judge_fallback_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_llm_calls" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_tool_calls" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="tool_error_rate" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="redundant_search_rate" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps_to_evidence" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="budget_exhausted_rate" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_ok" data-value="150.0" hidden>
+                <span class="cellwrap"><span>150</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_error" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0</span></span>
+                
+              </td>
+              
+            </tr>
+            
+            <tr>
+              <th scope="row"><span class="sysname">codex</span></th>
+              
+              <td class="n" data-col="retrieval_recall@5" data-value="0.47333333333333333" >
+                <span class="cellwrap"><span>0.473<span class="sig" title="vs hybrid_rerank_default: -0.179 (95% CI -0.244 to -0.119); Holm-adjusted p = 0.004; worse" aria-hidden="true">▼</span><span class="sr">vs hybrid_rerank_default: -0.179 (95% CI -0.244 to -0.119); Holm-adjusted p = 0.004; worse</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="4" x2="29.4" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="4" x2="4" y1="2" y2="8"/><line class="whisker-cap" x1="29.4" x2="29.4" y1="2" y2="8"/><circle class="whisker-dot" cx="16.8" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.41 to 0.5355555555555557</span>
+              </td>
+              
+              <td class="n" data-col="retrieval_mrr@10" data-value="0.5143730158730159" >
+                <span class="cellwrap"><span>0.514</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="4" x2="30.1" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="4" x2="4" y1="2" y2="8"/><line class="whisker-cap" x1="30.1" x2="30.1" y1="2" y2="8"/><circle class="whisker-dot" cx="17.1" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.44659464285714273 to 0.5814946428571428</span>
+              </td>
+              
+              <td class="n" data-col="retrieval_ndcg@10" data-value="0.48421089958229657" >
+                <span class="cellwrap"><span>0.484</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="4" x2="30.9" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="4" x2="4" y1="2" y2="8"/><line class="whisker-cap" x1="30.9" x2="30.9" y1="2" y2="8"/><circle class="whisker-dot" cx="17.4" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 0.4247310091580707 to 0.5441817807588752</span>
+              </td>
+              
+              <td class="n" data-col="answer_score" data-value="2.923333333333334" >
+                <span class="cellwrap"><span>2.92<span class="sig" title="vs hybrid_rerank_default: -0.731 (95% CI -0.943 to -0.519); Holm-adjusted p = 0.005; worse" aria-hidden="true">▼</span><span class="sr">vs hybrid_rerank_default: -0.731 (95% CI -0.943 to -0.519); Holm-adjusted p = 0.005; worse</span></span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="36.5" x2="49.3" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="36.5" x2="36.5" y1="2" y2="8"/><line class="whisker-cap" x1="49.3" x2="49.3" y1="2" y2="8"/><circle class="whisker-dot" cx="42.9" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 2.729983333333333 to 3.1179999999999994</span>
+              </td>
+              
+              <td class="n" data-col="faithfulness" data-value="2.54" >
+                <span class="cellwrap"><span>2.54</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="8.8" x2="24.8" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="8.8" x2="8.8" y1="2" y2="8"/><line class="whisker-cap" x1="24.8" x2="24.8" y1="2" y2="8"/><circle class="whisker-dot" cx="16.8" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 2.3066666666666666 to 2.77</span>
+              </td>
+              
+              <td class="n" data-col="token_f1" data-value="0.04109653956864659" >
+                <span class="cellwrap"><span>0.04</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_recall" data-value="0.8920454545454546" >
+                <span class="cellwrap"><span>0.89</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_cost_per_question" data-value="0.015977101666666667" >
+                <span class="cellwrap"><span>$0.01598</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="cost_per_correct" data-value="0.06145039102564102" >
+                <span class="cellwrap"><span>$0.06145</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_latency_ms" data-value="28509.600744126365" >
+                <span class="cellwrap"><span>28510 ms</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="latency_ms_p95" data-value="40058.07355898431" >
+                <span class="cellwrap"><span>40058 ms</span><svg xmlns="http://www.w3.org/2000/svg" class="whisker" viewBox="0 0 76 10" width="76" height="10" aria-hidden="true"><line class="whisker-line" x1="62.6" x2="72" y1="5.0" y2="5.0"/><line class="whisker-cap" x1="62.6" x2="62.6" y1="2" y2="8"/><line class="whisker-cap" x1="72" x2="72" y1="2" y2="8"/><circle class="whisker-dot" cx="66.2" cy="5.0" r="3"/></svg></span>
+                <span class="sr">95% interval 37863.349582999945 to 43587.243374902755</span>
+              </td>
+              
+              <td class="n" data-col="correctness" data-value="3.4266666666666667" hidden>
+                <span class="cellwrap"><span>3.43</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="completeness" data-value="2.9133333333333336" hidden>
+                <span class="cellwrap"><span>2.91</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="relevance" data-value="3.8333333333333335" hidden>
+                <span class="cellwrap"><span>3.83</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="citation_quality" data-value="1.9033333333333333" hidden>
+                <span class="cellwrap"><span>1.90</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="exact_match" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="keyword_recall" data-value="" hidden>
+                <span class="cellwrap"><span>—</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="context_precision" data-value="0.22553735436732694" hidden>
+                <span class="cellwrap"><span>0.23</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="abstain_precision" data-value="1.0" hidden>
+                <span class="cellwrap"><span>1.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="abstain_recall" data-value="0.16666666666666666" hidden>
+                <span class="cellwrap"><span>0.17</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="false_refusal_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="judge_fallback_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="avg_steps" data-value="1.0" hidden>
+                <span class="cellwrap"><span>1.0</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="avg_llm_calls" data-value="1.0" hidden>
+                <span class="cellwrap"><span>1.0</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_tool_calls" data-value="5.673333333333333" hidden>
+                <span class="cellwrap"><span>5.7</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="tool_error_rate" data-value="0.0011750881316098707" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="redundant_search_rate" data-value="0.0011750881316098707" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n" data-col="avg_steps_to_evidence" data-value="3.356589147286822" hidden>
+                <span class="cellwrap"><span>3.4</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="budget_exhausted_rate" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0.00</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_ok" data-value="150.0" hidden>
+                <span class="cellwrap"><span>150</span></span>
+                
+              </td>
+              
+              <td class="n best" data-col="n_error" data-value="0.0" hidden>
+                <span class="cellwrap"><span>0</span></span>
+                
+              </td>
+              
+            </tr>
+            
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">Shaded: best in the column. Missing values show "—", never 0: a system that retrieves nothing has no retrieval score, and a label-free question has no recall.</p>
+    </section>
+
+    
+
+    
+
+    
+
+    <section class="block" id="costs" aria-labelledby="h-costs">
+      <header><span class="num">04</span><h2 id="h-costs">Cost and latency</h2></header>
+      <div class="">
+        
+        <p class="lede">No cost was recorded: mock runs and local models are free, so there is nothing to split by stage.</p>
+        
+        <div class="card">
+          <h3>How long it takes</h3>
+          <p class="sub">Per-question latency, p50 and p95.</p>
+          <ul class="legend"><li><span class="sw lat-short"></span>p50 (typical)</li><li><span class="sw lat-long"></span>p95 (slow tail)</li></ul>
+          <div class="chart-scroll" tabindex="0" role="region" aria-label="Bars of latency per system"><svg xmlns="http://www.w3.org/2000/svg" class="chart latency" viewBox="0 0 900 202" style="min-width:700px" role="img" aria-label="Latency per system: p50 and p95"><title>Latency per system: p50 and p95</title><text x="136.2" y="20" class="row-label" text-anchor="end">hybrid_rerank_default</text><rect class="track" x="144.20000000000002" y="5" width="651.8" height="22" rx="4"/><g class="mark seg" tabindex="0" data-tip="hybrid_rerank_default · p50 2327 ms · p95 3305 ms" aria-label="hybrid_rerank_default · p50 2327 ms · p95 3305 ms"><path class="lat-p95" d="M144.2,5 H194 Q198,5 198,9 V23 Q198,27 194,27 H144.2 Z"/><path class="lat-p50" d="M144.2,11 H179.1 Q182.1,11 182.1,14 V18 Q182.1,21 179.1,21 H144.2 Z"/><rect class="hit" x="144.20000000000002" y="2" width="53.8" height="28"/></g><text x="206" y="20" class="value" text-anchor="start">2327 / 3305 ms</text><text x="136.2" y="52" class="row-label" text-anchor="end">agent_search_tools</text><rect class="track" x="144.20000000000002" y="37" width="651.8" height="22" rx="4"/><g class="mark seg" tabindex="0" data-tip="agent_search_tools · p50 10922 ms · p95 16177 ms" aria-label="agent_search_tools · p50 10922 ms · p95 16177 ms"><path class="lat-p95" d="M144.2,37 H403.4 Q407.4,37 407.4,41 V55 Q407.4,59 403.4,59 H144.2 Z"/><path class="lat-p50" d="M144.2,43 H318.9 Q321.9,43 321.9,46 V50 Q321.9,53 318.9,53 H144.2 Z"/><rect class="hit" x="144.20000000000002" y="34" width="263.2" height="28"/></g><text x="415.4" y="52" class="value" text-anchor="start">10922 / 16177 ms</text><text x="136.2" y="84" class="row-label" text-anchor="end">opencode_glm</text><rect class="track" x="144.20000000000002" y="69" width="651.8" height="22" rx="4"/><g class="mark seg" tabindex="0" data-tip="opencode_glm · p50 12196 ms · p95 22541 ms" aria-label="opencode_glm · p50 12196 ms · p95 22541 ms"><path class="lat-p95" d="M144.2,69 H507 Q511,69 511,73 V87 Q511,91 507,91 H144.2 Z"/><path class="lat-p50" d="M144.2,75 H339.6 Q342.6,75 342.6,78 V82 Q342.6,85 339.6,85 H144.2 Z"/><rect class="hit" x="144.20000000000002" y="66" width="366.8" height="28"/></g><text x="519" y="84" class="value" text-anchor="start">12196 / 22541 ms</text><text x="136.2" y="116" class="row-label" text-anchor="end">claude_code</text><rect class="track" x="144.20000000000002" y="101" width="651.8" height="22" rx="4"/><g class="mark seg" tabindex="0" data-tip="claude_code · p50 20226 ms · p95 31459 ms" aria-label="claude_code · p50 20226 ms · p95 31459 ms"><path class="lat-p95" d="M144.2,101 H652.1 Q656.1,101 656.1,105 V119 Q656.1,123 652.1,123 H144.2 Z"/><path class="lat-p50" d="M144.2,107 H470.3 Q473.3,107 473.3,110 V114 Q473.3,117 470.3,117 H144.2 Z"/><rect class="hit" x="144.20000000000002" y="98" width="511.9" height="28"/></g><text x="664.1" y="116" class="value" text-anchor="start">20226 / 31459 ms</text><text x="136.2" y="148" class="row-label" text-anchor="end">no_retrieval_floor</text><rect class="track" x="144.20000000000002" y="133" width="651.8" height="22" rx="4"/><g class="mark seg" tabindex="0" data-tip="no_retrieval_floor · p50 1357 ms · p95 2150 ms" aria-label="no_retrieval_floor · p50 1357 ms · p95 2150 ms"><path class="lat-p95" d="M144.2,133 H175.2 Q179.2,133 179.2,137 V151 Q179.2,155 175.2,155 H144.2 Z"/><path class="lat-p50" d="M144.2,139 H163.3 Q166.3,139 166.3,142 V146 Q166.3,149 163.3,149 H144.2 Z"/><rect class="hit" x="144.20000000000002" y="130" width="35" height="28"/></g><text x="187.2" y="148" class="value" text-anchor="start">1357 / 2150 ms</text><text x="136.2" y="180" class="row-label" text-anchor="end">codex</text><rect class="track" x="144.20000000000002" y="165" width="651.8" height="22" rx="4"/><g class="mark seg" tabindex="0" data-tip="codex · p50 27613 ms · p95 40058 ms" aria-label="codex · p50 27613 ms · p95 40058 ms"><path class="lat-p95" d="M144.2,165 H792 Q796,165 796,169 V183 Q796,187 792,187 H144.2 Z"/><path class="lat-p50" d="M144.2,171 H590.5 Q593.5,171 593.5,174 V178 Q593.5,181 590.5,181 H144.2 Z"/><rect class="hit" x="144.20000000000002" y="162" width="651.8" height="28"/></g><text x="804" y="180" class="value" text-anchor="start">27613 / 40058 ms</text></svg></div>
+          <details class="tableview"><summary>Table view</summary><div class="table-scroll"><table>
+            <thead><tr><th>System</th><th class="n">p50 (ms)</th><th class="n">p95 (ms)</th><th>Source</th></tr></thead>
+            <tbody><tr><th scope="row">hybrid_rerank_default</th><td class="n">2327</td><td class="n">3305</td><td>concurrent</td></tr><tr><th scope="row">agent_search_tools</th><td class="n">10922</td><td class="n">16177</td><td>concurrent</td></tr><tr><th scope="row">opencode_glm</th><td class="n">12196</td><td class="n">22541</td><td>probe</td></tr><tr><th scope="row">claude_code</th><td class="n">20226</td><td class="n">31459</td><td>probe</td></tr><tr><th scope="row">no_retrieval_floor</th><td class="n">1357</td><td class="n">2150</td><td>concurrent</td></tr><tr><th scope="row">codex</th><td class="n">27613</td><td class="n">40058</td><td>concurrent</td></tr></tbody>
+          </table></div></details>
+        </div>
+      </div>
+      <p class="hint">Cost is charged at standalone prices even when a cache avoided the call, so systems stay comparable; real savings are in the banner.</p>
+    </section>
+
+    
+    <section class="block" id="agents" aria-labelledby="h-agents">
+      <header><span class="num">05</span><h2 id="h-agents">Agents, tools and routing</h2></header>
+      
+      <div class="table-scroll"><table>
+        <thead><tr><th>System</th><th class="n">Steps</th><th class="n">LLM calls</th><th class="n">Tool calls</th><th class="n">Tool errors</th><th class="n">Redundant searches</th><th class="n">Steps to evidence</th><th class="n">Required tool used</th><th class="n">Budget hit</th><th class="n">Route accuracy</th></tr></thead>
+        <tbody><tr><th scope="row">agent_search_tools</th><td class="n">4.8 <span class="bar-cell" style="width: 35px" aria-hidden="true"></span></td><td class="n">5.6 <span class="bar-cell" style="width: 41px" aria-hidden="true"></span></td><td class="n">5.3 <span class="bar-cell" style="width: 28px" aria-hidden="true"></span></td><td class="n">0%</td><td class="n">0%</td><td class="n">1.1</td><td class="n">—</td><td class="n">0%</td><td class="n">—</td></tr><tr><th scope="row">opencode_glm</th><td class="n">5.4 <span class="bar-cell" style="width: 40px" aria-hidden="true"></span></td><td class="n">5.4 <span class="bar-cell" style="width: 40px" aria-hidden="true"></span></td><td class="n">7.7 <span class="bar-cell" style="width: 41px" aria-hidden="true"></span></td><td class="n">0%</td><td class="n">0%</td><td class="n">1.9</td><td class="n">—</td><td class="n">3%</td><td class="n">—</td></tr><tr><th scope="row">claude_code</th><td class="n">6.5 <span class="bar-cell" style="width: 48px" aria-hidden="true"></span></td><td class="n">6.5 <span class="bar-cell" style="width: 48px" aria-hidden="true"></span></td><td class="n">9.1 <span class="bar-cell" style="width: 48px" aria-hidden="true"></span></td><td class="n">0%</td><td class="n">0%</td><td class="n">3.5</td><td class="n">—</td><td class="n">3%</td><td class="n">—</td></tr><tr><th scope="row">codex</th><td class="n">1.0 <span class="bar-cell" style="width: 7px" aria-hidden="true"></span></td><td class="n">1.0 <span class="bar-cell" style="width: 7px" aria-hidden="true"></span></td><td class="n">5.7 <span class="bar-cell" style="width: 30px" aria-hidden="true"></span></td><td class="n">0%</td><td class="n">0%</td><td class="n">3.4</td><td class="n">—</td><td class="n">0%</td><td class="n">—</td></tr></tbody>
+      </table></div>
+      <p class="hint">Steps and calls are means per question. A high budget-hit share means the loop ran out of budget before it finished; tool errors are calls that returned an error observation.</p>
+      
+      
+      <h3 style="margin:22px 0 8px;font-size:16px">Tool usage</h3>
+      <div class="table-scroll"><table>
+        <thead><tr><th>System</th><th>Tool</th><th class="n">Calls</th><th class="n">Errors</th><th class="n">Questions using it</th><th class="n">Avg latency (ms)</th></tr></thead>
+        <tbody><tr><th scope="row">agent_search_tools</th><td>search</td><td class="n">712</td><td class="n">0</td><td class="n">150</td><td class="n">237.7</td></tr><tr><th scope="row">agent_search_tools</th><td>calculator</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">—</td></tr><tr><th scope="row">agent_search_tools</th><td>date_calc</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">—</td></tr><tr><th scope="row">agent_search_tools</th><td>corpus_grep</td><td class="n">80</td><td class="n">1</td><td class="n">52</td><td class="n">31.3</td></tr><tr><th scope="row">claude_code</th><td>Glob</td><td class="n">142</td><td class="n">0</td><td class="n">142</td><td class="n">0.0</td></tr><tr><th scope="row">claude_code</th><td>Grep</td><td class="n">834</td><td class="n">1</td><td class="n">150</td><td class="n">0.0</td></tr><tr><th scope="row">claude_code</th><td>Read</td><td class="n">390</td><td class="n">0</td><td class="n">131</td><td class="n">0.0</td></tr><tr><th scope="row">codex</th><td>shell</td><td class="n">851</td><td class="n">1</td><td class="n">150</td><td class="n">0.0</td></tr><tr><th scope="row">opencode_glm</th><td>glob</td><td class="n">125</td><td class="n">0</td><td class="n">122</td><td class="n">0.0</td></tr><tr><th scope="row">opencode_glm</th><td>grep</td><td class="n">647</td><td class="n">0</td><td class="n">149</td><td class="n">0.0</td></tr><tr><th scope="row">opencode_glm</th><td>read</td><td class="n">377</td><td class="n">1</td><td class="n">121</td><td class="n">0.0</td></tr><tr><th scope="row">opencode_glm</th><td>task</td><td class="n">3</td><td class="n">0</td><td class="n">3</td><td class="n">0.0</td></tr></tbody>
+      </table></div>
+      
+      
+    </section>
+    
+
+    
+
+    
+
+    <section class="block" id="repro" aria-labelledby="h-repro">
+      <header><span class="num">06</span><h2 id="h-repro">Reproducibility</h2></header>
+      <dl class="repro">
+        <div><dt>ragbench</dt><dd>0.3.0</dd></div>
+        <div><dt>Python</dt><dd>3.12.12</dd></div>
+        <div><dt>Git</dt><dd>35bbfe20f74b (modified)</dd></div>
+        <div><dt>Config hash</dt><dd>9fdef040f9f40fd9</dd></div>
+        <div><dt>Dataset hash</dt><dd>bc328f5df5194f5f</dd></div>
+        <div><dt>Models</dt><dd>claude-haiku-5-5, gpt-6-luna, text-embedding-3-small</dd></div>
+        <div><dt>Prices as of</dt><dd>2026-10-24</dd></div>
+        <div><dt>Started</dt><dd>2026-10-26T22:33:32Z</dd></div>
+      </dl>
+      <details class="more"><summary>Configuration that ran</summary><pre class="config" tabindex="0"># The agent harnesses of the published benchmark (docs/benchmarks/multihop-rag.md), on a stratified 150 of its questions: on this corpus
+# they cost 3-4x what they did on the demo, more than their share of the budget for 300. Three systems of configs/all_solutions.yaml run
+# next to them, configured identically, so the harnesses are compared with the built-ins on the same questions (the disk cache answers
+# those three for the 149 questions the subsets share).
+#
+#   ragbench datasets pull multihop-rag --subset 150 --seed 42 --output data/multihop-rag-150
+#   ragbench run --config configs/all_solutions_harnesses.yaml --mock
+#
+# A live run starts `claude`, `codex` and `opencode` (each with its own key or login); `ragbench estimate` cannot price them.
+run:
+  name: all_solutions_harnesses_multihop
+  output_dir: results
+
+dataset:
+  documents_path: data/multihop-rag-150/docs
+  questions_path: data/multihop-rag-150/questions.jsonl
+  qrels_path: data/multihop-rag-150/qrels.jsonl
+
+systems:
+  - type: no_retrieval
+    name: no_retrieval_floor
+    models:
+      generator: gpt-6-luna
+
+  - type: hybrid_rerank
+    name: hybrid_rerank_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: agent_search
+    name: agent_search_tools
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_steps: 5
+      max_cost_usd: 0.05
+      top_k: 5
+    tools: [calculator, date_calc, corpus_grep]
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: cli_agent
+    name: claude_code
+    retrieval:
+      preset: claude_code
+      model: anthropic:claude-haiku-5-5
+      max_steps: 20
+      timeout_s: 300
+      limits: {max_concurrent_requests: 2}
+
+  - type: cli_agent
+    name: codex
+    retrieval:
+      preset: codex
+      model: gpt-6-luna
+      max_steps: 20
+      timeout_s: 300
+      limits: {max_concurrent_requests: 2}
+
+  - type: cli_agent
+    name: opencode_glm
+    retrieval:
+      preset: opencode
+      model: openrouter:z-ai/glm-5.3
+      max_steps: 20
+      timeout_s: 300
+      limits: {max_concurrent_requests: 2}
+
+openrouter:
+  provider:
+    data_collection: deny
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  # Haiku 5.5 judges every answer, except those of its own family (claude_code), which gpt-6-luna judges: one judge per answer, never its own family.
+  judge:
+    panel: [anthropic:claude-haiku-5-5, gpt-6-luna]
+    independent: true
+    scorers: first
+  trials: 1
+  max_questions: null
+  max_workers: 4
+  max_cost_usd: 7.0   # the published run&#39;s cap, raised from 6.0 to finish (charged at standalone prices; Codex&#39;s tokens at API rates)
+  stats:
+    baseline: hybrid_rerank_default   # significance.csv: each harness against a built-in pipeline, on the same questions
+
+# MultiHop-RAG is ~1.4M tokens: indexing it at full concurrency can exceed OpenAI&#39;s lowest-tier limit of 1M embedding tokens per minute.
+limits:
+  tokens_per_minute: 900000
+</pre></details>
+      <p class="hint">How to read every number here: the methodology page of the docs (<code>docs/methodology.md</code>). This page is self-contained; the same data is in <code>report_data.json</code> next to it.</p>
+    </section>
+  </main>
+
+  <footer>RAGBench · github.com/alexandre0sheva/ragbench</footer>
+</div>
+<script type="application/json" id="report-data">{"schema":1,"run":{"id":"all_solutions_harnesses_multihop","mode":"live","started_utc":"2026-10-26T22:33:32Z","finished_utc":"2026-10-26T23:04:16Z","wall_time_s":1843.3889651249629,"ragbench_version":"0.3.0","python":"3.12.12","git_sha":"35bbfe20f74be28cdbcdf79883dff15ff6c2d17b","git_dirty":true,"config_hash":"9fdef040f9f40fd9f6d2088e64a806d943d22803820e568f4dd86a5551d3c6ac","dataset_hash":"bc328f5df5194f5ff6d5bdd602b0e290deeb193d7d0e6b05905409a882d51928","models_used":["claude-haiku-5-5","gpt-6-luna","text-embedding-3-small"],"pricing_as_of":"2026-10-24","systems":6,"errors":1,"latency_source":"probe","primary_k":5},"notices":[],"judge":{"panel":{"models":["anthropic:claude-haiku-5-5","gpt-6-luna"],"aggregate":"mean","independent":true,"agreement":{},"scorers":"first"},"audit":null},"dataset":{"questions":150,"labeled_questions":132,"label_free":false,"documents":null,"categories":[],"synthetic":0,"needs_review":0,"mock_generated":0,"warnings":[]},"cost":{"charged_usd":6.606599187900001,"real_spend_usd":6.7145489737,"saved_usd":0.0,"cache_hit_rate":0.0,"cache_hits":0,"budget":{"max_cost_usd":7.0,"spent_usd":6.714548973699999,"stopped":false,"completed_systems":["no_retrieval_floor","hybrid_rerank_default","agent_search_tools","claude_code","codex","opencode_glm"],"incomplete_systems":{}}},"recommendation":{"winner":"hybrid_rerank_default","profile":"balanced","weights":{"quality":0.6,"cost":0.2,"latency":0.2},"constraints":{},"tied_with_winner":["agent_search_tools","opencode_glm","claude_code"],"pareto":["no_retrieval_floor","hybrid_rerank_default"],"summary":"hybrid_rerank_default is recommended under the balanced profile (quality first, then the best mix of cost and speed among systems that are equally good): answer score 3.65, $0.00109 per question, p95 latency 3305 ms.","reasons":["hybrid_rerank_default is recommended under the balanced profile (quality first, then the best mix of cost and speed among systems that are equally good): answer score 3.65, $0.00109 per question, p95 latency 3305 ms.","hybrid_rerank_default ties with agent_search_tools, opencode_glm and claude_code on answer score: they are statistically indistinguishable from the best (hybrid_rerank_default) by a paired bootstrap on the same questions (Holm-adjusted p ≥ 0.05). Quality does not separate them, so it wins on cost and latency ($0.00109 per question against up to $0.01353; p95 latency 3305 ms against up to 31459 ms).","hybrid_rerank_default vs no_retrieval_floor (the cheapest feasible system): +1.71 answer score (95% CI +1.49 to +1.91, significant), 5.2× cost"],"infeasible":{},"closest_miss":null,"quality_metric":"answer_score","winner_facts":{"answer_score":3.654666666666667,"cost_per_question":0.0010878358666666665,"latency_ms_p95":3304.938783019315,"faithfulness":4.003333333333333},"winner_yaml":"# The winner of all_solutions_harnesses_multihop: 'hybrid_rerank_default'. Run it with `ragbench run --config \u003cthis file\u003e`.\n# `dataset:` is the benchmark's data; replace it with your production documents before deploying.\nrun:\n  name: all_solutions_harnesses_multihop_winner\n  output_dir: results\ndataset:\n  documents_path: data/multihop-rag-150/docs\n  questions_path: data/multihop-rag-150/questions.jsonl\n  qrels_path: data/multihop-rag-150/qrels.jsonl\nsystems:\n- type: hybrid_rerank\n  name: hybrid_rerank_default\n  chunker:\n    type: word\n    chunk_size: 500\n    chunk_overlap: 80\n  retrieval:\n    vector_store: numpy\n    bm25_top_k: 20\n    vector_top_k: 20\n    candidate_top_k: 30\n    final_top_k: 5\n    rrf_k: 60\n    reranker: local_relevance\n    multi_query: true\n    max_query_variants: 4\n  models:\n    embedding: text-embedding-3-small\n    generator: gpt-6-luna\nopenrouter:\n  provider:\n    data_collection: deny\nlimits:\n  tokens_per_minute: 900000\nevaluation:\n  k_values:\n  - 1\n  - 3\n  - 5\n  - 10\n  judge_enabled: true\n  judge:\n    panel:\n    - anthropic:claude-haiku-5-5\n    - gpt-6-luna\n    independent: true\n    scorers: first\n  trials: 1\n  max_questions: null\n  max_workers: 4\n  max_cost_usd: 7.0\n"},"leaderboard":{"columns":[{"key":"retrieval_recall@5","header":"Recall@5","higher_is_better":true,"interval":true,"default":true},{"key":"retrieval_mrr@10","header":"MRR@10","higher_is_better":true,"interval":true,"default":true},{"key":"retrieval_ndcg@10","header":"nDCG@10","higher_is_better":true,"interval":true,"default":true},{"key":"answer_score","header":"Answer","higher_is_better":true,"interval":true,"default":true},{"key":"faithfulness","header":"Faithful","higher_is_better":true,"interval":true,"default":true},{"key":"token_f1","header":"F1","higher_is_better":true,"interval":false,"default":true},{"key":"context_recall","header":"Ctx recall","higher_is_better":true,"interval":false,"default":true},{"key":"avg_cost_per_question","header":"$/Q","higher_is_better":false,"interval":false,"default":true},{"key":"cost_per_correct","header":"$/correct","higher_is_better":false,"interval":false,"default":true},{"key":"avg_latency_ms","header":"Latency","higher_is_better":false,"interval":false,"default":true},{"key":"latency_ms_p95","header":"p95","higher_is_better":false,"interval":true,"default":true},{"key":"correctness","header":"Correct","higher_is_better":true,"interval":false,"default":false},{"key":"completeness","header":"Complete","higher_is_better":true,"interval":false,"default":false},{"key":"relevance","header":"Relevant","higher_is_better":true,"interval":false,"default":false},{"key":"citation_quality","header":"Cites","higher_is_better":true,"interval":false,"default":false},{"key":"exact_match","header":"EM","higher_is_better":true,"interval":false,"default":false},{"key":"keyword_recall","header":"Keywords","higher_is_better":true,"interval":false,"default":false},{"key":"context_precision","header":"Ctx prec","higher_is_better":true,"interval":false,"default":false},{"key":"abstain_precision","header":"Abstain prec","higher_is_better":true,"interval":false,"default":false},{"key":"abstain_recall","header":"Abstain recall","higher_is_better":true,"interval":false,"default":false},{"key":"false_refusal_rate","header":"False refusals","higher_is_better":false,"interval":false,"default":false},{"key":"judge_fallback_rate","header":"Judge fallback","higher_is_better":false,"interval":false,"default":false},{"key":"avg_steps","header":"Steps","higher_is_better":false,"interval":false,"default":false},{"key":"avg_llm_calls","header":"LLM calls","higher_is_better":false,"interval":false,"default":false},{"key":"avg_tool_calls","header":"Tool calls","higher_is_better":false,"interval":false,"default":false},{"key":"tool_error_rate","header":"Tool errors","higher_is_better":false,"interval":false,"default":false},{"key":"redundant_search_rate","header":"Redundant searches","higher_is_better":false,"interval":false,"default":false},{"key":"avg_steps_to_evidence","header":"Steps to evidence","higher_is_better":false,"interval":false,"default":false},{"key":"budget_exhausted_rate","header":"Budget hit","higher_is_better":false,"interval":false,"default":false},{"key":"n_ok","header":"Answered","higher_is_better":true,"interval":false,"default":false},{"key":"n_error","header":"Failed","higher_is_better":false,"interval":false,"default":false}],"rows":[{"system":"hybrid_rerank_default","type":"hybrid_rerank","badges":["recommended","pareto","baseline"],"cells":[{"key":"retrieval_recall@5","raw":0.6527777777777777,"text":"0.653","ci":[0.5972083333333333,0.7088888888888889],"best":false,"sig":null},{"key":"retrieval_mrr@10","raw":0.7369999999999999,"text":"0.737","ci":[0.6764416666666666,0.7955694444444443],"best":true,"sig":null},{"key":"retrieval_ndcg@10","raw":0.6407569515844203,"text":"0.641","ci":[0.5878514595496646,0.6914526386426963],"best":false,"sig":null},{"key":"answer_score","raw":3.654666666666667,"text":"3.65","ci":[3.4966666666666666,3.8093333333333326],"best":true,"sig":null},{"key":"faithfulness","raw":4.003333333333333,"text":"4.00","ci":[3.856583333333333,4.1433333333333335],"best":true,"sig":null},{"key":"token_f1","raw":0.0727910997128567,"text":"0.07","ci":null,"best":false,"sig":null},{"key":"context_recall","raw":0.6868686868686869,"text":"0.69","ci":null,"best":false,"sig":null},{"key":"avg_cost_per_question","raw":0.0010878358666666665,"text":"$0.00109","ci":null,"best":false,"sig":null},{"key":"cost_per_correct","raw":0.0021756717333333325,"text":"$0.00218","ci":null,"best":true,"sig":null},{"key":"avg_latency_ms","raw":2484.9291394433626,"text":"2485 ms","ci":null,"best":false,"sig":null},{"key":"latency_ms_p95","raw":3304.938783019315,"text":"3305 ms","ci":[3011.3247071858495,7940.830833278596],"best":false,"sig":null},{"key":"correctness","raw":3.6066666666666665,"text":"3.61","ci":null,"best":false,"sig":null},{"key":"completeness","raw":3.3233333333333333,"text":"3.32","ci":null,"best":false,"sig":null},{"key":"relevance","raw":4.01,"text":"4.01","ci":null,"best":false,"sig":null},{"key":"citation_quality","raw":3.33,"text":"3.33","ci":null,"best":true,"sig":null},{"key":"exact_match","raw":0.007575757575757576,"text":"0.01","ci":null,"best":false,"sig":null},{"key":"keyword_recall","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"context_precision","raw":0.5287878787878788,"text":"0.53","ci":null,"best":false,"sig":null},{"key":"abstain_precision","raw":0.5483870967741935,"text":"0.55","ci":null,"best":false,"sig":null},{"key":"abstain_recall","raw":0.9444444444444444,"text":"0.94","ci":null,"best":true,"sig":null},{"key":"false_refusal_rate","raw":0.10606060606060606,"text":"0.11","ci":null,"best":false,"sig":null},{"key":"judge_fallback_rate","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"avg_llm_calls","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"avg_tool_calls","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"tool_error_rate","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"redundant_search_rate","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"avg_steps_to_evidence","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"budget_exhausted_rate","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"n_ok","raw":150.0,"text":"150","ci":null,"best":true,"sig":null},{"key":"n_error","raw":0.0,"text":"0","ci":null,"best":true,"sig":null}]},{"system":"agent_search_tools","type":"agent_search","badges":["tie"],"cells":[{"key":"retrieval_recall@5","raw":0.691111111111111,"text":"0.691","ci":[0.6366527777777778,0.7466944444444443],"best":true,"sig":{"symbol":"≈","verdict":"no clear difference","tip":"vs hybrid_rerank_default: +0.038 (95% CI +0.003 to +0.074); Holm-adjusted p = 0.114; no clear difference","p_holm":0.11394302848575713}},{"key":"retrieval_mrr@10","raw":0.6994444444444444,"text":"0.699","ci":[0.6374361111111111,0.7597999999999999],"best":false,"sig":null},{"key":"retrieval_ndcg@10","raw":0.647202833779578,"text":"0.647","ci":[0.5959696740077833,0.7013069507585158],"best":false,"sig":null},{"key":"answer_score","raw":3.4366666666666665,"text":"3.44","ci":[3.25465,3.6147],"best":false,"sig":{"symbol":"≈","verdict":"no clear difference","tip":"vs hybrid_rerank_default: -0.218 (95% CI -0.397 to -0.031); Holm-adjusted p = 0.072; no clear difference","p_holm":0.07196401799100449}},{"key":"faithfulness","raw":3.57,"text":"3.57","ci":[3.3833333333333333,3.7534166666666664],"best":false,"sig":null},{"key":"token_f1","raw":0.04775018490825845,"text":"0.05","ci":null,"best":false,"sig":null},{"key":"context_recall","raw":0.6931818181818182,"text":"0.69","ci":null,"best":false,"sig":null},{"key":"avg_cost_per_question","raw":0.002635931866666667,"text":"$0.00264","ci":null,"best":false,"sig":null},{"key":"cost_per_correct","raw":0.006082919692307693,"text":"$0.00608","ci":null,"best":false,"sig":null},{"key":"avg_latency_ms","raw":11136.401667386914,"text":"11136 ms","ci":null,"best":false,"sig":null},{"key":"latency_ms_p95","raw":16176.52671078685,"text":"16177 ms","ci":[14659.218749031425,18697.9550011456],"best":false,"sig":null},{"key":"correctness","raw":3.486666666666667,"text":"3.49","ci":null,"best":false,"sig":null},{"key":"completeness","raw":3.1,"text":"3.10","ci":null,"best":false,"sig":null},{"key":"relevance","raw":3.99,"text":"3.99","ci":null,"best":false,"sig":null},{"key":"citation_quality","raw":3.0366666666666666,"text":"3.04","ci":null,"best":false,"sig":null},{"key":"exact_match","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"keyword_recall","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"context_precision","raw":0.593939393939394,"text":"0.59","ci":null,"best":true,"sig":null},{"key":"abstain_precision","raw":0.53125,"text":"0.53","ci":null,"best":false,"sig":null},{"key":"abstain_recall","raw":0.9444444444444444,"text":"0.94","ci":null,"best":true,"sig":null},{"key":"false_refusal_rate","raw":0.11363636363636363,"text":"0.11","ci":null,"best":false,"sig":null},{"key":"judge_fallback_rate","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps","raw":4.806666666666667,"text":"4.8","ci":null,"best":false,"sig":null},{"key":"avg_llm_calls","raw":5.613333333333333,"text":"5.6","ci":null,"best":false,"sig":null},{"key":"avg_tool_calls","raw":5.28,"text":"5.3","ci":null,"best":true,"sig":null},{"key":"tool_error_rate","raw":0.0012626262626262627,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"redundant_search_rate","raw":0.0,"text":"0.00","ci":null,"best":true,"sig":null},{"key":"avg_steps_to_evidence","raw":1.121212121212121,"text":"1.1","ci":null,"best":true,"sig":null},{"key":"budget_exhausted_rate","raw":0.0,"text":"0.00","ci":null,"best":true,"sig":null},{"key":"n_ok","raw":150.0,"text":"150","ci":null,"best":true,"sig":null},{"key":"n_error","raw":0.0,"text":"0","ci":null,"best":true,"sig":null}]},{"system":"opencode_glm","type":"cli_agent","badges":["tie"],"cells":[{"key":"retrieval_recall@5","raw":0.6560402684563759,"text":"0.656","ci":[0.5956236017897092,0.7142197986577179],"best":false,"sig":{"symbol":"≈","verdict":"no clear difference","tip":"vs hybrid_rerank_default: -0.001 (95% CI -0.054 to +0.050); Holm-adjusted p = 0.964; no clear difference","p_holm":0.9635182408795602}},{"key":"retrieval_mrr@10","raw":0.7369580270586982,"text":"0.737","ci":[0.6738743741344413,0.7976710477255778],"best":false,"sig":null},{"key":"retrieval_ndcg@10","raw":0.6702952752788985,"text":"0.670","ci":[0.61063383570917,0.7263066537260465],"best":true,"sig":null},{"key":"answer_score","raw":3.6382550335570465,"text":"3.64","ci":[3.5,3.773842281879195],"best":false,"sig":{"symbol":"≈","verdict":"no clear difference","tip":"vs hybrid_rerank_default: -0.010 (95% CI -0.179 to +0.154); Holm-adjusted p = 0.903; no clear difference","p_holm":0.9025487256371814}},{"key":"faithfulness","raw":3.0268456375838926,"text":"3.03","ci":[2.835570469798658,3.204697986577181],"best":false,"sig":null},{"key":"token_f1","raw":0.026800526189311048,"text":"0.03","ci":null,"best":false,"sig":null},{"key":"context_recall","raw":0.9526515151515151,"text":"0.95","ci":null,"best":true,"sig":null},{"key":"avg_cost_per_question","raw":0.010229014079865772,"text":"$0.01023","ci":null,"best":false,"sig":null},{"key":"cost_per_correct","raw":0.022748105938805968,"text":"$0.02275","ci":null,"best":false,"sig":null},{"key":"avg_latency_ms","raw":12187.703166576102,"text":"12188 ms","ci":null,"best":false,"sig":null},{"key":"latency_ms_p95","raw":22541.40008329414,"text":"22541 ms","ci":null,"best":false,"sig":null},{"key":"correctness","raw":4.016778523489933,"text":"4.02","ci":null,"best":true,"sig":null},{"key":"completeness","raw":3.6879194630872485,"text":"3.69","ci":null,"best":true,"sig":null},{"key":"relevance","raw":4.429530201342282,"text":"4.43","ci":null,"best":false,"sig":null},{"key":"citation_quality","raw":3.030201342281879,"text":"3.03","ci":null,"best":false,"sig":null},{"key":"exact_match","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"keyword_recall","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"context_precision","raw":0.1284900040635347,"text":"0.13","ci":null,"best":false,"sig":null},{"key":"abstain_precision","raw":1.0,"text":"1.00","ci":null,"best":true,"sig":null},{"key":"abstain_recall","raw":0.7058823529411765,"text":"0.71","ci":null,"best":false,"sig":null},{"key":"false_refusal_rate","raw":0.0,"text":"0.00","ci":null,"best":true,"sig":null},{"key":"judge_fallback_rate","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps","raw":5.436241610738255,"text":"5.4","ci":null,"best":false,"sig":null},{"key":"avg_llm_calls","raw":5.436241610738255,"text":"5.4","ci":null,"best":false,"sig":null},{"key":"avg_tool_calls","raw":7.731543624161074,"text":"7.7","ci":null,"best":false,"sig":null},{"key":"tool_error_rate","raw":0.0008680555555555555,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"redundant_search_rate","raw":0.0026041666666666665,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps_to_evidence","raw":1.9393939393939394,"text":"1.9","ci":null,"best":false,"sig":null},{"key":"budget_exhausted_rate","raw":0.03355704697986577,"text":"0.03","ci":null,"best":false,"sig":null},{"key":"n_ok","raw":149.0,"text":"149","ci":null,"best":false,"sig":null},{"key":"n_error","raw":1.0,"text":"1","ci":null,"best":false,"sig":null}]},{"system":"claude_code","type":"cli_agent","badges":["tie"],"cells":[{"key":"retrieval_recall@5","raw":0.6322222222222222,"text":"0.632","ci":[0.5738749999999999,0.6916666666666667],"best":false,"sig":{"symbol":"≈","verdict":"no clear difference","tip":"vs hybrid_rerank_default: -0.021 (95% CI -0.073 to +0.028); Holm-adjusted p = 0.826; no clear difference","p_holm":0.8255872063968016}},{"key":"retrieval_mrr@10","raw":0.6934708994708995,"text":"0.693","ci":[0.6312916666666666,0.7579554232804233],"best":false,"sig":null},{"key":"retrieval_ndcg@10","raw":0.6330175292701054,"text":"0.633","ci":[0.5788732611976463,0.6869563117485562],"best":false,"sig":null},{"key":"answer_score","raw":3.554666666666667,"text":"3.55","ci":[3.3533333333333335,3.76],"best":false,"sig":{"symbol":"≈","verdict":"no clear difference","tip":"vs hybrid_rerank_default: -0.100 (95% CI -0.335 to +0.144); Holm-adjusted p = 0.854; no clear difference","p_holm":0.8535732133933034}},{"key":"faithfulness","raw":3.5,"text":"3.50","ci":[3.2733333333333334,3.7333333333333334],"best":false,"sig":null},{"key":"token_f1","raw":0.02150842399785907,"text":"0.02","ci":null,"best":false,"sig":null},{"key":"context_recall","raw":0.9387626262626262,"text":"0.94","ci":null,"best":false,"sig":null},{"key":"avg_cost_per_question","raw":0.013530883333333335,"text":"$0.01353","ci":null,"best":false,"sig":null},{"key":"cost_per_correct","raw":0.026358863636363646,"text":"$0.02636","ci":null,"best":false,"sig":null},{"key":"avg_latency_ms","raw":23101.87709154561,"text":"23102 ms","ci":null,"best":false,"sig":null},{"key":"latency_ms_p95","raw":31459.486525086686,"text":"31459 ms","ci":null,"best":false,"sig":null},{"key":"correctness","raw":3.62,"text":"3.62","ci":null,"best":false,"sig":null},{"key":"completeness","raw":3.66,"text":"3.66","ci":null,"best":false,"sig":null},{"key":"relevance","raw":4.526666666666666,"text":"4.53","ci":null,"best":true,"sig":null},{"key":"citation_quality","raw":2.466666666666667,"text":"2.47","ci":null,"best":false,"sig":null},{"key":"exact_match","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"keyword_recall","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"context_precision","raw":0.16935944146508353,"text":"0.17","ci":null,"best":false,"sig":null},{"key":"abstain_precision","raw":1.0,"text":"1.00","ci":null,"best":true,"sig":null},{"key":"abstain_recall","raw":0.9444444444444444,"text":"0.94","ci":null,"best":true,"sig":null},{"key":"false_refusal_rate","raw":0.0,"text":"0.00","ci":null,"best":true,"sig":null},{"key":"judge_fallback_rate","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps","raw":6.513333333333334,"text":"6.5","ci":null,"best":false,"sig":null},{"key":"avg_llm_calls","raw":6.513333333333334,"text":"6.5","ci":null,"best":false,"sig":null},{"key":"avg_tool_calls","raw":9.106666666666667,"text":"9.1","ci":null,"best":false,"sig":null},{"key":"tool_error_rate","raw":0.0007320644216691069,"text":"0.00","ci":null,"best":true,"sig":null},{"key":"redundant_search_rate","raw":0.0007320644216691069,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps_to_evidence","raw":3.549618320610687,"text":"3.5","ci":null,"best":false,"sig":null},{"key":"budget_exhausted_rate","raw":0.03333333333333333,"text":"0.03","ci":null,"best":false,"sig":null},{"key":"n_ok","raw":150.0,"text":"150","ci":null,"best":true,"sig":null},{"key":"n_error","raw":0.0,"text":"0","ci":null,"best":true,"sig":null}]},{"system":"no_retrieval_floor","type":"no_retrieval","badges":["pareto"],"cells":[{"key":"retrieval_recall@5","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"retrieval_mrr@10","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"retrieval_ndcg@10","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"answer_score","raw":1.9486666666666663,"text":"1.95","ci":[1.7398999999999996,2.1713499999999994],"best":false,"sig":{"symbol":"▼","verdict":"worse","tip":"vs hybrid_rerank_default: -1.706 (95% CI -1.908 to -1.491); Holm-adjusted p = 0.005; worse","p_holm":0.004997501249375312}},{"key":"faithfulness","raw":2.506666666666667,"text":"2.51","ci":[2.166583333333333,2.8434999999999993],"best":false,"sig":null},{"key":"token_f1","raw":0.15993619837472392,"text":"0.16","ci":null,"best":true,"sig":null},{"key":"context_recall","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"avg_cost_per_question","raw":0.0002086373333333334,"text":"$0.00021","ci":null,"best":true,"sig":null},{"key":"cost_per_correct","raw":0.002407353846153847,"text":"$0.00241","ci":null,"best":false,"sig":null},{"key":"avg_latency_ms","raw":1402.299183906677,"text":"1402 ms","ci":null,"best":true,"sig":null},{"key":"latency_ms_p95","raw":2150.2071935450654,"text":"2150 ms","ci":[2003.331916872412,2482.3144990950823],"best":true,"sig":null},{"key":"correctness","raw":2.066666666666667,"text":"2.07","ci":null,"best":false,"sig":null},{"key":"completeness","raw":1.8233333333333333,"text":"1.82","ci":null,"best":false,"sig":null},{"key":"relevance","raw":2.7133333333333334,"text":"2.71","ci":null,"best":false,"sig":null},{"key":"citation_quality","raw":0.6333333333333333,"text":"0.63","ci":null,"best":false,"sig":null},{"key":"exact_match","raw":0.10606060606060606,"text":"0.11","ci":null,"best":true,"sig":null},{"key":"keyword_recall","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"context_precision","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"abstain_precision","raw":0.20967741935483872,"text":"0.21","ci":null,"best":false,"sig":null},{"key":"abstain_recall","raw":0.7222222222222222,"text":"0.72","ci":null,"best":false,"sig":null},{"key":"false_refusal_rate","raw":0.3712121212121212,"text":"0.37","ci":null,"best":false,"sig":null},{"key":"judge_fallback_rate","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"avg_llm_calls","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"avg_tool_calls","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"tool_error_rate","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"redundant_search_rate","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"avg_steps_to_evidence","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"budget_exhausted_rate","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"n_ok","raw":150.0,"text":"150","ci":null,"best":true,"sig":null},{"key":"n_error","raw":0.0,"text":"0","ci":null,"best":true,"sig":null}]},{"system":"codex","type":"cli_agent","badges":[],"cells":[{"key":"retrieval_recall@5","raw":0.47333333333333333,"text":"0.473","ci":[0.41,0.5355555555555557],"best":false,"sig":{"symbol":"▼","verdict":"worse","tip":"vs hybrid_rerank_default: -0.179 (95% CI -0.244 to -0.119); Holm-adjusted p = 0.004; worse","p_holm":0.00399800099950025}},{"key":"retrieval_mrr@10","raw":0.5143730158730159,"text":"0.514","ci":[0.44659464285714273,0.5814946428571428],"best":false,"sig":null},{"key":"retrieval_ndcg@10","raw":0.48421089958229657,"text":"0.484","ci":[0.4247310091580707,0.5441817807588752],"best":false,"sig":null},{"key":"answer_score","raw":2.923333333333334,"text":"2.92","ci":[2.729983333333333,3.1179999999999994],"best":false,"sig":{"symbol":"▼","verdict":"worse","tip":"vs hybrid_rerank_default: -0.731 (95% CI -0.943 to -0.519); Holm-adjusted p = 0.005; worse","p_holm":0.004997501249375312}},{"key":"faithfulness","raw":2.54,"text":"2.54","ci":[2.3066666666666666,2.77],"best":false,"sig":null},{"key":"token_f1","raw":0.04109653956864659,"text":"0.04","ci":null,"best":false,"sig":null},{"key":"context_recall","raw":0.8920454545454546,"text":"0.89","ci":null,"best":false,"sig":null},{"key":"avg_cost_per_question","raw":0.015977101666666667,"text":"$0.01598","ci":null,"best":false,"sig":null},{"key":"cost_per_correct","raw":0.06145039102564102,"text":"$0.06145","ci":null,"best":false,"sig":null},{"key":"avg_latency_ms","raw":28509.600744126365,"text":"28510 ms","ci":null,"best":false,"sig":null},{"key":"latency_ms_p95","raw":40058.07355898431,"text":"40058 ms","ci":[37863.349582999945,43587.243374902755],"best":false,"sig":null},{"key":"correctness","raw":3.4266666666666667,"text":"3.43","ci":null,"best":false,"sig":null},{"key":"completeness","raw":2.9133333333333336,"text":"2.91","ci":null,"best":false,"sig":null},{"key":"relevance","raw":3.8333333333333335,"text":"3.83","ci":null,"best":false,"sig":null},{"key":"citation_quality","raw":1.9033333333333333,"text":"1.90","ci":null,"best":false,"sig":null},{"key":"exact_match","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"keyword_recall","raw":null,"text":"—","ci":null,"best":false,"sig":null},{"key":"context_precision","raw":0.22553735436732694,"text":"0.23","ci":null,"best":false,"sig":null},{"key":"abstain_precision","raw":1.0,"text":"1.00","ci":null,"best":true,"sig":null},{"key":"abstain_recall","raw":0.16666666666666666,"text":"0.17","ci":null,"best":false,"sig":null},{"key":"false_refusal_rate","raw":0.0,"text":"0.00","ci":null,"best":true,"sig":null},{"key":"judge_fallback_rate","raw":0.0,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps","raw":1.0,"text":"1.0","ci":null,"best":true,"sig":null},{"key":"avg_llm_calls","raw":1.0,"text":"1.0","ci":null,"best":true,"sig":null},{"key":"avg_tool_calls","raw":5.673333333333333,"text":"5.7","ci":null,"best":false,"sig":null},{"key":"tool_error_rate","raw":0.0011750881316098707,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"redundant_search_rate","raw":0.0011750881316098707,"text":"0.00","ci":null,"best":false,"sig":null},{"key":"avg_steps_to_evidence","raw":3.356589147286822,"text":"3.4","ci":null,"best":false,"sig":null},{"key":"budget_exhausted_rate","raw":0.0,"text":"0.00","ci":null,"best":true,"sig":null},{"key":"n_ok","raw":150.0,"text":"150","ci":null,"best":true,"sig":null},{"key":"n_error","raw":0.0,"text":"0","ci":null,"best":true,"sig":null}]}]},"baseline":"hybrid_rerank_default","scatter":{"x_metric":"cost","points":[{"name":"hybrid_rerank_default","x":0.0010878358666666665,"y":3.654666666666667,"size":2484.9291394433626,"kind":"winner","tip":"hybrid_rerank_default · answer 3.65 · $0.00109/question · 2485 ms"},{"name":"agent_search_tools","x":0.002635931866666667,"y":3.4366666666666665,"size":11136.401667386914,"kind":"tie","tip":"agent_search_tools · answer 3.44 · $0.00264/question · 11136 ms"},{"name":"opencode_glm","x":0.010229014079865772,"y":3.6382550335570465,"size":12187.703166576102,"kind":"tie","tip":"opencode_glm · answer 3.64 · $0.01023/question · 12188 ms"},{"name":"claude_code","x":0.013530883333333335,"y":3.554666666666667,"size":23101.87709154561,"kind":"tie","tip":"claude_code · answer 3.55 · $0.01353/question · 23102 ms"},{"name":"no_retrieval_floor","x":0.0002086373333333334,"y":1.9486666666666663,"size":1402.299183906677,"kind":"pareto","tip":"no_retrieval_floor · answer 1.95 · $0.00021/question · 1402 ms"},{"name":"codex","x":0.015977101666666667,"y":2.923333333333334,"size":28509.600744126365,"kind":"other","tip":"codex · answer 2.92 · $0.01598/question · 28510 ms"}]},"heatmap":null,"stages":null,"latency":[{"system":"hybrid_rerank_default","p50":2327.4548545014113,"p95":3304.938783019315,"source":"concurrent"},{"system":"agent_search_tools","p50":10922.272916533984,"p95":16176.52671078685,"source":"concurrent"},{"system":"opencode_glm","p50":12196.034624939784,"p95":22541.40008329414,"source":"probe"},{"system":"claude_code","p50":20226.225916994736,"p95":31459.486525086686,"source":"probe"},{"system":"no_retrieval_floor","p50":1357.3204994900152,"p95":2150.2071935450654,"source":"concurrent"},{"system":"codex","p50":27612.94047906995,"p95":40058.07355898431,"source":"concurrent"}],"agents":{"rows":[{"system":"agent_search_tools","avg_steps":4.806666666666667,"avg_llm_calls":5.613333333333333,"avg_tool_calls":5.28,"tool_error_rate":0.0012626262626262627,"redundant_search_rate":0.0,"avg_steps_to_evidence":1.121212121212121,"required_tool_used_rate":null,"budget_exhausted_rate":0.0,"route_accuracy":null},{"system":"opencode_glm","avg_steps":5.436241610738255,"avg_llm_calls":5.436241610738255,"avg_tool_calls":7.731543624161074,"tool_error_rate":0.0008680555555555555,"redundant_search_rate":0.0026041666666666665,"avg_steps_to_evidence":1.9393939393939394,"required_tool_used_rate":null,"budget_exhausted_rate":0.03355704697986577,"route_accuracy":null},{"system":"claude_code","avg_steps":6.513333333333334,"avg_llm_calls":6.513333333333334,"avg_tool_calls":9.106666666666667,"tool_error_rate":0.0007320644216691069,"redundant_search_rate":0.0007320644216691069,"avg_steps_to_evidence":3.549618320610687,"required_tool_used_rate":null,"budget_exhausted_rate":0.03333333333333333,"route_accuracy":null},{"system":"codex","avg_steps":1.0,"avg_llm_calls":1.0,"avg_tool_calls":5.673333333333333,"tool_error_rate":0.0011750881316098707,"redundant_search_rate":0.0011750881316098707,"avg_steps_to_evidence":3.356589147286822,"required_tool_used_rate":null,"budget_exhausted_rate":0.0,"route_accuracy":null}],"tools":[{"system":"agent_search_tools","tool":"search","calls":712,"errors":0,"error_rate":0.0,"truncated":32,"questions_using":150,"avg_latency_ms":237.66661989352184,"total_cost_usd":0.00026358},{"system":"agent_search_tools","tool":"calculator","calls":0,"errors":0,"error_rate":null,"truncated":0,"questions_using":0,"avg_latency_ms":null,"total_cost_usd":0.0},{"system":"agent_search_tools","tool":"date_calc","calls":0,"errors":0,"error_rate":null,"truncated":0,"questions_using":0,"avg_latency_ms":null,"total_cost_usd":0.0},{"system":"agent_search_tools","tool":"corpus_grep","calls":80,"errors":1,"error_rate":0.0125,"truncated":22,"questions_using":52,"avg_latency_ms":31.25261190289166,"total_cost_usd":0.0},{"system":"claude_code","tool":"Glob","calls":142,"errors":0,"error_rate":0.0,"truncated":0,"questions_using":142,"avg_latency_ms":0.0,"total_cost_usd":0.0},{"system":"claude_code","tool":"Grep","calls":834,"errors":1,"error_rate":0.001199040767386091,"truncated":0,"questions_using":150,"avg_latency_ms":0.0,"total_cost_usd":0.0},{"system":"claude_code","tool":"Read","calls":390,"errors":0,"error_rate":0.0,"truncated":0,"questions_using":131,"avg_latency_ms":0.0,"total_cost_usd":0.0},{"system":"codex","tool":"shell","calls":851,"errors":1,"error_rate":0.0011750881316098707,"truncated":0,"questions_using":150,"avg_latency_ms":0.0,"total_cost_usd":0.0},{"system":"opencode_glm","tool":"glob","calls":125,"errors":0,"error_rate":0.0,"truncated":0,"questions_using":122,"avg_latency_ms":0.0,"total_cost_usd":0.0},{"system":"opencode_glm","tool":"grep","calls":647,"errors":0,"error_rate":0.0,"truncated":0,"questions_using":149,"avg_latency_ms":0.0,"total_cost_usd":0.0},{"system":"opencode_glm","tool":"read","calls":377,"errors":1,"error_rate":0.002652519893899204,"truncated":0,"questions_using":121,"avg_latency_ms":0.0,"total_cost_usd":0.0},{"system":"opencode_glm","tool":"task","calls":3,"errors":0,"error_rate":0.0,"truncated":0,"questions_using":3,"avg_latency_ms":0.0,"total_cost_usd":0.0}],"routes":[]},"failures":null,"failure_other_detail":{},"qrels_audit":{"candidates":0,"questions":0,"by_system":{"hybrid_rerank_default":{"high":0,"medium":0},"agent_search_tools":{"high":0,"medium":0},"opencode_glm":{"high":0,"medium":0},"claude_code":{"high":0,"medium":0},"no_retrieval_floor":{"high":0,"medium":0},"codex":{"high":0,"medium":0}}},"questions":null,"reproducibility":{"manifest":{"ragbench_version":"0.3.0","python":"3.12.12","platform":"macOS-27.0.1-arm64-arm-64bit","dependencies":{"openai":"3.37.0","pandas":"3.1.0","numpy":"2.5.4","scikit-learn":"1.9.1","pydantic":"2.14.1","chromadb":"1.5.9","faiss-cpu":"1.15.1","qdrant-client":"1.19.1","rank-bm25":"0.2.2","tiktoken":"0.14.0","typer":"0.27.3","jinja2":"3.1.6"},"git_sha":"35bbfe20f74be28cdbcdf79883dff15ff6c2d17b","git_dirty":true,"config_hash":"9fdef040f9f40fd9f6d2088e64a806d943d22803820e568f4dd86a5551d3c6ac","dataset_hash":"bc328f5df5194f5ff6d5bdd602b0e290deeb193d7d0e6b05905409a882d51928","mode":"live","models_used":["claude-haiku-5-5","gpt-6-luna","text-embedding-3-small"],"seed":null,"started_utc":"2026-10-26T22:33:32Z","finished_utc":"2026-10-26T23:04:16Z"},"config_yaml":"# The agent harnesses of the published benchmark (docs/benchmarks/multihop-rag.md), on a stratified 150 of its questions: on this corpus\n# they cost 3-4x what they did on the demo, more than their share of the budget for 300. Three systems of configs/all_solutions.yaml run\n# next to them, configured identically, so the harnesses are compared with the built-ins on the same questions (the disk cache answers\n# those three for the 149 questions the subsets share).\n#\n#   ragbench datasets pull multihop-rag --subset 150 --seed 42 --output data/multihop-rag-150\n#   ragbench run --config configs/all_solutions_harnesses.yaml --mock\n#\n# A live run starts `claude`, `codex` and `opencode` (each with its own key or login); `ragbench estimate` cannot price them.\nrun:\n  name: all_solutions_harnesses_multihop\n  output_dir: results\n\ndataset:\n  documents_path: data/multihop-rag-150/docs\n  questions_path: data/multihop-rag-150/questions.jsonl\n  qrels_path: data/multihop-rag-150/qrels.jsonl\n\nsystems:\n  - type: no_retrieval\n    name: no_retrieval_floor\n    models:\n      generator: gpt-6-luna\n\n  - type: hybrid_rerank\n    name: hybrid_rerank_default\n    chunker:\n      type: word\n      chunk_size: 500\n      chunk_overlap: 80\n    retrieval:\n      vector_store: numpy\n      bm25_top_k: 20\n      vector_top_k: 20\n      candidate_top_k: 30\n      final_top_k: 5\n      rrf_k: 60\n      reranker: local_relevance\n      multi_query: true\n      max_query_variants: 4\n    models:\n      embedding: text-embedding-3-small\n      generator: gpt-6-luna\n\n  - type: agent_search\n    name: agent_search_tools\n    chunker:\n      type: word\n      chunk_size: 250\n      chunk_overlap: 40\n    retrieval:\n      retriever: hybrid\n      vector_store: numpy\n      max_steps: 5\n      max_cost_usd: 0.05\n      top_k: 5\n    tools: [calculator, date_calc, corpus_grep]\n    models:\n      embedding: text-embedding-3-small\n      generator: gpt-6-luna\n\n  - type: cli_agent\n    name: claude_code\n    retrieval:\n      preset: claude_code\n      model: anthropic:claude-haiku-5-5\n      max_steps: 20\n      timeout_s: 300\n      limits: {max_concurrent_requests: 2}\n\n  - type: cli_agent\n    name: codex\n    retrieval:\n      preset: codex\n      model: gpt-6-luna\n      max_steps: 20\n      timeout_s: 300\n      limits: {max_concurrent_requests: 2}\n\n  - type: cli_agent\n    name: opencode_glm\n    retrieval:\n      preset: opencode\n      model: openrouter:z-ai/glm-5.3\n      max_steps: 20\n      timeout_s: 300\n      limits: {max_concurrent_requests: 2}\n\nopenrouter:\n  provider:\n    data_collection: deny\n\nevaluation:\n  k_values: [1, 3, 5, 10]\n  judge_enabled: true\n  # Haiku 5.5 judges every answer, except those of its own family (claude_code), which gpt-6-luna judges: one judge per answer, never its own family.\n  judge:\n    panel: [anthropic:claude-haiku-5-5, gpt-6-luna]\n    independent: true\n    scorers: first\n  trials: 1\n  max_questions: null\n  max_workers: 4\n  max_cost_usd: 7.0   # the published run's cap, raised from 6.0 to finish (charged at standalone prices; Codex's tokens at API rates)\n  stats:\n    baseline: hybrid_rerank_default   # significance.csv: each harness against a built-in pipeline, on the same questions\n\n# MultiHop-RAG is ~1.4M tokens: indexing it at full concurrency can exceed OpenAI's lowest-tier limit of 1M embedding tokens per minute.\nlimits:\n  tokens_per_minute: 900000\n"}}</script>
+<script>
+/* RAGBench report behavior: theme, sortable leaderboard, column picker, heatmap metric toggle, tooltips, copy. Everything works without it except these
+   conveniences: every value is in the page's tables. No network, no external resources; data is inserted with textContent only. */
+(function () {
+  "use strict";
+  var root = document.documentElement;
+  function store(key, value) {
+    try {
+      if (value === undefined) return window.localStorage.getItem(key);
+      window.localStorage.setItem(key, value);
+    } catch (e) { /* private mode or blocked storage: the report works without remembering */ }
+    return null;
+  }
+
+  // ---- theme: auto (follow the OS) -> light -> dark ----
+  var themeButton = document.getElementById("theme-toggle");
+  function applyTheme(mode) {
+    if (mode === "light" || mode === "dark") root.setAttribute("data-theme", mode); else root.removeAttribute("data-theme");
+    if (themeButton) { themeButton.textContent = "Theme: " + (mode === "light" || mode === "dark" ? mode : "auto"); themeButton.setAttribute("aria-pressed", mode === "light" || mode === "dark" ? "true" : "false"); }
+  }
+  var saved = store("ragbench-report-theme");
+  applyTheme(saved === "light" || saved === "dark" ? saved : "auto");
+  if (themeButton) themeButton.addEventListener("click", function () {
+    var now = root.getAttribute("data-theme") || "auto";
+    var next = now === "auto" ? "light" : now === "light" ? "dark" : "auto";
+    applyTheme(next); store("ragbench-report-theme", next);
+  });
+
+  // ---- leaderboard: sort ----
+  var table = document.getElementById("leaderboard");
+  if (table) {
+    var tbody = table.tBodies[0];
+    Array.prototype.forEach.call(table.querySelectorAll("th button[data-sort]"), function (button) {
+      button.addEventListener("click", function () {
+        var th = button.closest("th");
+        var index = Array.prototype.indexOf.call(th.parentNode.children, th);
+        var numeric = button.getAttribute("data-kind") === "num";
+        var ascending = th.getAttribute("aria-sort") !== "ascending";
+        Array.prototype.forEach.call(th.parentNode.children, function (other) { other.removeAttribute("aria-sort"); });
+        th.setAttribute("aria-sort", ascending ? "ascending" : "descending");
+        var rows = Array.prototype.slice.call(tbody.rows);
+        rows.sort(function (a, b) {
+          var av = a.cells[index], bv = b.cells[index];
+          if (numeric) {
+            var x = parseFloat(av.getAttribute("data-value")), y = parseFloat(bv.getAttribute("data-value"));
+            var xn = isNaN(x), yn = isNaN(y);
+            if (xn || yn) return xn === yn ? 0 : xn ? 1 : -1; // missing values sink whichever way it is sorted
+            return (x - y) * (ascending ? 1 : -1);
+          }
+          return av.textContent.trim().toLowerCase().localeCompare(bv.textContent.trim().toLowerCase()) * (ascending ? 1 : -1);
+        });
+        rows.forEach(function (row) { tbody.appendChild(row); });
+      });
+    });
+
+    // ---- leaderboard: column picker ----
+    var boxes = document.querySelectorAll("#column-picker input[type=checkbox]");
+    var remembered = null;
+    try { remembered = JSON.parse(store("ragbench-report-columns") || "null"); } catch (e) { remembered = null; }
+    function showColumns() {
+      var visible = {};
+      Array.prototype.forEach.call(boxes, function (box) { visible[box.value] = box.checked; });
+      Array.prototype.forEach.call(table.querySelectorAll("[data-col]"), function (cell) { cell.hidden = !visible[cell.getAttribute("data-col")]; });
+    }
+    Array.prototype.forEach.call(boxes, function (box) {
+      if (remembered && Object.prototype.hasOwnProperty.call(remembered, box.value)) box.checked = !!remembered[box.value];
+      box.addEventListener("change", function () {
+        showColumns();
+        var state = {};
+        Array.prototype.forEach.call(boxes, function (b) { state[b.value] = b.checked; });
+        store("ragbench-report-columns", JSON.stringify(state));
+      });
+    });
+    showColumns();
+  }
+
+  // ---- heatmap metric toggle ----
+  var toggles = document.querySelectorAll("[data-heat-button]");
+  Array.prototype.forEach.call(toggles, function (button) {
+    button.addEventListener("click", function () {
+      var which = button.getAttribute("data-heat-button");
+      Array.prototype.forEach.call(toggles, function (other) { other.setAttribute("aria-pressed", other === button ? "true" : "false"); });
+      Array.prototype.forEach.call(document.querySelectorAll("[data-heat]"), function (panel) { panel.hidden = panel.getAttribute("data-heat") !== which; });
+    });
+  });
+
+  // ---- tooltips on chart marks (hover and keyboard focus) ----
+  var tip = document.createElement("div");
+  tip.className = "tip"; tip.setAttribute("role", "tooltip"); tip.id = "chart-tip";
+  document.body.appendChild(tip);
+  Array.prototype.forEach.call(document.querySelectorAll(".chart .mark > title"), function (node) { node.parentNode.removeChild(node); });
+  function showTip(text, x, y) {
+    tip.textContent = text; tip.classList.add("on");
+    var box = tip.getBoundingClientRect();
+    var left = Math.min(Math.max(8, x + 14), window.innerWidth - box.width - 8);
+    var top = y + 18 + box.height > window.innerHeight ? y - box.height - 12 : y + 18;
+    tip.style.left = left + "px"; tip.style.top = Math.max(8, top) + "px";
+  }
+  function hideTip() { tip.classList.remove("on"); }
+  document.addEventListener("pointermove", function (event) {
+    var mark = event.target.closest ? event.target.closest(".chart .mark[data-tip]") : null;
+    if (mark) showTip(mark.getAttribute("data-tip"), event.clientX, event.clientY); else hideTip();
+  });
+  document.addEventListener("focusin", function (event) {
+    var mark = event.target.closest ? event.target.closest(".chart .mark[data-tip]") : null;
+    if (!mark) return;
+    var box = mark.getBoundingClientRect();
+    showTip(mark.getAttribute("data-tip"), box.left + box.width / 2, box.top + box.height / 2);
+  });
+  document.addEventListener("focusout", hideTip);
+  document.addEventListener("keydown", function (event) { if (event.key === "Escape") hideTip(); });
+  window.addEventListener("scroll", hideTip, true);
+
+  // ---- copy winner.yaml ----
+  var copy = document.getElementById("copy-yaml");
+  var source = document.getElementById("winner-yaml");
+  if (copy && source) copy.addEventListener("click", function () {
+    var done = function (ok) { copy.textContent = ok ? "Copied" : "Press Ctrl/Cmd+C"; window.setTimeout(function () { copy.textContent = "Copy"; }, 1800); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(source.textContent).then(function () { done(true); }, function () { selectText(); done(false); });
+    } else { selectText(); done(false); }
+    function selectText() { var range = document.createRange(); range.selectNodeContents(source); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range); }
+  });
+
+  // ---- printing: open the table views so the numbers are on paper ----
+  window.addEventListener("beforeprint", function () {
+    Array.prototype.forEach.call(document.querySelectorAll("details.tableview, details.more"), function (d) { d.setAttribute("open", ""); });
+  });
+})();
+
+/* Question explorer: filter, search and expand every question, systems side by side. Data comes from the embedded #questions-data (and, when the page
+   is served over http and the embed was cut down, from report_questions.json). Everything is inserted with textContent: answers and contexts are
+   untrusted text. */
+(function () {
+  "use strict";
+  var holder = document.getElementById("questions-data");
+  var table = document.getElementById("q-table");
+  if (!holder || !table) return;
+  var data;
+  try { data = JSON.parse(holder.textContent); } catch (e) { return; }
+  var tbody = table.tBodies[0];
+  var PAGE = 50;
+  var shown = PAGE, focusIndex = 0, openId = null, visible = [];
+  var JUDGE_LABELS = { correctness: "Correctness", faithfulness: "Faithfulness", completeness: "Completeness", relevance: "Relevance", citation_quality: "Citations" };
+  var MARK_LABELS = { relevant: "labeled relevant", judged_good: "likely relevant (unlabeled)" };
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined && text !== null) node.textContent = text;
+    return node;
+  }
+  function num(value, digits) { return value === null || value === undefined ? "—" : Number(value).toFixed(digits === undefined ? 2 : digits); }
+  function money(value) { return value === null || value === undefined ? "—" : value === 0 ? "$0" : value >= 1 ? "$" + value.toFixed(2) : "$" + value.toFixed(5); }
+  function failureName(key) { return (data.failure_names && data.failure_names[key]) || String(key).replace(/_/g, " "); }
+  function runFailure(run) { return run.error ? "run_error" : run.failure; }
+  function bucket(score) { return Math.max(0, Math.min(6, Math.round((score / 5) * 6))); }
+  function metricValue(run, metric) {
+    if (run.error) return null;
+    if (metric === "score") return run.score;
+    return run.judge ? run.judge[metric] : null;
+  }
+  function systemIndex(name) { return data.systems.indexOf(name); }
+
+  // ---- filters ----
+  var search = $("q-search"), category = $("q-category"), system = $("q-system"), failure = $("q-failure");
+  var metric = $("q-metric"), below = $("q-below"), disagree = $("q-disagree"), count = $("q-count");
+  function fillOptions() {
+    var cats = {}, fails = {};
+    data.questions.forEach(function (q) {
+      cats[q.cat] = (cats[q.cat] || 0) + 1;
+      q.runs.forEach(function (run) { fails[runFailure(run)] = true; });
+    });
+    function reset(select, first) {
+      var keep = select.value;
+      while (select.options.length > 1) select.remove(1);
+      select.options[0].textContent = first;
+      return keep;
+    }
+    var keepCat = reset(category, "All"), keepSys = reset(system, "All systems"), keepFail = reset(failure, "Any");
+    Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a] || (a < b ? -1 : 1); }).forEach(function (c) { category.add(new Option(c + " (" + cats[c] + ")", c)); });
+    data.systems.forEach(function (name) { system.add(new Option(name, name)); });
+    Object.keys(fails).sort().forEach(function (f) { failure.add(new Option(failureName(f), f)); });
+    category.value = keepCat; system.value = keepSys; failure.value = keepFail;
+    disagree.parentNode.title = "The best and worst answer scores for this question are at least " + data.disagree_spread + " points apart";
+  }
+  function haystack(q) {
+    if (q._hay === undefined) q._hay = [q.id, q.q, q.cat, q.ref || ""].concat(q.runs.map(function (r) { return r.answer; })).join("\n").toLowerCase();
+    return q._hay;
+  }
+  function filtered() {
+    var text = search.value.trim().toLowerCase();
+    var limit = below.value === "" ? null : parseFloat(below.value);
+    var only = system.value === "" ? -1 : systemIndex(system.value);
+    return data.questions.filter(function (q) {
+      if (category.value && q.cat !== category.value) return false;
+      var runs = only < 0 ? q.runs : q.runs.filter(function (r) { return r.s === only; });
+      if (!runs.length) return false;
+      if (failure.value && !runs.some(function (r) { return runFailure(r) === failure.value; })) return false;
+      if (limit !== null && !isNaN(limit) && !runs.some(function (r) { var v = metricValue(r, metric.value); return v !== null && v !== undefined && v < limit; })) return false;
+      if (disagree.checked && !(q.spread !== null && q.spread >= data.disagree_spread)) return false;
+      return !text || haystack(q).indexOf(text) >= 0;
+    });
+  }
+
+  // ---- the table ----
+  function chip(run) {
+    var name = data.systems[run.s];
+    var node = el("span", "q-chip " + (run.error ? "err" : run.score === null ? "na" : "sc-" + bucket(run.score)) + (runFailure(run) !== "no_failure" ? " failed" : ""), run.error ? "err" : num(run.score, 1));
+    var label = name + ": " + (run.error ? "error" : "score " + num(run.score, 1)) + (runFailure(run) !== "no_failure" ? " (" + failureName(runFailure(run)) + ")" : "");
+    node.title = label; node.setAttribute("aria-label", label);
+    return node;
+  }
+  function rowFor(q, index) {
+    var tr = el("tr", "q-row");
+    tr.tabIndex = index === focusIndex ? 0 : -1;
+    tr.setAttribute("data-id", q.id); tr.setAttribute("data-index", String(index));
+    tr.setAttribute("aria-expanded", q.id === openId ? "true" : "false");
+    tr.appendChild(el("td", "mono q-id", q.id));
+    var text = el("td", "q-text"); text.appendChild(el("span", null, q.q)); tr.appendChild(text);
+    tr.appendChild(el("td", "q-cat", q.cat));
+    var chips = el("td", "q-chips");
+    q.runs.slice().sort(function (a, b) { return a.s - b.s; }).forEach(function (run) { chips.appendChild(chip(run)); });
+    tr.appendChild(chips);
+    tr.appendChild(el("td", "n q-spread" + (q.spread !== null && q.spread >= data.disagree_spread ? " wide" : ""), num(q.spread, 1)));
+    return tr;
+  }
+  function render() {
+    visible = filtered();
+    var matching = visible.length;
+    visible = visible.slice(0, shown);
+    if (focusIndex >= visible.length) focusIndex = 0;
+    while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+    visible.forEach(function (q, index) {
+      tbody.appendChild(rowFor(q, index));
+      if (q.id === openId) tbody.appendChild(detailRow(q));
+    });
+    if (!visible.length) {
+      var tr = el("tr"), td = el("td", "empty", "No question matches these filters."); td.colSpan = 5; tr.appendChild(td); tbody.appendChild(tr);
+    }
+    var more = $("q-more");
+    more.hidden = matching <= visible.length;
+    more.textContent = "Show " + Math.min(PAGE, matching - visible.length) + " more";
+    count.textContent = matching + " of " + data.questions.length + " questions match" + (data.total > data.questions.length ? " (" + data.total + " in the run; see the note above)" : "") + ".";
+  }
+
+  // ---- one question, systems side by side ----
+  function section(title, open) {
+    var d = el("details", "q-sec"); if (open) d.open = true;
+    d.appendChild(el("summary", null, title));
+    return d;
+  }
+  function contextList(run) {
+    var list = el("ol", "q-ctx");
+    run.ctx.forEach(function (c) {
+      var li = el("li", "ctx " + (c.mark === "relevant" ? "relevant" : c.mark === "judged_good" ? "good" : "plain") + (c.in ? "" : " out"));
+      var head = el("div", "ctx-head");
+      head.appendChild(el("span", "mono", "#" + c.rank + " " + c.doc));
+      if (c.mark) head.appendChild(el("span", "badge", MARK_LABELS[c.mark]));
+      if (!c.in) head.appendChild(el("span", "badge", "not shown to the generator"));
+      var where = [c.page !== undefined ? "page " + c.page : "", c.heading || ""].filter(Boolean).join(" · ");
+      if (where) head.appendChild(el("span", "muted", where));
+      head.appendChild(el("span", "muted", "score " + num(c.score, 3)));
+      li.appendChild(head);
+      if (c.text) li.appendChild(el("p", "ctx-text", c.text));
+      list.appendChild(li);
+    });
+    return list;
+  }
+  function traceList(run) {
+    var total = run.steps.reduce(function (sum, s) { return sum + (s.ms || 0); }, 0) || 1;
+    var list = el("ol", "q-trace");
+    run.steps.forEach(function (s) {
+      var li = el("li", "step k-" + s.kind);
+      var head = el("div", "step-head");
+      head.appendChild(el("span", "kind", s.kind));
+      head.appendChild(el("span", "mono", s.name));
+      head.appendChild(el("span", "muted", num(s.ms, 1) + " ms" + (s.cost ? " · " + money(s.cost) : "") + (s.tokens ? " · " + s.tokens + " tokens" : "")));
+      li.appendChild(head);
+      var bar = el("span", "step-bar"); bar.style.width = Math.max(2, Math.round((100 * (s.ms || 0)) / total)) + "%"; bar.setAttribute("aria-hidden", "true");
+      li.appendChild(bar);
+      if (s.in) { var i = el("p", "step-io"); i.appendChild(el("b", null, "in ")); i.appendChild(document.createTextNode(s.in)); li.appendChild(i); }
+      if (s.out) { var o = el("p", "step-io"); o.appendChild(el("b", null, "out ")); o.appendChild(document.createTextNode(s.out)); li.appendChild(o); }
+      if (s.meta) {
+        var keys = Object.keys(s.meta);
+        if (keys.length) li.appendChild(el("p", "step-meta muted", keys.map(function (k) { return k + "=" + s.meta[k]; }).join("  ")));
+      }
+      list.appendChild(li);
+    });
+    return list;
+  }
+  function runCard(q, run) {
+    var card = el("article", "q-card");
+    card.setAttribute("aria-label", data.systems[run.s]);
+    var head = el("header", "q-card-head");
+    head.appendChild(el("h4", null, data.systems[run.s]));
+    head.appendChild(chip(run));
+    if (runFailure(run) !== "no_failure") head.appendChild(el("span", "badge failed", failureName(runFailure(run))));
+    if (run.route) head.appendChild(el("span", "badge", "route: " + run.route));
+    if (run.refused) head.appendChild(el("span", "badge", "refused"));
+    card.appendChild(head);
+    card.appendChild(el("p", "muted q-facts", num(run.latency_ms, 0) + " ms · " + money(run.cost) + " per question"));
+    if (run.error) { card.appendChild(el("p", "q-error", "This question raised an error: " + run.error)); return card; }
+    var answer = section("Answer", true);
+    answer.appendChild(el("p", "q-answer", run.answer || "(empty answer)"));
+    card.appendChild(answer);
+    if (run.judge) {
+      var judge = section("Judge", true), grid = el("dl", "q-judge");
+      Object.keys(JUDGE_LABELS).forEach(function (key) {
+        var cell = el("div"); cell.appendChild(el("dt", null, JUDGE_LABELS[key])); cell.appendChild(el("dd", null, num(run.judge[key], 1))); grid.appendChild(cell);
+      });
+      judge.appendChild(grid);
+      if (run.reasoning) judge.appendChild(el("p", "q-reason", run.reasoning));
+      if (run.judge_by) judge.appendChild(el("p", "muted", "judged by: " + run.judge_by));
+      card.appendChild(judge);
+    }
+    if (run.claims) {
+      var claims = section("Claims (" + (run.claims.rate === null ? "none checked" : num(run.claims.rate * 100, 0) + "% supported") + ")", true);
+      if (run.claims.unsupported.length) {
+        var list = el("ul", "q-claims");
+        run.claims.unsupported.forEach(function (text) { list.appendChild(el("li", "q-unsupported", text)); });
+        claims.appendChild(el("p", "muted", "Not supported by the context the generator was given:"));
+        claims.appendChild(list);
+      } else {
+        claims.appendChild(el("p", "muted", run.claims.total ? "Every checked claim is supported by the context." : "The answer makes no claims to check."));
+      }
+      card.appendChild(claims);
+    }
+    if (run.ctx) {
+      var ctx = section("Retrieved contexts (" + run.ctx.length + ")", true);
+      ctx.appendChild(run.ctx.length ? contextList(run) : el("p", "muted", "This system retrieved nothing."));
+      card.appendChild(ctx);
+    }
+    if (run.steps) {
+      var trace = section("Trace (" + run.steps.length + " steps)", true);
+      if (run.agent) trace.appendChild(el("p", "muted", Object.keys(run.agent).map(function (k) { return k + "=" + run.agent[k]; }).join("  ")));
+      trace.appendChild(run.steps.length ? traceList(run) : el("p", "muted", "No steps were recorded."));
+      card.appendChild(trace);
+    } else {
+      card.appendChild(el("p", "muted", "Contexts and trace are not embedded in this copy of the page."));
+    }
+    return card;
+  }
+  function detailRow(q) {
+    var tr = el("tr", "q-detail-row"), td = el("td"); td.colSpan = 5;
+    var box = el("div", "q-detail");
+    box.appendChild(el("h3", null, q.q));
+    var facts = el("dl", "q-ref");
+    function fact(label, value) { if (!value) return; var d = el("div"); d.appendChild(el("dt", null, label)); d.appendChild(el("dd", null, value)); facts.appendChild(d); }
+    fact("Reference answer", q.unanswerable ? "(unanswerable: the right behavior is to say so)" : q.ref);
+    fact("Relevant documents", q.rel.length ? q.rel.join(", ") : "none labeled");
+    fact("Category", q.cat + (q.diff ? " · " + q.diff : ""));
+    fact("Needs tools", q.tools ? q.tools.join(", ") : "");
+    fact("Routing hint", q.hint);
+    box.appendChild(facts);
+    var grid = el("div", "q-systems");
+    q.runs.slice().sort(function (a, b) { return a.s - b.s; }).forEach(function (run) { grid.appendChild(runCard(q, run)); });
+    grid.tabIndex = 0; grid.setAttribute("role", "region"); grid.setAttribute("aria-label", "Systems side by side");
+    box.appendChild(grid);
+    td.appendChild(box); tr.appendChild(td);
+    return tr;
+  }
+  function rowAt(index) { return tbody.querySelector('.q-row[data-index="' + index + '"]'); }
+  function setOpen(id) {
+    var index = visible.findIndex(function (q) { return q.id === id; });
+    openId = openId === id ? null : id;
+    if (index >= 0) focusIndex = index;
+    render();
+    var row = rowAt(focusIndex);
+    if (row) row.focus();
+  }
+  function moveFocus(to) {
+    if (to >= visible.length && $("q-more").hidden === false) { shown += PAGE; render(); }
+    to = Math.max(0, Math.min(to, visible.length - 1));
+    var old = rowAt(focusIndex), next = rowAt(to);
+    if (old) old.tabIndex = -1;
+    if (next) { next.tabIndex = 0; next.focus(); focusIndex = to; }
+  }
+
+  tbody.addEventListener("click", function (event) {
+    var row = event.target.closest ? event.target.closest(".q-row") : null;
+    if (row) setOpen(row.getAttribute("data-id"));
+  });
+  tbody.addEventListener("keydown", function (event) {
+    var row = event.target.classList && event.target.classList.contains("q-row") ? event.target : null;
+    if (row) {
+      var index = parseInt(row.getAttribute("data-index"), 10);
+      if (event.key === "ArrowDown") { event.preventDefault(); moveFocus(index + 1); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); moveFocus(index - 1); }
+      else if (event.key === "Home") { event.preventDefault(); moveFocus(0); }
+      else if (event.key === "End") { event.preventDefault(); moveFocus(visible.length - 1); }
+      else if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(row.getAttribute("data-id")); }
+      else if (event.key === "Escape" && openId) { event.preventDefault(); setOpen(openId); }
+    } else if (event.key === "Escape" && openId) {
+      event.preventDefault(); setOpen(openId); // close it, and put focus back on its row
+    }
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) return;
+    var tag = event.target && event.target.tagName;
+    if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA" || (event.target && event.target.isContentEditable)) return;
+    event.preventDefault(); search.focus(); search.select();
+  });
+  function refresh() { shown = PAGE; focusIndex = 0; render(); }
+  [search, below].forEach(function (input) { input.addEventListener("input", refresh); });
+  [category, system, failure, metric, disagree].forEach(function (input) { input.addEventListener("change", refresh); });
+  $("q-reset").addEventListener("click", function () {
+    search.value = ""; below.value = ""; category.value = ""; system.value = ""; failure.value = ""; metric.value = "score"; disagree.checked = false; openId = null; refresh();
+  });
+  $("q-more").addEventListener("click", function () { shown += PAGE; render(); });
+
+  // ---- a page that holds a reduced copy says so, and loads the complete data when it can ----
+  var note = $("q-note"), noteText = $("q-note-text");
+  function reducedNote() {
+    var parts = [];
+    if (data.questions.length < data.total) parts.push(data.questions.length + " of " + data.total + " questions");
+    if (data.detail !== "full") parts.push("reduced detail (" + (data.detail === "scores" ? "scores only" : "shorter text, no trace previews") + ")");
+    return "To stay under the size cap this page holds " + parts.join(" with ") + ". ";
+  }
+  if (data.file) {
+    note.hidden = false;
+    var http = /^https?:$/.test(window.location.protocol), fileName = data.file;
+    noteText.textContent = reducedNote() + (http ? "Loading everything from " + data.file + "…" : "Serve this folder over http (for example `python -m http.server`) to load all of it from " + data.file + ", or read per_question_results.jsonl.");
+    if (http && window.fetch) {
+      window.fetch(data.file).then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.json(); }).then(function (full) {
+        if (!full || !Array.isArray(full.questions) || !Array.isArray(full.systems)) throw new Error("unexpected data");
+        data = full; fillOptions(); render(); note.hidden = true; // everything is here now: nothing left to warn about
+      }).catch(function () { noteText.textContent = reducedNote() + "The complete data (" + fileName + ") could not be loaded."; });
+    }
+  }
+  fillOptions();
+  render();
+})();
+
+</script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 {
  "source": "https://openrouter.ai/api/v1/models",
- "fetched_at": "2026-10-24",
+ "fetched_at": "2026-10-26",
  "models": {
   "anthropic/claude-haiku-5.5": {
    "name": "Anthropic: Claude Haiku 5.5",
@@ -73,8 +73,8 @@
    "hugging_face_id": "deepseek-ai/DeepSeek-V4.1-Flash",
    "context_length": 1048576,
    "price": {
-    "input": 0.02,
-    "output": 1.0
+    "input": 0.0477,
+    "output": 0.1908
    },
    "supported_parameters": [
     "max_tokens",
@@ -201,8 +201,8 @@
    "hugging_face_id": "moonshotai/Kimi-K3",
    "context_length": 1048576,
    "price": {
-    "input": 0.239,
-    "output": 10.8
+    "input": 0.179,
+    "output": 20.0
    },
    "supported_parameters": [
     "max_tokens",
@@ -397,7 +397,7 @@
    "hugging_face_id": "zai-org/GLM-5.3",
    "context_length": 1048576,
    "price": {
-    "input": 0.079,
+    "input": 0.0699,
     "output": 1.4
    },
    "supported_parameters": [

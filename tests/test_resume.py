@@ -19,12 +19,16 @@ class Recorder(ProgressListener):
     def __init__(self) -> None:
         self.started: list[str] = []
         self.restored: list[str] = []
+        self.resumed: dict[str, tuple[int, int]] = {}
 
     def system_started(self, name: str, index: int, total: int) -> None:
         self.started.append(name)
 
     def system_restored(self, name: str, num_questions: int) -> None:
         self.restored.append(name)
+
+    def system_resumed(self, name: str, answered: int, total: int) -> None:
+        self.resumed[name] = (answered, total)
 
 
 def _config(root: Path, systems: list[dict] | None = None, **evaluation) -> Path:
@@ -132,13 +136,15 @@ def test_a_changed_dataset_invalidates_every_checkpoint(tmp_path):
     assert len(recorder.started) == 3 and recorder.restored == []
 
 
-def test_a_system_with_failed_questions_is_not_checkpointed_so_resuming_retries_it(tmp_path, monkeypatch):
+def test_a_system_with_failed_questions_keeps_its_good_answers_and_resuming_retries_only_the_failed_ones(tmp_path, monkeypatch):
     from ragbench.rag_systems.bm25_rag import BM25RAG
 
     original = BM25RAG.answer_question
     state = {"fail": True}
+    asked: list[str] = []
 
     def flaky(self, question, *args, **kwargs):
+        asked.append(question)
         if state["fail"] and "ClaimPilot" in question:
             raise RuntimeError("transient outage")
         return original(self, question, *args, **kwargs)
@@ -147,13 +153,21 @@ def test_a_system_with_failed_questions_is_not_checkpointed_so_resuming_retries_
     config = _config(tmp_path, max_error_rate=1.0)
     run_dir = tmp_path / "results" / "flaky"
     run_benchmark(config, force_mock=True, run_dir=run_dir)
-    assert {row["error"] is None for row in _rows(run_dir)["bm25"]} == {True, False}
-    assert not CheckpointStore(run_dir).path_for("bm25").exists() and CheckpointStore(run_dir).path_for("vector").exists()
+    first = _rows(run_dir)["bm25"]
+    assert {row["error"] is None for row in first} == {True, False}
+    store = CheckpointStore(run_dir)
+    assert not store.path_for("bm25").exists() and store.path_for("vector").exists()
+    partial = json.loads(store.path_for("bm25", partial=True).read_text())
+    assert [row["per_question"]["question_id"] for row in partial["results"]] == ["q1"]  # the good answer only; the failed one is retried
 
-    state["fail"] = False  # the outage is over
+    state["fail"], asked[:] = False, []  # the outage is over
     recorder = Recorder()
     run_benchmark(config, force_mock=True, run_dir=run_dir, progress=recorder)
-    assert recorder.started == ["bm25"] and all(row["error"] is None for row in _rows(run_dir)["bm25"])
+    assert recorder.started == ["bm25"] and recorder.resumed == {"bm25": (1, 2)}
+    assert asked == ["When does ClaimPilot ship?"]  # only the failed question was asked again
+    after = _rows(run_dir)["bm25"]
+    assert all(row["error"] is None for row in after) and after[0] == first[0]
+    assert store.path_for("bm25").exists() and not store.path_for("bm25", partial=True).exists()
 
 
 def test_an_unreadable_checkpoint_is_ignored_and_its_system_runs_again(tmp_path):
@@ -190,6 +204,87 @@ def test_the_spending_cap_counts_what_restored_systems_already_cost(tmp_path, mo
     assert stopped.value.spent_usd >= spent * 0.6 and "bm25_2" in stopped.value.incomplete
 
 
+def _paid_config(tmp_path: Path, monkeypatch, num_questions: int = 6) -> tuple[Path, dict]:
+    """One bm25 system on `num_questions` questions, priced by the paid fakes (offline, but charged like a live run)."""
+    from paid_fakes import PRICING
+    from paid_fakes import install as install_paid_fakes
+
+    install_paid_fakes(monkeypatch)
+    systems = [{"type": "bm25", "name": "bm25", "models": {"generator": "fake-paid-model"}, "chunker": {"type": "word", "chunk_size": 40, "chunk_overlap": 0}}]
+    config = _config(tmp_path, systems=systems, judge_model="fake-judge")
+    questions = [("How much does HarborShield cost?", "$200 per month.", "doc_001"), ("When does ClaimPilot ship?", "Q3.", "doc_002")]
+    write_jsonl(
+        tmp_path / "questions.jsonl",
+        [{"id": f"q{n}", "question": questions[n % 2][0], "reference_answer": questions[n % 2][1], "relevant_doc_ids": [questions[n % 2][2]]} for n in range(num_questions)],
+    )
+    raw = yaml.safe_load(config.read_text())
+    raw["pricing"], raw["cache"] = PRICING, {"enabled": False}
+    return config, raw
+
+
+def _count_questions(monkeypatch) -> list[str]:
+    """The ids of the questions the run answers (and pays for) from now on."""
+    from ragbench.evaluation import question_runner
+
+    asked: list[str] = []
+    original = question_runner.evaluate_question
+
+    def counting(system, system_config, question, *args, **kwargs):
+        asked.append(question.id)
+        return original(system, system_config, question, *args, **kwargs)
+
+    monkeypatch.setattr(question_runner, "evaluate_question", counting)
+    return asked
+
+
+def test_a_budget_stopped_system_resumes_from_the_questions_it_answered(tmp_path, monkeypatch):
+    from ragbench.evaluation.budget import BudgetExceededError
+
+    config, raw = _paid_config(tmp_path, monkeypatch)
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    full = run_benchmark(config)  # the price of the whole run, to set a cap that stops it partway
+    rows = _rows(full)["bm25"]
+    per_question = [float(row["cost"]["total_cost"]) for row in rows]
+    assert len(per_question) == 6 and min(per_question) > 0
+
+    raw["evaluation"]["max_cost_usd"] = sum(per_question) / 2  # about half of the answers
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    run_dir = tmp_path / "results" / "capped"
+    with pytest.raises(BudgetExceededError) as stopped:
+        run_benchmark(config, run_dir=run_dir)
+    answered = stopped.value.incomplete["bm25"]["answered"]
+    assert 0 < answered < 6
+    store = CheckpointStore(run_dir)
+    partial = json.loads(store.path_for("bm25", partial=True).read_text())
+    kept = [row["per_question"]["question_id"] for row in partial["results"]]
+    assert kept == [f"q{n}" for n in range(answered)] and not store.path_for("bm25").exists()
+    paid_before = stopped.value.spent_usd
+
+    # Resumed under the same cap: what the earlier attempt charged counts, so nothing new starts and the kept answers stay kept.
+    asked = _count_questions(monkeypatch)
+    with pytest.raises(BudgetExceededError) as again:
+        run_benchmark(config, run_dir=run_dir)
+    assert asked == [] and again.value.incomplete["bm25"]["answered"] == answered
+    assert again.value.spent_usd == pytest.approx(paid_before)
+    assert json.loads(store.path_for("bm25", partial=True).read_text())["results"] == partial["results"]
+    assert len(read_jsonl(run_dir / "per_question_partial.jsonl")) == answered
+
+    # With the cap raised, only the missing questions are asked, and the run finishes with the earlier answers in it.
+    raw["evaluation"]["max_cost_usd"] = sum(per_question) * 10
+    config.write_text(yaml.safe_dump(raw), encoding="utf-8")
+    recorder = Recorder()
+    run_benchmark(config, run_dir=run_dir, progress=recorder)
+    assert asked == [f"q{n}" for n in range(answered, 6)] and recorder.resumed == {"bm25": (answered, 6)}
+    resumed = _rows(run_dir)["bm25"]
+    assert [row["question_id"] for row in resumed] == [f"q{n}" for n in range(6)]
+    assert [row["answer"] for row in resumed] == [row["answer"] for row in rows]
+    assert resumed[:answered] == [row["per_question"] for row in partial["results"]]
+    assert store.path_for("bm25").exists() and not store.path_for("bm25", partial=True).exists()
+    assert not (run_dir / "per_question_partial.jsonl").exists()
+    spent = json.loads((run_dir / "run_summary.json").read_text())["budget"]["spent_usd"]
+    assert spent >= paid_before + sum(per_question[answered:]) - 1e-9  # the earlier attempt's answers count towards the run's spend
+
+
 def test_a_run_with_trials_resumes_from_its_checkpoints_and_a_changed_trial_count_reruns_everything(tmp_path):
     config, run_dir, _ = _first_run(tmp_path, trials=2)
     before = _rows(run_dir)
@@ -221,3 +316,18 @@ def test_a_changed_harness_prompt_invalidates_exactly_that_systems_checkpoint(tm
     assert again.started == ["vector"]
 
     assert sorted(again.restored) == ["bm25", "hybrid"]
+
+
+def test_ragbench_run_resumes_in_the_directory_given_by_run_dir(tmp_path):
+    from typer.testing import CliRunner
+
+    from ragbench.cli import app
+
+    config = _config(tmp_path)
+    run_dir = tmp_path / "results" / "published"
+    first = CliRunner().invoke(app, ["run", "--config", str(config), "--mock", "--run-dir", str(run_dir)])
+    assert first.exit_code == 0, first.output
+    assert len(list((run_dir / CHECKPOINT_DIR).glob("*.json"))) == 3
+    second = CliRunner().invoke(app, ["run", "--config", str(config), "--mock", "--run-dir", str(run_dir)])
+    assert second.exit_code == 0, second.output
+    assert "restored from the earlier attempt" in second.output

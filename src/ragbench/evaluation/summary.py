@@ -123,7 +123,7 @@ def judge_notices(judge: JudgePanel | None, generators: dict[str, str | None], s
     if judge.independent:
         for name, generator in generators.items():
             family = model_family(generator)
-            if all(model_family(ref) == family for ref in scoring_judges(judge.refs, generator, independent=True)):
+            if all(model_family(ref) == family for ref in scoring_judges(judge.refs, generator, independent=True, first=judge.first)):
                 same_family.append(name)
     label = f"the judge ({judge.refs[0]})" if not judge.is_panel else f"every judge on the panel ({', '.join(judge.refs)})"
     fallbacks = {row["system"]: row["judge_fallback_rate"] for row in summary_rows if (row.get("judge_fallback_rate") or 0) > 0}

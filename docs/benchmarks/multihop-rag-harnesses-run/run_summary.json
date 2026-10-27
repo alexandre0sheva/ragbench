@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "run_id": "all_solutions_harnesses_multihop",
+  "mode": "live",
+  "models_used": [
+    "claude-haiku-5-5",
+    "gpt-6-luna",
+    "text-embedding-3-small"
+  ],
+  "unknown_priced_models": [],
+  "pricing_as_of": "2026-10-24",
+  "run_wall_time_ms": 1843388.9651249629,
+  "max_workers": 4,
+  "execution": {
+    "max_workers": 4,
+    "system_workers": 3,
+    "ingest_workers": 4,
+    "latency_probe_questions": 5,
+    "latency_source": "probe",
+    "probe_calls": 10,
+    "probe_cost_usd": 0.1079497858
+  },
+  "num_systems": 6,
+  "budget": {
+    "max_cost_usd": 7.0,
+    "spent_usd": 6.714548973699999,
+    "stopped": false,
+    "completed_systems": [
+      "no_retrieval_floor",
+      "hybrid_rerank_default",
+      "agent_search_tools",
+      "claude_code",
+      "codex",
+      "opencode_glm"
+    ],
+    "incomplete_systems": {}
+  },
+  "num_question_rows": 900,
+  "num_errors": 1,
+  "errors_by_system": {
+    "opencode_glm": 1
+  },
+  "k_values": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "retrieval_depth": 10,
+  "context_k": 5,
+  "primary_k": 5,
+  "embedding_cache": {
+    "hits": 0,
+    "misses": 0,
+    "saved_cost_usd": 0.0
+  },
+  "cache": {
+    "enabled": true,
+    "path": ".ragbench_cache/cache.sqlite3",
+    "hits": 0,
+    "misses": 299,
+    "hit_rate": 0.0,
+    "saved_cost_usd": 0.0,
+    "by_namespace": {
+      "llm": {
+        "hits": 0,
+        "misses": 299,
+        "saved_cost_usd": 0.0
+      }
+    },
+    "size_bytes": 1340104096,
+    "charged_cost_usd": 6.606599187900001,
+    "real_spend_usd": 6.7145489737
+  },
+  "dataset": {
+    "questions": 150,
+    "labeled_questions": 132,
+    "label_free": false,
+    "synthetic_questions": 0,
+    "needs_review_questions": 0,
+    "mock_questions": 0
+  },
+  "notices": [],
+  "judge": {
+    "models": [
+      "anthropic:claude-haiku-5-5",
+      "gpt-6-luna"
+    ],
+    "aggregate": "mean",
+    "independent": true,
+    "agreement": {},
+    "scorers": "first"
+  },
+  "dataset_warnings": [],
+  "document_warnings": [],
+  "outputs": {
+    "leaderboard": "leaderboard.md",
+    "report": "report.html",
+    "qrels_audit": "qrels_audit.md",
+    "stats": "stats.json",
+    "significance": "significance.csv",
+    "pareto": "pareto.json",
+    "stages": "stages.json",
+    "recommendation": "recommendation.md"
+  }
+}

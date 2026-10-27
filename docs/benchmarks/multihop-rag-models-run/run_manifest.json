@@ -1,0 +1,94 @@
+{
+  "ragbench_version": "0.3.0",
+  "python": "3.12.12",
+  "platform": "macOS-27.0.1-arm64-arm-64bit",
+  "dependencies": {
+    "openai": "3.37.0",
+    "pandas": "3.1.0",
+    "numpy": "2.5.4",
+    "scikit-learn": "1.9.1",
+    "pydantic": "2.14.1",
+    "chromadb": "1.5.9",
+    "faiss-cpu": "1.15.1",
+    "qdrant-client": "1.19.1",
+    "rank-bm25": "0.2.2",
+    "tiktoken": "0.14.0",
+    "typer": "0.27.3",
+    "jinja2": "3.1.6"
+  },
+  "git_sha": "35bbfe20f74be28cdbcdf79883dff15ff6c2d17b",
+  "git_dirty": true,
+  "config_hash": "04ec7e19baa86c9eab21824caab26c578104843541d0fc792c3e11ab529b9a0c",
+  "dataset_hash": "343260f2e03eea186fcf95cc34a732a0416a7a6391ef65cb17c578574072c2f7",
+  "mode": "live",
+  "models_used": [
+    "claude-haiku-5-5",
+    "gpt-6-luna",
+    "openrouter:deepseek/deepseek-v4.1-flash",
+    "openrouter:minimax/minimax-m3",
+    "openrouter:moonshotai/kimi-k3",
+    "openrouter:qwen/qwen3.8-flash",
+    "openrouter:xiaomi/mimo-v2.6-pro",
+    "openrouter:z-ai/glm-5.3",
+    "text-embedding-3-small"
+  ],
+  "model_settings": {
+    "openrouter:deepseek/deepseek-v4.1-flash": {
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "provider": {
+        "data_collection": "deny"
+      }
+    },
+    "openrouter:minimax/minimax-m3": {
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "provider": {
+        "data_collection": "deny"
+      }
+    },
+    "openrouter:moonshotai/kimi-k3": {
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "provider": {
+        "data_collection": "deny"
+      }
+    },
+    "openrouter:qwen/qwen3.8-flash": {
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "provider": {
+        "data_collection": "deny"
+      }
+    },
+    "openrouter:xiaomi/mimo-v2.6-pro": {
+      "reasoning": {
+        "effort": "none",
+        "exclude": true
+      },
+      "provider": {
+        "data_collection": "deny"
+      }
+    },
+    "openrouter:z-ai/glm-5.3": {
+      "reasoning": {
+        "effort": "low",
+        "exclude": true
+      },
+      "provider": {
+        "data_collection": "deny"
+      }
+    }
+  },
+  "seed": null,
+  "started_utc": "2026-10-26T23:05:54Z",
+  "finished_utc": "2026-10-26T23:10:54Z"
+}

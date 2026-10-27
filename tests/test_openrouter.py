@@ -65,7 +65,7 @@ def test_bundled_snapshot_prices_the_shortlist_offline():
     for model in ("deepseek/deepseek-v4.1-flash", "z-ai/glm-5.3", "moonshotai/kimi-k3", "xiaomi/mimo-v2.6-pro", "qwen/qwen3.8-flash", "minimax/minimax-m3"):
         assert loaded.models[model].open_weights and loaded.models[model].supports_tools, model
         assert cost.price_known(f"openrouter:{model}"), model
-    assert cost.estimate_model_cost("openrouter:deepseek/deepseek-v4.1-flash", 1_000_000, 1_000_000) == pytest.approx(0.02 + 1.00)
+    assert cost.estimate_model_cost("openrouter:deepseek/deepseek-v4.1-flash", 1_000_000, 1_000_000) == pytest.approx(0.0477 + 0.1908)  # audited 2026-10-26
 
 
 def test_an_older_synced_file_does_not_shadow_the_bundled_snapshot(tmp_path, monkeypatch):

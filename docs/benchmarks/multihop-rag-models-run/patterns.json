@@ -1,0 +1,70 @@
+{
+  "questions": {
+    "comparison_query": 33,
+    "inference_query": 32,
+    "null_query": 12,
+    "temporal_query": 23
+  },
+  "answerable_score": {
+    "agent_search_tools[generator=anthropic:claude-haiku-5-5]": 3.893181818181818,
+    "agent_search_tools[generator=gpt-6-luna]": 3.2772727272727273,
+    "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]": 3.515909090909091,
+    "agent_search_tools[generator=openrouter:minimax/minimax-m3]": 3.3852272727272728,
+    "agent_search_tools[generator=openrouter:moonshotai/kimi-k3]": 2.9647727272727273,
+    "agent_search_tools[generator=openrouter:qwen/qwen3.8-flash]": 3.465909090909091,
+    "agent_search_tools[generator=openrouter:xiaomi/mimo-v2.6-pro]": 3.4761363636363636,
+    "agent_search_tools[generator=openrouter:z-ai/glm-5.3]": 3.5636363636363635,
+    "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]": 3.934090909090909,
+    "hybrid_rerank_default[generator=gpt-6-luna]": 3.528409090909091,
+    "hybrid_rerank_default[generator=openrouter:deepseek/deepseek-v4.1-flash]": 2.5738636363636362,
+    "hybrid_rerank_default[generator=openrouter:minimax/minimax-m3]": 3.3011363636363638,
+    "hybrid_rerank_default[generator=openrouter:moonshotai/kimi-k3]": 3.2818181818181817,
+    "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]": 3.3488636363636366,
+    "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]": 3.4693181818181817,
+    "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]": 3.4954545454545456,
+    "iterative_default[generator=anthropic:claude-haiku-5-5]": 3.7136363636363634,
+    "iterative_default[generator=gpt-6-luna]": 3.275,
+    "iterative_default[generator=openrouter:deepseek/deepseek-v4.1-flash]": 2.934090909090909,
+    "iterative_default[generator=openrouter:minimax/minimax-m3]": 3.4875,
+    "iterative_default[generator=openrouter:moonshotai/kimi-k3]": 3.4386363636363635,
+    "iterative_default[generator=openrouter:qwen/qwen3.8-flash]": 3.256818181818182,
+    "iterative_default[generator=openrouter:xiaomi/mimo-v2.6-pro]": 3.388863636363636,
+    "iterative_default[generator=openrouter:z-ai/glm-5.3]": 3.4284090909090907
+  },
+  "hard": {
+    "threshold": 4.0,
+    "none": 7,
+    "none_by_category": {
+      "comparison_query": 5,
+      "inference_query": 1,
+      "temporal_query": 1
+    }
+  },
+  "recall_buckets": [
+    {
+      "recall": "none",
+      "answers": 119,
+      "answer_score": 2.2176470588235295
+    },
+    {
+      "recall": "some",
+      "answers": 1043,
+      "answer_score": 3.40816874400767
+    },
+    {
+      "recall": "all",
+      "answers": 950,
+      "answer_score": 3.520421052631579
+    }
+  ],
+  "failures": {
+    "no_failure": 1237,
+    "insufficient_context": 434,
+    "answer_hallucination": 401,
+    "partial_answer": 110,
+    "retrieval_miss": 90,
+    "bad_reranking": 63,
+    "over_refusal": 57,
+    "possible_qrels_gap": 8
+  }
+}

@@ -47,13 +47,14 @@ def print_estimate(estimate: Estimate) -> None:
     for header in ("Ingestion", "Query", "Judge", "Total"):
         table.add_column(header, justify="right")
     for row in estimate.systems:
+        name = escape(row.system)  # a swept name's `[generator=...]` is not markup
         if row.error is not None:
-            table.add_row(row.system, "[red]could not be estimated[/red]", "", "", "")
+            table.add_row(name, "[red]could not be estimated[/red]", "", "", "")
             continue
         if row.external:
-            table.add_row(row.system, "[dim]external: not called[/dim]", "", "", "")
+            table.add_row(name, "[dim]external: not called[/dim]", "", "", "")
             continue
-        table.add_row(row.system + (" ~" if row.agentic else ""), money(row.ingestion_usd), money(row.query_usd), money(row.judge_usd), money(row.total_usd))
+        table.add_row(name + (" ~" if row.agentic else ""), money(row.ingestion_usd), money(row.query_usd), money(row.judge_usd), money(row.total_usd))
     if estimate.pairwise_calls:
         table.add_section()
         table.add_row(f"Pairwise judging ({estimate.pairwise_calls} calls)", "", "", money(estimate.pairwise_usd), money(estimate.pairwise_usd))
@@ -133,6 +134,9 @@ class _RichProgress(ProgressListener):
 
     def system_restored(self, name: str, num_questions: int) -> None:
         self.tasks[name] = self.progress.add_task(f"[bold]{name}[/bold] · restored from the earlier attempt", total=num_questions, completed=num_questions)
+
+    def system_resumed(self, name: str, answered: int, total: int) -> None:
+        self.progress.update(self.tasks[name], description=f"[bold]{name}[/bold] · {answered} answers kept from the earlier attempt · ingesting…", total=total, completed=answered)
 
 
 def execute_benchmark(
@@ -287,6 +291,9 @@ def run(
     system_workers: int | None = typer.Option(None, "--system-workers", min=1, help="Override evaluation.system_workers: systems evaluated at the same time."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache for this run."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd."),
+    run_dir: Path | None = typer.Option(
+        None, "--run-dir", help="Write the run into this directory instead of a new timestamped one. Running into it again resumes: systems that finished are kept, unfinished ones keep their answers and run only the missing or failed questions."
+    ),
     as_json: bool = typer.Option(False, "--json", help=_JSON_HELP),
 ) -> None:
     """Run a config: every system on the same questions, then the report and a recommendation."""
@@ -294,7 +301,7 @@ def run(
         console.print("[yellow]`ragbench evaluate` is deprecated and will be removed; use `ragbench run` (same options).[/yellow]")
     with json_output(as_json):
         path, raw = resolve_config(config, preset, docs, questions, qrels, only, skip)
-        output_dir = execute_benchmark(path, mock, max_workers, _DONE.get(ctx.info_name or "run", "Run complete."), use_cache=not no_cache, system_workers=system_workers, raw_config=raw, yes=yes)
+        output_dir = execute_benchmark(path, mock, max_workers, _DONE.get(ctx.info_name or "run", "Run complete."), use_cache=not no_cache, system_workers=system_workers, raw_config=raw, yes=yes, run_dir=run_dir)
     if as_json:
         print_json(describe_run(output_dir))
 

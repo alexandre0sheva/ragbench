@@ -20,6 +20,9 @@ class ProgressListener:
 
     def system_restored(self, name: str, num_questions: int) -> None: ...
 
+    def system_resumed(self, name: str, answered: int, total: int) -> None:
+        """`name` started with `answered` of its `total` answers kept from an earlier attempt (its partial checkpoint)."""
+
 
 class SerializedProgress(ProgressListener):
     """Forwards every hook to `inner` under one lock, so listeners never have to be thread-safe themselves.
@@ -58,3 +61,7 @@ class SerializedProgress(ProgressListener):
     def system_restored(self, name: str, num_questions: int) -> None:
         with self._lock:
             self._inner.system_restored(name, num_questions)
+
+    def system_resumed(self, name: str, answered: int, total: int) -> None:
+        with self._lock:
+            self._inner.system_resumed(name, answered, total)

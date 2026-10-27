@@ -23,24 +23,28 @@ if TYPE_CHECKING:
 AGREEMENT_AXES = (*SCORE_AXES, "answer_score")
 
 
-def scoring_judges(judges: list[str], generator: str | None, *, independent: bool) -> list[str]:
+def scoring_judges(judges: list[str], generator: str | None, *, independent: bool, first: bool = False) -> list[str]:
     """The judges that score answers from `generator`: all of them, minus its family's when `independent`. When every judge is of
-    the generator's family nobody else could score those answers, so all of them do (and the report says so)."""
-    if not independent:
-        return list(judges)
-    family = model_family(generator)
-    others = [judge for judge in judges if model_family(judge) != family]
-    return others or list(judges)
+    the generator's family nobody else could score those answers, so all of them do (and the report says so). With `first`
+    (`scorers: first`) only the first of those, in panel order, scores."""
+    chosen = list(judges)
+    if independent:
+        family = model_family(generator)
+        chosen = [judge for judge in judges if model_family(judge) != family] or chosen
+    return chosen[:1] if first else chosen
 
 
 class JudgePanel:
     """The run's judges, one `AnswerJudge` per model ref in `refs` (in the same order)."""
 
-    def __init__(self, judges: list[AnswerJudge], refs: list[str], *, independent: bool, aggregate: Literal["mean", "median"] = "mean"):
+    def __init__(
+        self, judges: list[AnswerJudge], refs: list[str], *, independent: bool, aggregate: Literal["mean", "median"] = "mean", first: bool = False
+    ):
         self.judges = dict(zip(refs, judges, strict=True))
         self.refs = list(refs)
         self.independent = independent
         self.aggregate = aggregate
+        self.first = first
 
     @classmethod
     def from_config(cls, evaluation: EvaluationConfig, force_mock: bool) -> JudgePanel:
@@ -50,7 +54,7 @@ class JudgePanel:
             AnswerJudge(model_name=ref, enabled=evaluation.judge_enabled, force_mock=force_mock, samples=evaluation.judge.samples, temperature=evaluation.judge.temperature)
             for ref in refs
         ]
-        return cls(judges, refs, independent=evaluation.judge.independent, aggregate=evaluation.judge.aggregate)
+        return cls(judges, refs, independent=evaluation.judge.independent, aggregate=evaluation.judge.aggregate, first=evaluation.judge.scorers == "first")
 
     @property
     def lead(self) -> AnswerJudge:
@@ -81,7 +85,7 @@ class JudgePanel:
         """
         if not self.is_panel:
             return self.lead.judge(question, answer, contexts)
-        chosen = scoring_judges(self.refs, generator, independent=self.independent)
+        chosen = scoring_judges(self.refs, generator, independent=self.independent, first=self.first)
         verdicts = {ref: self.judges[ref].judge(question, answer, contexts) for ref in chosen}
         usable = {ref: verdict for ref, verdict in verdicts.items() if not verdict.metadata.get("fallback")}
         cost = CostBreakdown()

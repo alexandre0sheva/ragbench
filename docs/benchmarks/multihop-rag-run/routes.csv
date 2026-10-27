@@ -1,0 +1,5 @@
+system,route,questions,share,avg_answer_score,avg_cost_per_question,precision,recall
+adaptive_default,default,165,0.55,3.563030303030303,0.000764706787878788,,
+adaptive_default,multi_hop,108,0.36,3.6722222222222225,0.0008397742592592593,,
+adaptive_default,lexical,15,0.05,3.44,0.0007944466666666667,,
+adaptive_default,computation,12,0.04,2.858333333333333,0.0028282483333333334,,

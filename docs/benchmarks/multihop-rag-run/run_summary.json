@@ -1,0 +1,143 @@
+{
+  "schema_version": 1,
+  "run_id": "all_solutions_multihop",
+  "mode": "live",
+  "models_used": [
+    "claude-haiku-5-5",
+    "gpt-6-luna",
+    "gpt-6.1-sol",
+    "text-embedding-3-small"
+  ],
+  "unknown_priced_models": [],
+  "pricing_as_of": "2026-10-24",
+  "run_wall_time_ms": 14832584.625624819,
+  "max_workers": 4,
+  "execution": {
+    "max_workers": 4,
+    "system_workers": 3,
+    "ingest_workers": 4,
+    "latency_probe_questions": 5,
+    "latency_source": "probe",
+    "probe_calls": 160,
+    "probe_cost_usd": 0.15421288
+  },
+  "num_systems": 32,
+  "budget": {
+    "max_cost_usd": 24.0,
+    "spent_usd": 21.76520084000012,
+    "stopped": false,
+    "completed_systems": [
+      "bm25_default",
+      "vector_default",
+      "hybrid_default",
+      "rerank_default",
+      "hybrid_rerank_default",
+      "hyde_default",
+      "parent_doc_default",
+      "llm_heavy_default",
+      "no_retrieval_floor",
+      "full_context_50k",
+      "sentence_window_default",
+      "vector_mmr",
+      "contextual_default",
+      "hierarchical_default",
+      "raptor_collapsed",
+      "compression_llm_extract",
+      "late_interaction_rerank",
+      "rag_fusion_default",
+      "decompose_default",
+      "corrective_default",
+      "iterative_default",
+      "agent_search_plain",
+      "agent_search_tools",
+      "grep_agent_default",
+      "adaptive_default",
+      "decision_gate_default",
+      "decision_gate_strict",
+      "graph_rag_local",
+      "graph_rag_global",
+      "langchain_default",
+      "llamaindex_default",
+      "haystack_default"
+    ],
+    "incomplete_systems": {}
+  },
+  "num_question_rows": 9600,
+  "num_errors": 0,
+  "errors_by_system": {},
+  "k_values": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "retrieval_depth": 10,
+  "context_k": 5,
+  "primary_k": 5,
+  "embedding_cache": {
+    "hits": 85358,
+    "misses": 125890,
+    "saved_cost_usd": 0.6416814599999812
+  },
+  "cache": {
+    "enabled": true,
+    "path": ".ragbench_cache/cache.sqlite3",
+    "hits": 22490,
+    "misses": 144206,
+    "hit_rate": 0.1349162547391659,
+    "saved_cost_usd": 0.4883491400000026,
+    "by_namespace": {
+      "decision": {
+        "hits": 0,
+        "misses": 1097,
+        "saved_cost_usd": 0.0
+      },
+      "embeddings": {
+        "hits": 21564,
+        "misses": 100657,
+        "saved_cost_usd": 0.15806964000000256
+      },
+      "llm": {
+        "hits": 926,
+        "misses": 42452,
+        "saved_cost_usd": 0.33027950000000006
+      }
+    },
+    "size_bytes": 1581944224,
+    "charged_cost_usd": 21.61098796,
+    "real_spend_usd": 20.635170240000015
+  },
+  "dataset": {
+    "questions": 300,
+    "labeled_questions": 264,
+    "label_free": false,
+    "synthetic_questions": 0,
+    "needs_review_questions": 0,
+    "mock_questions": 0
+  },
+  "notices": [
+    "The LLM judge returned an unusable verdict for some questions and the heuristic judge scored them instead: llamaindex_default (0%). Their answer scores mix two judges; see `judge_fallback_rate` in `metrics_summary.csv`."
+  ],
+  "judge": {
+    "models": [
+      "anthropic:claude-haiku-5-5",
+      "gpt-6-luna"
+    ],
+    "aggregate": "mean",
+    "independent": true,
+    "agreement": {},
+    "scorers": "first"
+  },
+  "dataset_warnings": [],
+  "document_warnings": [],
+  "outputs": {
+    "leaderboard": "leaderboard.md",
+    "report": "report.html",
+    "qrels_audit": "qrels_audit.md",
+    "stats": "stats.json",
+    "significance": "significance.csv",
+    "pareto": "pareto.json",
+    "stages": "stages.json",
+    "recommendation": "recommendation.md"
+  }
+}

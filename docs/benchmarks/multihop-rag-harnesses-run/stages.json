@@ -1,0 +1,164 @@
+[
+  {
+    "system": "no_retrieval_floor",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 2.8061333333333332e-05,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1402.2830586042255,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default",
+    "cost": {
+      "retrieve": 1.4532000000000001e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.000374212,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 662.2621083399281,
+      "rerank": 44.58644858095795,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1777.631171643734,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0014552773333333334,
+      "tool": 1.7572e-06,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0005969606666666666,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 7556.87167508062,
+      "tool": 1144.7922821094592,
+      "embed": 0.0,
+      "route": 0.05395023928334316,
+      "grade": 0.0,
+      "generate": 2434.195731692016,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "claude_code",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.009124943333333333,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.003990599333333333,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "codex",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.015243571000000001,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "opencode_glm",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.006879426661744967,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.002540298156375839,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  }
+]

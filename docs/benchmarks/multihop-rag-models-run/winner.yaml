@@ -1,0 +1,51 @@
+# The winner of all_solutions_models_multihop: 'hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]'. Run it with `ragbench run --config <this file>`.
+# `dataset:` is the benchmark's data; replace it with your production documents before deploying.
+run:
+  name: all_solutions_models_multihop_winner
+  output_dir: results
+dataset:
+  documents_path: data/multihop-rag-100/docs
+  questions_path: data/multihop-rag-100/questions.jsonl
+  qrels_path: data/multihop-rag-100/qrels.jsonl
+systems:
+- type: hybrid_rerank
+  name: hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]
+  chunker:
+    type: word
+    chunk_size: 500
+    chunk_overlap: 80
+  retrieval:
+    vector_store: numpy
+    bm25_top_k: 20
+    vector_top_k: 20
+    candidate_top_k: 30
+    final_top_k: 5
+    rrf_k: 60
+    reranker: local_relevance
+    multi_query: true
+    max_query_variants: 4
+  models:
+    embedding: text-embedding-3-small
+    generator: anthropic:claude-haiku-5-5
+openrouter:
+  provider:
+    data_collection: deny
+limits:
+  tokens_per_minute: 900000
+evaluation:
+  k_values:
+  - 1
+  - 3
+  - 5
+  - 10
+  judge_enabled: true
+  judge:
+    panel:
+    - anthropic:claude-haiku-5-5
+    - gpt-6-luna
+    independent: true
+    scorers: first
+  trials: 1
+  max_questions: null
+  max_workers: 4
+  max_cost_usd: 9.4

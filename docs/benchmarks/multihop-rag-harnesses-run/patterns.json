@@ -1,0 +1,53 @@
+{
+  "questions": {
+    "comparison_query": 50,
+    "inference_query": 48,
+    "null_query": 18,
+    "temporal_query": 34
+  },
+  "answerable_score": {
+    "agent_search_tools": 3.3143939393939394,
+    "claude_code": 3.506060606060606,
+    "codex": 2.778030303030303,
+    "hybrid_rerank_default": 3.559090909090909,
+    "no_retrieval_floor": 1.721969696969697,
+    "opencode_glm": 3.6234848484848485
+  },
+  "hard": {
+    "threshold": 4.0,
+    "none": 27,
+    "none_by_category": {
+      "comparison_query": 14,
+      "inference_query": 3,
+      "temporal_query": 10
+    }
+  },
+  "recall_buckets": [
+    {
+      "recall": "none",
+      "answers": 52,
+      "answer_score": 2.871153846153846
+    },
+    {
+      "recall": "some",
+      "answers": 298,
+      "answer_score": 3.370805369127517
+    },
+    {
+      "recall": "all",
+      "answers": 310,
+      "answer_score": 3.423548387096774
+    }
+  ],
+  "failures": {
+    "no_failure": 380,
+    "answer_hallucination": 343,
+    "over_refusal": 57,
+    "partial_answer": 51,
+    "insufficient_context": 51,
+    "bad_reranking": 9,
+    "retrieval_miss": 5,
+    "format_error": 3,
+    "run_error": 1
+  }
+}

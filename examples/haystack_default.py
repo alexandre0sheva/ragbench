@@ -9,11 +9,11 @@
           model: gpt-6-luna
 
 Needs `pip install 'ragbench[haystack]'`. The tutorial's defaults: a `DocumentSplitter` (200 words, no overlap), a document embedder into an
-`InMemoryDocumentStore`, and a query pipeline of text embedder, `InMemoryEmbeddingRetriever`, `PromptBuilder` and `OpenAIGenerator`. The model and the
-embeddings are the built-in systems' (`gpt-6-luna`, `text-embedding-3-small`); the retrieval depth is RAGBench's `top_k`, so the systems are compared at the same depth.
+`InMemoryDocumentStore`, and a query pipeline of text embedder, `InMemoryEmbeddingRetriever`, `ChatPromptBuilder` and `OpenAIChatGenerator` (Haystack 3
+dropped the plain `OpenAIGenerator`). The model and the embeddings are the built-in systems' (`gpt-6-luna`, `text-embedding-3-small`); the retrieval depth is RAGBench's `top_k`, so the systems are compared at the same depth.
 
 With no key, or without `RAGBENCH_REFERENCE_LIVE=1`, it runs on RAGBench's mock models (see `ragbench.adapters.offline`). Live, the generator is Haystack's own
-`OpenAIGenerator`; the embedders call RAGBench's client (the same `text-embedding-3-small` vectors), so indexing a large corpus honours the run's
+`OpenAIChatGenerator`; the embedders call RAGBench's client (the same `text-embedding-3-small` vectors), so indexing a large corpus honours the run's
 `limits.tokens_per_minute`, retries and embedding cache.
 """
 
@@ -23,9 +23,10 @@ from dataclasses import replace
 from typing import Any
 
 from haystack import Document, Pipeline, component
-from haystack.components.builders import PromptBuilder
+from haystack.components.builders import ChatPromptBuilder
 from haystack.components.preprocessors import DocumentSplitter
 from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
+from haystack.dataclasses import ChatMessage
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 
 from ragbench.adapters import offline
@@ -40,6 +41,7 @@ Context:
 {% endfor %}
 
 Question: {{ question }}"""
+PROMPT = [ChatMessage.from_user(TEMPLATE)]
 
 
 @component
@@ -78,11 +80,12 @@ def _ragbench_embed(texts: list[str]) -> list[list[float]]:
 
 
 @component
-class OfflineGenerator:
-    @component.output_types(replies=list[str], meta=list[dict[str, Any]])
-    def run(self, prompt: str) -> dict[str, Any]:
-        text, prompt_tokens, completion_tokens = offline.complete(prompt)
-        return {"replies": [text], "meta": [{"model": "ragbench-offline", "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}}]}
+class OfflineChatGenerator:
+    @component.output_types(replies=list[ChatMessage])
+    def run(self, messages: list[ChatMessage]) -> dict[str, Any]:
+        text, prompt_tokens, completion_tokens = offline.complete("\n\n".join(message.text or "" for message in messages))
+        usage = {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens}
+        return {"replies": [ChatMessage.from_assistant(text, meta={"model": "ragbench-offline", "usage": usage})]}
 
 
 _pipeline: Pipeline | None = None
@@ -91,13 +94,14 @@ _pipeline: Pipeline | None = None
 def ingest(documents: list[Any]) -> None:
     global _pipeline
     if offline.live():
-        from haystack.components.generators import OpenAIGenerator
+        from haystack.components.generators.chat import OpenAIChatGenerator
 
         document_embedder: Any = RagbenchDocumentEmbedder()
         text_embedder: Any = RagbenchTextEmbedder()
-        generator: Any = OpenAIGenerator(model=DEFAULT_GENERATOR_MODEL, generation_kwargs={"temperature": 0})
+        # No `temperature: 0`: GPT-6 models accept only their default and reject 0 (RAGBench's own client drops it the same way).
+        generator: Any = OpenAIChatGenerator(model=DEFAULT_GENERATOR_MODEL)
     else:
-        document_embedder, text_embedder, generator = OfflineDocumentEmbedder(), OfflineTextEmbedder(), OfflineGenerator()
+        document_embedder, text_embedder, generator = OfflineDocumentEmbedder(), OfflineTextEmbedder(), OfflineChatGenerator()
     store = InMemoryDocumentStore()
     chunks = DocumentSplitter().run([Document(content=doc.text, meta={"file_path": doc.path}) for doc in documents])["documents"]
     store.write_documents(document_embedder.run(chunks)["documents"])
@@ -105,11 +109,11 @@ def ingest(documents: list[Any]) -> None:
     pipeline = Pipeline()
     pipeline.add_component("embedder", text_embedder)
     pipeline.add_component("retriever", InMemoryEmbeddingRetriever(store))
-    pipeline.add_component("prompt_builder", PromptBuilder(template=TEMPLATE, required_variables=["documents", "question"]))
+    pipeline.add_component("prompt_builder", ChatPromptBuilder(template=PROMPT, required_variables=["documents", "question"]))
     pipeline.add_component("llm", generator)
     pipeline.connect("embedder.embedding", "retriever.query_embedding")
     pipeline.connect("retriever.documents", "prompt_builder.documents")
-    pipeline.connect("prompt_builder.prompt", "llm.prompt")
+    pipeline.connect("prompt_builder.prompt", "llm.messages")
     _pipeline = pipeline
 
 

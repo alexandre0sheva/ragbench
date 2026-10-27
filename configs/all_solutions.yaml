@@ -1,0 +1,560 @@
+# Every RAG solution RAGBench can run, on one public dataset: the published benchmark (docs/benchmarks/multihop-rag.md).
+#
+#   ragbench datasets pull multihop-rag --subset 300 --seed 42 --output data/multihop-rag
+#   ragbench estimate --config configs/all_solutions.yaml                 # the built-in systems; harnesses cannot be priced ahead
+#   ragbench run --config configs/all_solutions.yaml --mock               # the whole pipeline offline, no key
+#
+# A live run needs OPENAI_API_KEY, ANTHROPIC_API_KEY (+ `ragbench[anthropic]`), OPENROUTER_API_KEY, the `langchain,llamaindex,haystack,colbert`
+# extras, RAGBENCH_REFERENCE_LIVE=1 for the three framework pipelines, and `claude`, `codex` and `opencode` on PATH.
+# `gpt-6-luna` writes every built-in and framework answer; `tests/test_all_solutions.py` keeps one entry per registered system type here.
+# The published run ran the harnesses on 150 of the questions (configs/all_solutions_harnesses.yaml, next to three of these systems):
+#   ragbench run --config configs/all_solutions.yaml --skip claude_code,codex,opencode_glm
+run:
+  name: all_solutions_multihop
+  output_dir: results
+
+dataset:
+  documents_path: data/multihop-rag/docs
+  questions_path: data/multihop-rag/questions.jsonl
+  qrels_path: data/multihop-rag/qrels.jsonl
+
+systems:
+  - type: bm25
+    name: bm25_default
+    chunker:
+      type: word
+      chunk_size: 450
+      chunk_overlap: 70
+    retrieval:
+      top_k: 5
+    models:
+      generator: gpt-6-luna
+
+  - type: vector
+    name: vector_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: hybrid
+    name: hybrid_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      final_top_k: 5
+      rrf_k: 60
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: rerank
+    name: rerank_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      candidate_top_k: 30
+      final_top_k: 5
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: hybrid_rerank
+    name: hybrid_rerank_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: hyde
+    name: hyde_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+      probe_top_k: 10
+      fuse_with_question: true
+      rrf_k: 60
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: parent_doc
+    name: parent_doc_default
+    chunker:
+      child_chunk_size: 250
+      child_chunk_overlap: 50
+      parent_chunk_size: 1000
+      parent_chunk_overlap: 150
+    retrieval:
+      vector_store: numpy
+      top_k_children: 8
+      top_k_parents: 4
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: llm_heavy
+    name: llm_heavy_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+      per_query_top_k: 10
+      reranker: local_relevance
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6.1-sol
+    llm_features:
+      enable_llm_ingestion: false
+      enable_query_rewrite: true
+      enable_llm_rerank: false
+
+  # Baselines: the floor shows what the model knows without documents. The corpus (~1.4M tokens) does not fit a prompt, so the long-context
+  # entry reads the documents BM25 ranks first up to 50k tokens (the judge reads them too, and Haiku 5.5 costs 5x above 100k).
+  - type: no_retrieval
+    name: no_retrieval_floor
+    models:
+      generator: gpt-6-luna
+
+  - type: full_context
+    name: full_context_50k
+    retrieval:
+      context_token_budget: 50000
+    models:
+      generator: gpt-6-luna
+
+  - type: sentence_window
+    name: sentence_window_default
+    retrieval:
+      vector_store: numpy
+      window: 2
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # The `vector` system again with maximal marginal relevance on, to see whether diverse context beats the plain ranking.
+  - type: vector
+    name: vector_mmr
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+      diversity: mmr
+      mmr_lambda: 0.5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Ingestion-time LLM systems: one cheap call per chunk (contextual) or per document (hierarchical), cached on disk for re-runs.
+  - type: contextual
+    name: contextual_default
+    chunker:
+      type: word
+      chunk_size: 450
+      chunk_overlap: 70
+    retrieval:
+      vector_store: numpy
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: hierarchical
+    name: hierarchical_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      docs_k: 5
+      chunks_per_doc: 2
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Recursive summary tree: one cheap call per cluster at ingestion, cached; chunks and summaries searched as one index.
+  - type: raptor
+    name: raptor_collapsed
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      mode: collapsed
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Contextual compression: 20 hybrid candidates cut to the sentences that bear on the question (one extra call), packed to 1,500 tokens.
+  - type: compression
+    name: compression_llm_extract
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      vector_store: numpy
+      compressor: llm_extract
+      candidate_k: 20
+      context_token_budget: 1500
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # ColBERT MaxSim reranking of hybrid candidates: a local model ($0 API cost), live runs need `pip install 'ragbench[colbert]'`.
+  - type: late_interaction
+    name: late_interaction_rerank
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      vector_store: numpy
+      mode: rerank
+      candidate_k: 30
+      final_top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # LLM query planning: one short extra call per question that writes alternative queries (rag_fusion) or sub-questions (decompose).
+  - type: rag_fusion
+    name: rag_fusion_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      num_queries: 4
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: decompose
+    name: decompose_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_subquestions: 4
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Agentic systems: they loop (grade and retry, or search again for what is missing), so cost per question varies; the caps bound it.
+  - type: corrective
+    name: corrective_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_rounds: 2
+      expand_to: hybrid
+      max_cost_usd: 0.02
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: iterative
+    name: iterative_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_hops: 3
+      max_cost_usd: 0.02
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Tool-using agents. The two agent_search variants differ only in their tools, so the tool axis is benchmarked by default:
+  # `tools: []` still has `search`; the other adds a calculator, a date calculator and grep.
+  - type: agent_search
+    name: agent_search_plain
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_steps: 5
+      max_cost_usd: 0.05
+      top_k: 5
+    tools: []
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: agent_search
+    name: agent_search_tools
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_steps: 5
+      max_cost_usd: 0.05
+      top_k: 5
+    tools: [calculator, date_calc, corpus_grep]
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # No chunking, no embeddings, no index: the agent lists, greps and reads the raw documents.
+  - type: grep_agent
+    name: grep_agent_default
+    retrieval:
+      max_steps: 6
+      max_cost_usd: 0.05
+      top_k: 5
+    models:
+      generator: gpt-6-luna
+
+  # A per-question router over four pipelines. Compare it against its own routes to see whether routing pays: routes.csv shows, per route,
+  # how many questions it took and how they scored. Routes inherit `models` from here.
+  - type: adaptive
+    name: adaptive_default
+    retrieval:
+      router: heuristic
+      routes:
+        default:
+          type: hybrid_rerank
+          chunker: {type: word, chunk_size: 250, chunk_overlap: 40}
+          retrieval: {vector_store: numpy, final_top_k: 5}
+        lexical:
+          type: bm25
+          chunker: {type: word, chunk_size: 250, chunk_overlap: 40}
+          retrieval: {top_k: 5}
+        multi_hop:
+          type: decompose
+          chunker: {type: word, chunk_size: 250, chunk_overlap: 40}
+          retrieval: {retriever: hybrid, vector_store: numpy, top_k: 5}
+        computation:
+          type: agent_search
+          chunker: {type: word, chunk_size: 250, chunk_overlap: 40}
+          retrieval: {retriever: hybrid, vector_store: numpy, max_steps: 5, max_cost_usd: 0.05, top_k: 5}
+          tools: [calculator, date_calc]
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # Decision-gated RAG (see docs/decision-gate-evaluation.md): the same retrieval as hybrid_rerank_default, then a typed decision model gates the chunks.
+  - type: decision_gate
+    name: decision_gate_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+      decision_model:
+        provider: openai_decisions
+        model: gpt-6-luna
+      judge_mode: batched
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: decision_gate
+    name: decision_gate_strict
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+      decision_model:
+        provider: openai_decisions
+        model: gpt-6-luna
+      judge_mode: batched
+      answerability_threshold: 0.5
+      sufficiency_threshold: 0.5
+      max_candidates_to_judge: 10
+      answerability_instructions: Does {passage} state a fact that answers the question, or a fact the answer depends on? Passages that are merely about the same domain, product line or industry, without such a fact, do not count.
+      sufficiency_instructions: 'Is the specific fact the question asks for stated in the evidence? Mentioning the same entity or topic is not enough: the evidence must give the actual answer to every part of the question.'
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # GraphRAG-lite in both search modes. Ingestion (one extraction call per chunk, one report per community) is paid once: the second mode replays the cache.
+  - type: graph_rag
+    name: graph_rag_local
+    chunker:
+      type: word
+      chunk_size: 300
+      chunk_overlap: 40
+    retrieval:
+      mode: local
+      top_k: 5
+      entities_k: 10
+      max_relations: 20
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  - type: graph_rag
+    name: graph_rag_global
+    chunker:
+      type: word
+      chunk_size: 300
+      chunk_overlap: 40
+    retrieval:
+      mode: global
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+      generator: gpt-6-luna
+
+  # The pipelines each framework's RAG tutorial builds, out of the box (examples/*_default.py), on the same generator and embeddings.
+  - type: python_callable
+    name: langchain_default
+    retrieval:
+      target: examples/langchain_default.py:answer
+      ingest_target: examples/langchain_default.py:ingest
+      model: gpt-6-luna
+
+  - type: python_callable
+    name: llamaindex_default
+    retrieval:
+      target: examples/llamaindex_default.py:answer
+      ingest_target: examples/llamaindex_default.py:ingest
+      model: gpt-6-luna
+
+  - type: python_callable
+    name: haystack_default
+    retrieval:
+      target: examples/haystack_default.py:answer
+      ingest_target: examples/haystack_default.py:ingest
+      model: gpt-6-luna
+
+  # Agent harnesses with file tools over a read-only copy of the corpus (docs/benchmarking-external-systems.md#agent-harnesses).
+  - type: cli_agent
+    name: claude_code
+    retrieval:
+      preset: claude_code
+      model: anthropic:claude-haiku-5-5
+      max_steps: 20
+      timeout_s: 300
+      limits: {max_concurrent_requests: 2}
+
+  - type: cli_agent
+    name: codex
+    retrieval:
+      preset: codex
+      model: gpt-6-luna
+      max_steps: 20
+      timeout_s: 300
+      limits: {max_concurrent_requests: 2}
+
+  # GLM 5.3: the open-weight model that passed Task 2's agent smoke test and was measured in OpenCode (docs/models.md).
+  - type: cli_agent
+    name: opencode_glm
+    retrieval:
+      preset: opencode
+      model: openrouter:z-ai/glm-5.3
+      max_steps: 20
+      timeout_s: 300
+      limits: {max_concurrent_requests: 2}
+
+openrouter:
+  provider:
+    data_collection: deny
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  # Haiku 5.5 judges every answer, except those of its own family (claude_code), which gpt-6-luna judges: one judge per answer, never its own family.
+  judge:
+    panel: [anthropic:claude-haiku-5-5, gpt-6-luna]
+    independent: true
+    scorers: first
+  trials: 1
+  max_questions: null
+  max_workers: 4
+  max_cost_usd: 24.0   # the published run's cap, charged at standalone prices (cache hits count in full)
+
+# MultiHop-RAG is ~1.4M tokens: indexing it at full concurrency can exceed OpenAI's lowest-tier limit of 1M embedding tokens per minute.
+limits:
+  tokens_per_minute: 900000

@@ -1,0 +1,103 @@
+# The model comparison of the published benchmark (docs/benchmarks/multihop-rag.md): three systems of configs/all_solutions.yaml, configured
+# exactly as there, each swept over the open-weight shortlist of docs/models.md plus the two hosted references, on 100 of its questions.
+#
+#   ragbench datasets pull multihop-rag --subset 100 --seed 42 --output data/multihop-rag-100   # 99 of them are in the 300 of all_solutions
+#   ragbench estimate --config configs/all_solutions_models.yaml
+#   ragbench run --config configs/all_solutions_models.yaml --mock
+#
+# Live: OPENROUTER_API_KEY (open-weight generators), ANTHROPIC_API_KEY + `ragbench[anthropic]`, OPENAI_API_KEY (embeddings, references).
+# The gpt-6-luna rows repeat all_solutions' prompts, so the disk cache serves most of them. 3 systems x 8 generators = 24 systems.
+run:
+  name: all_solutions_models_multihop
+  output_dir: results
+
+dataset:
+  documents_path: data/multihop-rag-100/docs
+  questions_path: data/multihop-rag-100/questions.jsonl
+  qrels_path: data/multihop-rag-100/qrels.jsonl
+
+systems:
+  - type: hybrid_rerank
+    name: hybrid_rerank_default
+    chunker:
+      type: word
+      chunk_size: 500
+      chunk_overlap: 80
+    retrieval:
+      vector_store: numpy
+      bm25_top_k: 20
+      vector_top_k: 20
+      candidate_top_k: 30
+      final_top_k: 5
+      rrf_k: 60
+      reranker: local_relevance
+      multi_query: true
+      max_query_variants: 4
+    models:
+      embedding: text-embedding-3-small
+    sweep:
+      models.generator: &generators
+        - openrouter:deepseek/deepseek-v4.1-flash
+        - openrouter:z-ai/glm-5.3
+        - openrouter:moonshotai/kimi-k3
+        - openrouter:xiaomi/mimo-v2.6-pro
+        - openrouter:qwen/qwen3.8-flash
+        - openrouter:minimax/minimax-m3
+        - gpt-6-luna
+        - anthropic:claude-haiku-5-5
+
+  - type: iterative
+    name: iterative_default
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_hops: 3
+      max_cost_usd: 0.02
+      top_k: 5
+    models:
+      embedding: text-embedding-3-small
+    sweep:
+      models.generator: *generators
+
+  - type: agent_search
+    name: agent_search_tools
+    chunker:
+      type: word
+      chunk_size: 250
+      chunk_overlap: 40
+    retrieval:
+      retriever: hybrid
+      vector_store: numpy
+      max_steps: 5
+      max_cost_usd: 0.05
+      top_k: 5
+    tools: [calculator, date_calc, corpus_grep]
+    models:
+      embedding: text-embedding-3-small
+    sweep:
+      models.generator: *generators
+
+# Every OpenRouter request goes out with reasoning off (or at the lowest effort a model that must reason accepts); see docs/models.md#openrouter.
+openrouter:
+  provider:
+    data_collection: deny
+
+evaluation:
+  k_values: [1, 3, 5, 10]
+  judge_enabled: true
+  # As in all_solutions: Haiku 5.5 judges every answer except its own family's, which gpt-6-luna judges.
+  judge:
+    panel: [anthropic:claude-haiku-5-5, gpt-6-luna]
+    independent: true
+    scorers: first
+  trials: 1
+  max_questions: null
+  max_workers: 4
+  max_cost_usd: 9.4   # the published run's cap, raised from 5.5 (then 8.0 and 9.0) to finish (charged at standalone prices; cache hits count in full)
+
+limits:
+  tokens_per_minute: 900000

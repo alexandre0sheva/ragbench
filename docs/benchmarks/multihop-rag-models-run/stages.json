@@ -1,0 +1,650 @@
+[
+  {
+    "system": "hybrid_rerank_default[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+    "cost": {
+      "retrieve": 1.4772e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.000506635427,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 556.7404736531898,
+      "rerank": 26.969745862297714,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1010.3750890912488,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+    "cost": {
+      "retrieve": 1.4772e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.002196023224,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 573.1362195778638,
+      "rerank": 28.02406238624826,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 3665.035015863832,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default[generator=openrouter:moonshotai/kimi-k3]",
+    "cost": {
+      "retrieve": 1.4772e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0033500006659999996,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 555.7790253427811,
+      "rerank": 28.27217131620273,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 2214.6052858023904,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+    "cost": {
+      "retrieve": 1.4772e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.001711033422,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 579.0740442532115,
+      "rerank": 24.704040037468076,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 8135.828880793415,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+    "cost": {
+      "retrieve": 1.4772e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00058639136,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 540.6233357568271,
+      "rerank": 23.027242075186223,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 4372.099099564366,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default[generator=openrouter:minimax/minimax-m3]",
+    "cost": {
+      "retrieve": 1.4772e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0013184734,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 536.6746297501959,
+      "rerank": 30.50580082461238,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 2599.7376853204332,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default[generator=gpt-6-luna]",
+    "cost": {
+      "retrieve": 1.4772e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00037369400000000004,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 643.188294658903,
+      "rerank": 36.189154190942645,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1729.78458246449,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+    "cost": {
+      "retrieve": 1.4772e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00081787,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 612.939888285473,
+      "rerank": 26.16131748771295,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 3220.3887129668146,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+    "cost": {
+      "retrieve": 1.5688000000000001e-06,
+      "rerank": 0.0,
+      "llm": 0.00052429504522,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00037575808247999995,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 588.0480590509251,
+      "rerank": 0.0,
+      "llm": 3469.975645886734,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0062370882369577885,
+      "grade": 0.0,
+      "generate": 1112.0106491982006,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default[generator=openrouter:z-ai/glm-5.3]",
+    "cost": {
+      "retrieve": 1.5326000000000002e-06,
+      "rerank": 0.0,
+      "llm": 0.001848261201,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0013639305709999998,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 572.9729696572758,
+      "rerank": 0.0,
+      "llm": 6077.327243161853,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0059808348305523396,
+      "grade": 0.0,
+      "generate": 2415.609498778358,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default[generator=openrouter:moonshotai/kimi-k3]",
+    "cost": {
+      "retrieve": 1.6066e-06,
+      "rerank": 0.0,
+      "llm": 0.00724939691,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0031344807390000003,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 602.5611683237366,
+      "rerank": 0.0,
+      "llm": 6112.545185834169,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.007286642212420702,
+      "grade": 0.0,
+      "generate": 2036.6096970927902,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+    "cost": {
+      "retrieve": 1.6404e-06,
+      "rerank": 0.0,
+      "llm": 0.00159816825,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0011819214,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 686.6801013122313,
+      "rerank": 0.0,
+      "llm": 18123.202951299027,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.008510425686836243,
+      "grade": 0.0,
+      "generate": 7591.040621704888,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default[generator=openrouter:qwen/qwen3.8-flash]",
+    "cost": {
+      "retrieve": 1.5524000000000002e-06,
+      "rerank": 0.0,
+      "llm": 0.0005665063,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00040429720000000004,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 573.2048824103549,
+      "rerank": 0.0,
+      "llm": 11667.581469169818,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.006855004467070103,
+      "grade": 0.0,
+      "generate": 4016.209556676913,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default[generator=openrouter:minimax/minimax-m3]",
+    "cost": {
+      "retrieve": 1.6460000000000002e-06,
+      "rerank": 0.0,
+      "llm": 0.0011513910400000001,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0011701158,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 584.3994761724025,
+      "rerank": 0.0,
+      "llm": 4876.505543680396,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.008364950772374868,
+      "grade": 0.0,
+      "generate": 3510.60520745581,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default[generator=gpt-6-luna]",
+    "cost": {
+      "retrieve": 2.1266e-06,
+      "rerank": 0.0,
+      "llm": 0.000441662,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.000239933,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 810.0291838357225,
+      "rerank": 0.0,
+      "llm": 6330.116072592791,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.010458710603415966,
+      "grade": 0.0,
+      "generate": 1535.597382101696,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default[generator=anthropic:claude-haiku-5-5]",
+    "cost": {
+      "retrieve": 1.5754000000000002e-06,
+      "rerank": 0.0,
+      "llm": 0.000823386,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0006668269999999999,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 566.9791599456221,
+      "rerank": 0.0,
+      "llm": 6140.71258257376,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.007615347858518362,
+      "grade": 0.0,
+      "generate": 3598.719909149222,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0013672678171999999,
+      "tool": 7.516e-07,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00051320666982,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 4574.07516614534,
+      "tool": 836.0146260075271,
+      "embed": 0.0,
+      "route": 0.0486484938301146,
+      "grade": 0.0,
+      "generate": 2202.983380786609,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools[generator=openrouter:z-ai/glm-5.3]",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0025388319320000003,
+      "tool": 5.68e-07,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.001610838917,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 3666.370516635943,
+      "tool": 684.2081900918856,
+      "embed": 0.0,
+      "route": 0.03259388729929924,
+      "grade": 0.0,
+      "generate": 2979.510761697311,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools[generator=openrouter:moonshotai/kimi-k3]",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.008763498667,
+      "tool": 6.952e-07,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00394530712,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 4986.742324964143,
+      "tool": 682.3411857429892,
+      "embed": 0.0,
+      "route": 0.03419799730181694,
+      "grade": 0.0,
+      "generate": 2529.2788908211514,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.003425402966,
+      "tool": 8.198e-07,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.001089766952,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 17348.098930451088,
+      "tool": 1595.9466055314988,
+      "embed": 0.0,
+      "route": 0.05322795594111085,
+      "grade": 0.0,
+      "generate": 7676.119814114645,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools[generator=openrouter:qwen/qwen3.8-flash]",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.00151388812,
+      "tool": 1.125e-06,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00054495714,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 41705.96144665731,
+      "tool": 995.6046056910418,
+      "embed": 0.0,
+      "route": 0.05686877993866801,
+      "grade": 0.0,
+      "generate": 14371.231787505094,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools[generator=openrouter:minimax/minimax-m3]",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0030080974,
+      "tool": 1.0734000000000002e-06,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0012719024,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 7532.4355003773235,
+      "tool": 1665.215746734757,
+      "embed": 0.0,
+      "route": 0.04221453797072172,
+      "grade": 0.0,
+      "generate": 3173.1629916164093,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools[generator=gpt-6-luna]",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0014224390000000002,
+      "tool": 1.7364000000000002e-06,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0005860290000000001,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 7421.978357466869,
+      "tool": 1257.594623665791,
+      "embed": 0.0,
+      "route": 0.05890510743483901,
+      "grade": 0.0,
+      "generate": 2452.8476892225444,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools[generator=anthropic:claude-haiku-5-5]",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.002093972,
+      "tool": 8.084000000000001e-07,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.001166572,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 5131.874986614566,
+      "tool": 1341.0164361842908,
+      "embed": 0.0,
+      "route": 0.03839537035673857,
+      "grade": 0.0,
+      "generate": 3661.07685420895,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  }
+]

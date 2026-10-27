@@ -17,7 +17,7 @@ Reasoning models spend hidden thinking tokens that are billed as output. RAGBenc
 
 ## Shortlist
 
-USD per 1M input / output tokens, checked against the providers' own pages and OpenRouter's `GET /api/v1/models` on **2026-10-24**. Prices change; `ragbench models list` shows what this installation will charge.
+USD per 1M input / output tokens, checked against the providers' own pages and OpenRouter's `GET /api/v1/models` on **2026-10-24**, re-audited on **2026-10-26** (three open-weight prices moved; the rest were unchanged). Prices change; `ragbench models list` shows what this installation will charge.
 
 | Role | Model ref | Price | Notes |
 | --- | --- | --- | --- |
@@ -27,9 +27,9 @@ USD per 1M input / output tokens, checked against the providers' own pages and O
 | Strongest | `anthropic:claude-opus-5-5` / `anthropic:claude-fable-5-1` / `gpt-6-astra` | 4 / 20, 10 / 50, 10 / 50 | Rarely worth it for RAG answers |
 | Frontier via OpenRouter | `openrouter:google/gemini-3.8-flash` | 0.825 / 4.125 | Must reason: lowest effort `low` |
 | Frontier via OpenRouter | `openrouter:x-ai/grok-4.7` | 2 / 6 | Must reason: lowest effort `low` |
-| Open-weight | `openrouter:deepseek/deepseek-v4.1-flash` | 0.02 / 1.00 | `deepseek/deepseek-v4-pro-0813` 0.66 / 1.98; `deepseek-v4.1-flash-1017` (2026-10-17) is a separate model at 0.15 / 0.60 |
-| Open-weight | `openrouter:z-ai/glm-5.3` | 0.079 / 1.40 | Must reason: lowest effort `low`. `glm-5.3-flash` 0.15 / 0.50 |
-| Open-weight | `openrouter:moonshotai/kimi-k3` | 0.239 / 10.80 | Expensive output: keep answers short. `kimi-k3.1-pro` (2026-10-23) lists no open weights |
+| Open-weight | `openrouter:deepseek/deepseek-v4.1-flash` | 0.048 / 0.19 | `deepseek/deepseek-v4-pro-0813` 0.66 / 1.98; `deepseek-v4.1-flash-1017` (2026-10-17) is a separate model at 0.15 / 0.60 |
+| Open-weight | `openrouter:z-ai/glm-5.3` | 0.07 / 1.40 | Must reason: lowest effort `low`. `glm-5.3-flash` 0.15 / 0.50 |
+| Open-weight | `openrouter:moonshotai/kimi-k3` | 0.179 / 20.00 | Expensive output (doubled on 2026-10-26): keep answers short. `kimi-k3.1-pro` (2026-10-23) lists no open weights |
 | Open-weight | `openrouter:xiaomi/mimo-v2.6-pro` | 0.435 / 0.87 | `mimo-v2.6-flash` 0.14 / 0.28 |
 | Open-weight | `openrouter:qwen/qwen3.8-flash` | 0.15 / 0.47 | `qwen3.8-2.4t-a95b` 2 / 6, must reason |
 | Open-weight | `openrouter:minimax/minimax-m3` | 0.30 / 1.20 | `minimax-m3.1-flash` 0.15 / 0.60, must reason |

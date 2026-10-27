@@ -1,0 +1,309 @@
+{#- docs/benchmarks/multihop-rag.md is rendered from this file and the run folders next to it: `python scripts/check_results.py --write`.
+    Never type a number here; read it from `run`, `harnesses`, `models` or the optimize folder, so CI can check it. -#}
+{% set rec = run.recommendation %}
+{% set cache = run.summary.cache %}
+{% set hcache = harnesses.summary.cache %}
+{% set mcache = models.summary.cache %}
+{% set n = run.summary.dataset.questions %}
+{% set hn = harnesses.summary.dataset.questions %}
+{% set harness_names = ["claude_code", "codex", "opencode_glm"] %}
+{% set framework_names = ["langchain_default", "llamaindex_default", "haystack_default"] %}
+{% macro row_cells(row, mark="") -%}
+| `{{ row.system }}`{{ mark }} | {{ row.system_type }} | {{ ci(row, "retrieval_recall@5", 3) }} | {{ row["retrieval_mrr@10"] | score(3) }} | {{ ci(row, "answer_score") }} | {{ row.faithfulness | score }} | {{ row.avg_cost_per_question | money }} | {{ row.cost_per_correct | money }} | {{ row.latency_ms_p95 | ms }} | {{ row.n_error }} | {{ "✓" if row.pareto_optimal else "" }} |
+{%- endmacro %}
+# MultiHop-RAG: every RAG solution on one public dataset
+
+This is RAGBench's published benchmark. **Every RAG solution RAGBench can run** (its built-in pipelines and agents, three frameworks' tutorial pipelines and three agent harnesses) answers the same {{ n }} questions over the same corpus of news articles, with one generator and a judge from another model family. A second run swaps the generator for six open-weight models. Every number on this page is generated from the result files in [`multihop-rag-run/`](multihop-rag-run/), [`multihop-rag-harnesses-run/`](multihop-rag-harnesses-run/) and [`multihop-rag-models-run/`](multihop-rag-models-run/) by `scripts/check_results.py`, and CI fails if the page and the files disagree. What the metrics mean is in the [methodology](../methodology.md).
+
+## The run
+
+| | |
+| --- | --- |
+| Dataset | [MultiHop-RAG](https://github.com/yixuantt/MultiHop-RAG) (Tang and Yang, 2024; [ODC-By-1.0](https://opendatacommons.org/licenses/by/1-0/)), revision `{{ run.hub.revision }}`, pulled with `ragbench datasets pull multihop-rag --subset {{ run.hub.subset.questions }} --seed {{ run.hub.subset.seed }}` |
+| Questions | {{ n }}, a stratified subset (seed {{ run.hub.subset.seed }}) that keeps the dataset's mix of inference, comparison and temporal questions and its null queries, which the corpus cannot answer; {{ run.summary.dataset.labeled_questions }} carry relevance labels |
+| Corpus | the whole corpus of news articles: a subset keeps every article, so the others are distractors |
+| Systems | {{ run.rows | length }} entries of [`configs/all_solutions.yaml`](../../configs/all_solutions.yaml) on all {{ n }} questions; its {{ harness_names | length }} agent harnesses on a stratified {{ hn }} of them ([`configs/all_solutions_harnesses.yaml`](../../configs/all_solutions_harnesses.yaml), see [below](#agent-harnesses)) |
+| Generator | `gpt-6-luna` for every built-in and framework entry (`llm_heavy` keeps `gpt-6.1-sol`, which is what that system is); the harnesses run their own models: Claude Code on `claude-haiku-5-5`, Codex on `gpt-6-luna`, OpenCode on `z-ai/glm-5.3` |
+| Judge | `anthropic:claude-haiku-5-5` scores every answer except Claude Code's, which `gpt-6-luna` scores (`evaluation.judge.scorers: first`): one judge per answer, never of the generator's own family |
+| Settings | `trials: 1`, `full_context` at a {{ "{:,}".format(run.config.systems | selectattr("type", "equalto", "full_context") | map(attribute="retrieval") | map(attribute="context_token_budget") | first) }}-token budget, prices as of {{ run.summary.pricing_as_of }} |
+| When | {{ run.manifest.started_utc }} to {{ run.manifest.finished_utc }} (main run) |
+| Versions | ragbench {{ run.manifest.ragbench_version }}, Python {{ run.manifest.python }} |
+| Spend | main run {{ cache.charged_cost_usd | money(2) }} charged at standalone prices (cap {{ run.summary.budget.max_cost_usd | money(2) }}), {{ cache.real_spend_usd | money(2) }} real after the disk cache; harness run {{ hcache.charged_cost_usd | money(2) }} charged (cap {{ harnesses.summary.budget.max_cost_usd | money(2) }}), {{ hcache.real_spend_usd | money(2) }} real; model comparison {{ mcache.charged_cost_usd | money(2) }} charged (cap {{ models.summary.budget.max_cost_usd | money(2) }}), {{ mcache.real_spend_usd | money(2) }} real |
+| Errors | {{ run.summary.num_errors }} of {{ run.summary.num_question_rows }} question-system pairs in the main run, {{ harnesses.summary.num_errors }} of {{ harnesses.summary.num_question_rows }} in the harness run |
+
+## What it shows
+
+{% set ranked = run.by("answer_score") %}
+{% set best = ranked[0] %}
+{% set floor = run.row("no_retrieval_floor") %}
+{% set win = run.row(rec.winner) %}
+{% set win_test = run.test(rec.winner, run.stats.baseline) %}
+{% set ast = run.row("agent_search_tools") %}
+{% set it = run.row("iterative_default") %}
+{% set fw = [] %}
+{% for name in framework_names %}{% set _ = fw.append(run.row(name)) %}{% endfor %}
+{% set hr_h = harnesses.row("hybrid_rerank_default") %}
+{% set oc = harnesses.row("opencode_glm") %}
+{% set cc = harnesses.row("claude_code") %}
+{% set cx = harnesses.row("codex") %}
+{% set gg = run.row("graph_rag_global") %}
+{% set gl = run.row("graph_rag_local") %}
+{% set strict = run.row("decision_gate_strict") %}
+{% set null_scores = rec.category_scores["null_query"] %}
+{% set base_tests = run.significance | selectattr("metric", "equalto", "answer_score") | selectattr("baseline", "equalto", "no_retrieval_floor") | list %}
+{% set better = base_tests | selectattr("significant") | selectattr("mean_diff", "gt", 0) | list %}
+{% set top_recall = run.by("retrieval_recall@5")[0] %}
+{% set fc = run.row("full_context_50k") %}
+{% set oc_t = harnesses.test("opencode_glm", "hybrid_rerank_default") %}
+{% set cc_t = harnesses.test("claude_code", "hybrid_rerank_default") %}
+{% set cx_t = harnesses.test("codex", "hybrid_rerank_default") %}
+{% set oc_fix = harnesses.corrections["opencode_glm"] %}
+{% set oc_low = oc.avg_cost_per_question * oc_fix.factor_low %}
+{% set oc_high = oc.avg_cost_per_question * oc_fix.factor_high %}
+{% set mrows = {} %}
+{% for g in models.sweep("hybrid_rerank_default") %}
+{% set scores = [] %}
+{% for sysname in ["hybrid_rerank_default", "iterative_default", "agent_search_tools"] %}
+{% set _ = scores.append(models.row(sysname ~ "[generator=" ~ g ~ "]").answer_score) %}
+{% endfor %}
+{% set _ = mrows.update({g: scores}) %}
+{% endfor %}
+{% macro mean3(g) %}{{ (mrows[g] | sum / 3) | score }}{% endmacro %}
+{% set ds = mrows["openrouter:deepseek/deepseek-v4.1-flash"] %}
+- **Retrieval is most of the score.** Without documents `gpt-6-luna` scores {{ floor.answer_score | score }}; {{ better | length }} of the {{ base_tests | length }} retrieving systems score significantly more, the best, `{{ best.system }}`, {{ best.answer_score | score }}.
+- **A plain pipeline is the pick.** The top is a statistical tie: `{{ best.system }}` (which rewrites queries with `gpt-6.1-sol`) costs {{ best.avg_cost_per_question | money }} a question, the recommended `{{ rec.winner }}` {{ win.avg_cost_per_question | money }}, {{ "%.0f" | format(best.avg_cost_per_question / win.avg_cost_per_question) }}× less, at {{ win.answer_score | score }}.
+- **Agents did not beat it.** `{{ top_recall.system }}` retrieves best (Recall@5 {{ top_recall["retrieval_recall@5"] | score(3) }}, against {{ win["retrieval_recall@5"] | score(3) }}) but answers worse ({{ ast.answer_score | score }}; `iterative_default` {{ it.answer_score | score }}), with a p95 latency of {{ ast.latency_ms_p95 | ms }} against {{ win.latency_ms_p95 | ms }}. Nor did the long context: `full_context_50k` scores {{ fc.answer_score | score }} for {{ fc.avg_cost_per_question | money }} a question.
+- **The frameworks' tutorial pipelines retrieve like the built-ins but answer worse.** LangChain, LlamaIndex and Haystack out of the box reach Recall@5 {{ fw | map(attribute="retrieval_recall@5") | min | score(3) }} to {{ fw | map(attribute="retrieval_recall@5") | max | score(3) }} (`hybrid_default`: {{ run.row("hybrid_default")["retrieval_recall@5"] | score(3) }}) and answer scores of {{ fw | map(attribute="answer_score") | min | score }} to {{ fw | map(attribute="answer_score") | max | score }}, at the same retrieval depth and generator. Most of the gap is the null queries: on the {{ run.patterns.questions | dictsort | rejectattr("0", "equalto", "null_query") | map(attribute="1") | sum }} answerable questions they score {{ fw | map(attribute="system") | map("extract", run.patterns.answerable_score) | min | score }} to {{ fw | map(attribute="system") | map("extract", run.patterns.answerable_score) | max | score }} (`hybrid_default`: {{ run.patterns.answerable_score["hybrid_default"] | score }}), on the {{ run.patterns.questions["null_query"] }} null queries {{ fw | map(attribute="system") | map("extract", null_scores) | min | score }} to {{ fw | map(attribute="system") | map("extract", null_scores) | max | score }} (`hybrid_default`: {{ null_scores["hybrid_default"] | score }}): the tutorials' prompts do not make the model say when the passages lack the answer, so it often answers anyway.
+- **Two agent harnesses match the recommended pipeline, at {{ "%.0f" | format(cc.avg_cost_per_question / hr_h.avg_cost_per_question) }}× the cost (Claude Code) and probably {{ "%.0f" | format(oc_low / hr_h.avg_cost_per_question) }}–{{ "%.0f" | format(oc_high / hr_h.avg_cost_per_question) }}× ([OpenCode](#opencodes-cost)).** On the same {{ hn }} questions OpenCode (GLM 5.3) scores {{ oc.answer_score | score }} and Claude Code (Haiku 5.5) {{ cc.answer_score | score }} against `hybrid_rerank_default`'s {{ hr_h.answer_score | score }} (Holm p {{ oc_t.p_holm | score(2) }} and {{ cc_t.p_holm | score(2) }}), for {{ oc.avg_cost_per_question | money }} as recorded (OpenRouter probably billed {{ oc_low | money(3) }}–{{ oc_high | money(3) }}) and {{ cc.avg_cost_per_question | money }} a question against {{ hr_h.avg_cost_per_question | money }}, with p95 latencies of {{ oc.latency_ms_p95 | ms }} and {{ cc.latency_ms_p95 | ms }}. Codex scores {{ cx.answer_score | score }} ({{ cx_t.mean_diff | signed }}, Holm p {{ cx_t.p_holm | score(3) }}).
+- **GraphRAG does not help here.** `graph_rag_local` scores {{ gl.answer_score | score }}, level with `hybrid_default` ({{ run.row("hybrid_default").answer_score | score }}); `graph_rag_global` scores {{ gg.answer_score | score }}, near the floor: global search reads community summaries, which suit questions about a whole corpus, not a fact spread over two articles.
+- **Abstaining is a trade.** `decision_gate_strict` is best on the null queries ({{ null_scores["decision_gate_strict"] | score }}, against {{ null_scores[rec.winner] | score }} for `{{ rec.winner }}`) and the most faithful system ({{ strict.faithfulness | score }}), but it also refuses {{ "%.0f" | format(strict.false_refusal_rate * 100) }}% of the answerable questions (`{{ rec.winner }}`: {{ "%.0f" | format(win.false_refusal_rate * 100) }}%) and scores {{ strict.answer_score | score }} overall.
+- **Open-weight generators come close.** Averaged over the three systems of the [model comparison](#open-weight-generators), GLM 5.3 scores {{ mean3("openrouter:z-ai/glm-5.3") }} and MiMo V2.6 Pro {{ mean3("openrouter:xiaomi/mimo-v2.6-pro") }}, against {{ mean3("gpt-6-luna") }} for `gpt-6-luna`; DeepSeek V4.1 Flash scores {{ ds[0] | score }} in `hybrid_rerank_default` but {{ ds[2] | score }} as an agent.
+
+## Recommendation
+
+{% for line in rec.rationale %}
+- {{ line }}
+{% endfor %}
+
+The full reasoning is in [`recommendation.md`](multihop-rag-run/recommendation.md) and the winner's config in [`winner.yaml`](multihop-rag-run/winner.yaml).
+
+## Leaderboard
+
+Every entry, sorted by answer score (0 to 5). Brackets are 95% bootstrap confidence intervals over the questions each system answered. ✓ marks the Pareto front on answer score, cost and latency. `$ / correct` is the cost per answer scoring at least {{ run.stats.correct_threshold | score(1) }}. † marks the harnesses, measured on {{ hn }} of the {{ n }} questions in a run of their own: compare them with the others through [their own table](#agent-harnesses), which has three of these systems on the same questions.
+
+| System | Type | Recall@5 | MRR@10 | Answer score | Faithfulness | $ / question | $ / correct | p95 latency | Errors | Pareto |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+{% for row in run.by("answer_score") %}
+{{ row_cells(row) }}
+{% endfor %}
+{% for name in harness_names %}
+{{ row_cells(harnesses.row(name), "†") }}
+{% endfor %}
+
+## Where systems differ
+
+{% set base = run.stats.baseline %}
+### Against `{{ base }}`
+
+Paired bootstrap on the same questions, Holm-adjusted over every system, against `{{ base }}` ({{ run.stats.baseline_source }}; answer score {{ run.row(base).answer_score | score }}{{ ", the model without documents" if base == "no_retrieval_floor" else "" }}).
+
+| System | Difference in answer score | 95% CI | Holm p | Wins / ties / losses |
+| --- | --- | --- | --- | --- |
+{% for row in run.by("answer_score") if row.system != base %}
+{% set test = run.test(row.system, base) %}
+{% if test %}
+| `{{ row.system }}` | {{ test.mean_diff | signed }} | {{ test.ci_lo | signed }} to {{ test.ci_hi | signed }} | {{ test.p_holm | score(3) }} | {{ test.wins }} / {{ test.ties }} / {{ test.losses }} |
+{% endif %}
+{% endfor %}
+
+### Statistically tied with the best
+
+{% set best = run.by("answer_score")[0] %}
+The recommendation compares every system with the best answer score (`{{ best.system }}`, {{ best.answer_score | score }}) by the same paired test. {% set tied = ([rec.winner] + rec.tied_with_winner) | reject("equalto", best.system) | unique | list %}
+{% if tied %}
+Statistically indistinguishable from it (Holm-adjusted p ≥ 0.05): {{ tied | codes }}. Every other system scores significantly lower.
+{% else %}
+No other system is statistically indistinguishable from it.
+{% endif %}
+
+### Per category
+
+The best system on each question category (mean answer score in that category).
+
+| Category | Best system | Its score | `no_retrieval_floor` |
+| --- | --- | --- | --- |
+{% for category, winner in rec.by_category | dictsort %}
+| {{ category }} | `{{ winner }}` | {{ rec.category_scores[category][winner] | score }} | {{ rec.category_scores[category]["no_retrieval_floor"] | score }} |
+{% endfor %}
+
+### Pareto front
+
+On answer score, cost per question and p95 latency, no system beats these on all three: {{ rec.pareto | codes }}.
+
+## Agent harnesses
+
+{% set anchor = harnesses.row("hybrid_rerank_default") %}
+On this corpus the harnesses cost several times what they did on the demo dataset, more than their share of the budget for {{ n }} questions, so they ran on a stratified {{ hn }} (`ragbench datasets pull multihop-rag --subset {{ harnesses.hub.subset.questions }} --seed {{ harnesses.hub.subset.seed }}`) next to three systems of the main run, configured identically. Each harness works in a fresh read-only copy of the corpus with file tools only (no shell, no web). Significance is against `hybrid_rerank_default` ({{ anchor.answer_score | score }} on these questions).
+
+| System | Answer score | Recall@5 | $ / question | p95 latency | Difference vs `hybrid_rerank_default` | Holm p |
+| --- | --- | --- | --- | --- | --- | --- |
+{% for row in harnesses.by("answer_score") %}
+{% set test = harnesses.test(row.system, "hybrid_rerank_default") %}
+| `{{ row.system }}` | {{ ci(row, "answer_score") }} | {{ ci(row, "retrieval_recall@5", 3) }} | {{ row.avg_cost_per_question | money }} | {{ row.latency_ms_p95 | ms }} | {{ (test.mean_diff | signed) if test else "baseline" }}{{ (" (" ~ (test.ci_lo | signed) ~ " to " ~ (test.ci_hi | signed) ~ ")") if test else "" }} | {{ (test.p_holm | score(3)) if test else "" }} |
+{% endfor %}
+
+Codex's cost is its tokens at OpenAI API prices; this run billed them to a ChatGPT login. Retrieval metrics for a harness count the files it read, in reading order.
+
+{% set hcats = harnesses.recommendation.category_scores %}
+{% set hsystems = ["hybrid_rerank_default"] + harness_names %}
+The harnesses are not uniformly better or worse. Mean answer score by question category, on the same {{ hn }} questions:
+
+| Category | Questions | {% for s in hsystems %}`{{ s }}`{{ " | " if not loop.last }}{% endfor %} |
+| --- | --- | {{ (["---"] * hsystems | length) | join(" | ") }} |
+{% for category, scores in hcats | dictsort %}
+| {{ category }} | {{ harnesses.patterns.questions[category] }} | {{ hsystems | map("extract", scores) | map("score") | join(" | ") }} |
+{% endfor %}
+
+### OpenCode's cost
+
+**Correction ({{ oc_fix.found }}): OpenCode's cost in this run is too low, probably by {{ "%.2f" | format(oc_fix.factor_low) }}–{{ "%.2f" | format(oc_fix.factor_high) }}×.** The {{ oc.avg_cost_per_question | money }} a question recorded above is OpenCode's own estimate: its tokens at the OpenRouter catalog price of GLM 5.3, which is the cheapest of the providers OpenRouter routes that model to. OpenRouter billed whichever provider served each request, and OpenCode never sees that bill. RAGBench's own GLM 5.3 calls in the [model comparison](#open-weight-generators) record what OpenRouter billed: {{ "%.2f" | format(oc_fix.factor_low) }}× their tokens at the catalog price in `agent_search_tools` and {{ "%.2f" | format(oc_fix.factor_high) }}× in `hybrid_rerank_default`. At those factors OpenCode cost about {{ oc_low | money(3) }}–{{ oc_high | money(3) }} a question, {{ "%.0f" | format(oc_low / hr_h.avg_cost_per_question) }}–{{ "%.0f" | format(oc_high / hr_h.avg_cost_per_question) }}× `hybrid_rerank_default` and more than Claude Code ({{ cc.avg_cost_per_question | money }}). Its answer scores are unaffected. OpenCode also sends no routing preferences, so its requests did not carry the config's `openrouter.provider.data_collection: deny`.
+
+The fix is in this release: with an `openrouter:` model, the `opencode` preset sends OpenCode's requests through a local relay that records OpenRouter's bill and applies the config's routing ([`openrouter_relay.py`](../../src/ragbench/rag_systems/openrouter_relay.py)). The figures above are this run's and were not re-measured; the correction is recorded with its source in [`corrections.json`](multihop-rag-harnesses-run/corrections.json).
+
+## Frameworks out of the box
+
+The pipelines each framework's RAG tutorial builds ([`examples/`](../../examples/)), on the same generator and embeddings as the built-in systems:
+
+| System | Answer score | Answerable questions | Null queries | Recall@5 | $ / question |
+| --- | --- | --- | --- | --- | --- |
+{% for name in framework_names + ["hybrid_default"] %}
+{% set row = run.row(name) %}
+| `{{ name }}`{{ " (built-in, for reference)" if name == "hybrid_default" else "" }} | {{ ci(row, "answer_score") }} | {{ run.patterns.answerable_score[name] | score }} | {{ rec.category_scores["null_query"][name] | score }} | {{ ci(row, "retrieval_recall@5", 3) }} | {{ row.avg_cost_per_question | money }} |
+{% endfor %}
+
+## Open-weight generators
+
+[`configs/all_solutions_models.yaml`](../../configs/all_solutions_models.yaml): three systems of the main run, configured identically, with each generator, on a stratified {{ models.summary.dataset.questions }} of the questions. Answer score (95% CI) and cost per question.
+
+**Read the `anthropic:claude-haiku-5-5` row apart from the others.** Haiku 5.5 judges every other row, and a judge never scores its own model family, so the Haiku-generated answers were scored by `gpt-6-luna` instead. A different judge means a different scale: that row's lead may be the judge, not the model.
+
+{% set systems = ["hybrid_rerank_default", "iterative_default", "agent_search_tools"] %}
+{% set generators = models.sweep("hybrid_rerank_default") %}
+| Generator | {% for s in systems %}`{{ s }}` | {% endfor %}$ / question (mean of the three) |
+| --- | {% for s in systems %}--- | {% endfor %}--- |
+{% for g in generators %}
+{% set rows = [] %}
+{% for s in systems %}
+{% set _ = rows.append(models.row(s ~ "[generator=" ~ g ~ "]")) %}
+{% endfor %}
+| `{{ g }}` | {% for r in rows %}{{ ci(r, "answer_score") }} | {% endfor %}{{ (rows | map(attribute="avg_cost_per_question") | sum / rows | length) | money }} |
+{% endfor %}
+
+## Patterns across the runs
+
+{% set pat = run.patterns %}
+{% set retrieving = run.rows | rejectattr("system", "equalto", "no_retrieval_floor") | list %}
+{% set by_mean = [] %}
+{% set by_spread = [] %}
+{% for category, scores in rec.category_scores | dictsort %}
+{% set values = retrieving | map(attribute="system") | map("extract", scores) | list %}
+{% set _ = by_mean.append([values | sum / values | length, category]) %}
+{% set _ = by_spread.append([(values | max) - (values | min), category]) %}
+{% endfor %}
+{% set hardest = (by_mean | sort | first)[1] %}
+{% set easiest = (by_mean | sort | last)[1] %}
+{% set widest = (by_spread | sort | last)[1] %}
+### Which questions are hard
+
+Mean answer score by question category over the {{ retrieving | length }} retrieving systems of the main run:
+
+| Category | Questions | Mean | Best system's score | Worst system's score | `no_retrieval_floor` |
+| --- | --- | --- | --- | --- | --- |
+{% for mean, category in by_mean | sort(reverse=true) %}
+{% set values = retrieving | map(attribute="system") | map("extract", rec.category_scores[category]) | list %}
+| {{ category }} | {{ pat.questions[category] }} | {{ mean | score }} | {{ values | max | score }} | {{ values | min | score }} | {{ rec.category_scores[category]["no_retrieval_floor"] | score }} |
+{% endfor %}
+
+- **{{ hardest | replace("_query", "") | capitalize }} questions are the hardest.**{% if hardest == "temporal_query" %} They ask how two reports relate in time, so a system needs both articles and their dates.{% endif %} {{ pat.hard.none }} of the {{ n }} questions get no answer scoring {{ pat.hard.threshold | score(0) }} or more from any of the {{ run.rows | length }} systems; {{ pat.hard.none_by_category.get(hardest, 0) }} of them are {{ hardest | replace("_query", "") }} questions.
+- **The {{ widest | replace("_query", "") }} queries separate the systems most**, from {{ (rec.category_scores[widest].values() | list | min) | score }} to {{ (rec.category_scores[widest].values() | list | max) | score }}{% if widest == "null_query" %}: whether a system says the documents lack the answer matters more than how well it retrieves. The built-in pipelines' prompts ask for that; the frameworks' tutorial prompts do not insist on it ([Frameworks](#frameworks-out-of-the-box)){% endif %}.
+
+### Retrieval explains part of the ranking, cost none of it
+
+{% set rho_recall = rank_correlation(retrieving, "retrieval_recall@5", "answer_score") %}
+{% set rho_cost = rank_correlation(retrieving, "avg_cost_per_question", "answer_score") %}
+{% set buckets = {} %}
+{% for bucket in pat.recall_buckets %}{% set _ = buckets.update({bucket.recall: bucket}) %}{% endfor %}
+Across the {{ retrieving | length }} retrieving systems, the rank correlation (Spearman) of Recall@5 with the answer score is {{ rho_recall | score }}, and of the cost per question with the answer score {{ rho_cost | score }}: a system that spends more on a question does not answer it better for that. Per answer, on the answerable questions:
+
+| Labeled evidence in the top 5 | Answers | Mean answer score |
+| --- | --- | --- |
+| none of it | {{ "{:,}".format(buckets.none.answers) }} | {{ buckets.none.answer_score | score }} |
+| some of it | {{ "{:,}".format(buckets.some.answers) }} | {{ buckets.some.answer_score | score }} |
+| all of it | {{ "{:,}".format(buckets.all.answers) }} | {{ buckets.all.answer_score | score }} |
+
+{% if buckets.some.answer_score - buckets.none.answer_score > buckets.all.answer_score - buckets.some.answer_score %}Finding part of the evidence gets most of the way ({{ buckets.some.answer_score | score }} against {{ buckets.none.answer_score | score }}); finding all of it adds only {{ (buckets.all.answer_score - buckets.some.answer_score) | signed }}, because a complete context still has to be combined into one answer.{% endif %}
+
+
+### Why answers fail
+
+{% set total = pat.failures.values() | sum %}
+{% set failed = total - pat.failures.get("no_failure", 0) %}
+{{ "{:,}".format(failed) }} of the main run's {{ "{:,}".format(total) }} answers fall short ([failure types](../methodology.md#failure-types)):
+
+| Failure type | Answers | Share of the failures |
+| --- | --- | --- |
+{% for kind, count in pat.failures.items() if kind != "no_failure" %}
+| `{{ kind }}` | {{ "{:,}".format(count) }} | {{ "%.0f%%" | format(100 * count / failed) }} |
+{% endfor %}
+
+{% set kinds = pat.failures.keys() | reject("equalto", "no_failure") | list %}
+{% if kinds[:2] == ["insufficient_context", "answer_hallucination"] %}
+The commonest failure is a half-found question (`insufficient_context`: part of the evidence never reached the generator), the multi-hop failure this dataset is built to provoke; next come answers the context does not support (`answer_hallucination`), which include every null query a system answered anyway.
+{% endif %}
+
+### A generator's rank depends on the system
+
+{% set gens = models.sweep("hybrid_rerank_default") %}
+{% set bases = ["hybrid_rerank_default", "iterative_default", "agent_search_tools"] %}
+{% set rhos = [] %}
+{% for i in range(bases | length) %}{% for j in range(i + 1, bases | length) %}
+{% set pairs = [] %}
+{% for g in gens %}{% set _ = pairs.append({"x": models.row(bases[i] ~ "[generator=" ~ g ~ "]").answer_score, "y": models.row(bases[j] ~ "[generator=" ~ g ~ "]").answer_score}) %}{% endfor %}
+{% set _ = rhos.append(rank_correlation(pairs, "x", "y")) %}
+{% endfor %}{% endfor %}
+{% set open_weight = gens | select("startingwith", "openrouter:") | list %}
+{% macro refusals(base, names) -%}
+{% set rates = [] %}{% for g in names %}{% set _ = rates.append(models.row(base ~ "[generator=" ~ g ~ "]").false_refusal_rate) %}{% endfor %}
+{%- if rates | length == 1 %}{{ "%.0f%%" | format(100 * rates[0]) }}{% else %}{{ "%.0f" | format(100 * (rates | min)) }}–{{ "%.0f%%" | format(100 * (rates | max)) }}{% endif -%}
+{%- endmacro %}
+In the [model comparison](#open-weight-generators) the eight generators rank differently in each of the three systems: the rank correlation of their answer scores between two systems is {{ rhos | min | score }} to {{ rhos | max | score }}. Pick a generator together with the system it will run in.
+
+In `hybrid_rerank_default`, which reads one fixed set of passages, the open-weight generators refuse {{ refusals("hybrid_rerank_default", open_weight) }} of the answerable questions, against {{ refusals("hybrid_rerank_default", ["gpt-6-luna"]) }} for `gpt-6-luna`; in `agent_search_tools`, where they can search again, {{ refusals("agent_search_tools", open_weight) }}.
+
+## Optimizing a system on this dataset
+
+`ragbench optimize` ([how it works](../optimization.md)) tried to improve `hybrid_rerank` on a 151 / 149 train / test split of these questions (Task 22 of the 0.4.0 plan); the full record is in [`multihop-rag-optimize/`](multihop-rag-optimize/optimization.md). Its verdict, quoted from that file:
+
+{{ section(optimization_md, "Verdict") }}
+
+## Limitations
+
+- **One judge per answer, and an LLM one.** Haiku 5.5 scored almost every answer; its accuracy on this dataset has not been checked against human labels (`ragbench judge-audit`). The answers of Claude Code and of the Haiku rows of the model comparison were scored by `gpt-6-luna`, so they sit on another judge's scale.
+- **One trial.** Every question was answered once; differences inside the confidence intervals are noise, and the tied-with-best list is the honest summary of the top.
+- **A subset.** {{ n }} of the dataset's questions; the harnesses {{ hn }}, the open-weight comparison {{ models.summary.dataset.questions }}.
+- **Not a ceiling.** The corpus is far larger than any prompt, so `full_context_50k` reads the articles BM25 ranks first up to its budget, not the whole corpus.
+- **Latency** is the mean of a short one-at-a-time probe and moves between runs; compare it only across large differences.
+- **News from 2023.** The model may know some of these stories; `no_retrieval_floor` measures how much.
+- **GraphRAG's index is not perfect.** A few chunks' entity extraction ran out of output tokens and was left out of the graph (the run logs each one).
+- **Refusals worded freely are not counted as refusals.** The abstain and false-refusal columns detect RAGBench's own refusal wording, which its built-in prompts ask for. The framework pipelines and the harnesses phrase refusals their own way, so those columns undercount them; compare them on the judge's null-query score instead ([Per category](#per-category), [Frameworks](#frameworks-out-of-the-box)).
+- **OpenCode's cost is under-reported** by about {{ "%.2f" | format(oc_fix.factor_low) }}–{{ "%.2f" | format(oc_fix.factor_high) }}× ([correction](#opencodes-cost)); every other system's cost is what its provider billed or its tokens at list price.
+- **Framework cost.** LangChain's and Haystack's own OpenAI clients bypass RAGBench's call cache, so their tokens are priced from what they report, and the run's real-spend line leaves them out.
+
+## Files
+
+Each run folder holds `config.yaml`, `metrics_summary.csv`, `significance.csv`, `stats.json`, `run_summary.json`, `run_manifest.json`, the recommendation, the dataset's `hub.json` and `patterns.json` (the per-question counts and means the [patterns](#patterns-across-the-runs) quote, with no question or answer text). `ragbench report docs/benchmarks/multihop-rag-run` rebuilds the leaderboard, the recommendation and `report.html` from them. The per-question rows (questions, answers, passages) are not committed: the articles are third-party news.
+
+<p>
+  <img src="multihop-rag-run/report-desktop.png" alt="The top of the main run's report.html: run header, recommendation, and the quality-against-cost chart" width="66%">
+  <img src="multihop-rag-run/report-mobile.png" alt="The same report at phone width" width="24%">
+</p>

@@ -1,0 +1,291 @@
+{
+  "maximize": [
+    "answer_score"
+  ],
+  "minimize": [
+    "avg_cost_per_question",
+    "avg_latency_ms"
+  ],
+  "front": [
+    "hybrid_rerank_default[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+    "hybrid_rerank_default[generator=gpt-6-luna]",
+    "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+  ],
+  "dominated_by": {
+    "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "hybrid_rerank_default[generator=openrouter:moonshotai/kimi-k3]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]"
+    ],
+    "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "hybrid_rerank_default[generator=openrouter:minimax/minimax-m3]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]"
+    ],
+    "iterative_default[generator=openrouter:deepseek/deepseek-v4.1-flash]": [
+      "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "iterative_default[generator=openrouter:z-ai/glm-5.3]": [
+      "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+      "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "iterative_default[generator=openrouter:minimax/minimax-m3]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]"
+    ],
+    "iterative_default[generator=openrouter:moonshotai/kimi-k3]": [
+      "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+      "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "agent_search_tools[generator=openrouter:z-ai/glm-5.3]"
+    ],
+    "iterative_default[generator=openrouter:xiaomi/mimo-v2.6-pro]": [
+      "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+      "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "iterative_default[generator=openrouter:minimax/minimax-m3]",
+      "iterative_default[generator=anthropic:claude-haiku-5-5]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "agent_search_tools[generator=openrouter:qwen/qwen3.8-flash]"
+    ],
+    "iterative_default[generator=openrouter:qwen/qwen3.8-flash]": [
+      "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "iterative_default[generator=gpt-6-luna]"
+    ],
+    "iterative_default[generator=openrouter:minimax/minimax-m3]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "iterative_default[generator=gpt-6-luna]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "iterative_default[generator=anthropic:claude-haiku-5-5]": [
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "agent_search_tools[generator=openrouter:z-ai/glm-5.3]": [
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "agent_search_tools[generator=openrouter:moonshotai/kimi-k3]": [
+      "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+      "hybrid_rerank_default[generator=openrouter:moonshotai/kimi-k3]",
+      "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "hybrid_rerank_default[generator=openrouter:minimax/minimax-m3]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "agent_search_tools[generator=openrouter:z-ai/glm-5.3]"
+    ],
+    "agent_search_tools[generator=openrouter:xiaomi/mimo-v2.6-pro]": [
+      "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+      "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "iterative_default[generator=openrouter:minimax/minimax-m3]",
+      "iterative_default[generator=anthropic:claude-haiku-5-5]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "agent_search_tools[generator=openrouter:z-ai/glm-5.3]",
+      "agent_search_tools[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "agent_search_tools[generator=openrouter:qwen/qwen3.8-flash]": [
+      "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "iterative_default[generator=anthropic:claude-haiku-5-5]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]"
+    ],
+    "agent_search_tools[generator=openrouter:minimax/minimax-m3]": [
+      "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+      "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "iterative_default[generator=openrouter:z-ai/glm-5.3]",
+      "iterative_default[generator=openrouter:minimax/minimax-m3]",
+      "iterative_default[generator=anthropic:claude-haiku-5-5]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "agent_search_tools[generator=openrouter:z-ai/glm-5.3]",
+      "agent_search_tools[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "agent_search_tools[generator=gpt-6-luna]": [
+      "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "hybrid_rerank_default[generator=openrouter:minimax/minimax-m3]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "iterative_default[generator=gpt-6-luna]",
+      "iterative_default[generator=anthropic:claude-haiku-5-5]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]"
+    ],
+    "agent_search_tools[generator=anthropic:claude-haiku-5-5]": [
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]"
+    ]
+  },
+  "points": [
+    {
+      "system": "hybrid_rerank_default[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "answer_score": 2.8229999999999995,
+      "avg_cost_per_question": 0.001211524627,
+      "avg_latency_ms": 1594.6539283590391
+    },
+    {
+      "system": "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+      "answer_score": 3.6060000000000008,
+      "avg_cost_per_question": 0.002937050424,
+      "avg_latency_ms": 4266.730114549864
+    },
+    {
+      "system": "hybrid_rerank_default[generator=openrouter:moonshotai/kimi-k3]",
+      "answer_score": 3.446,
+      "avg_cost_per_question": 0.004083628866000001,
+      "avg_latency_ms": 2799.1882795188576
+    },
+    {
+      "system": "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "answer_score": 3.5789999999999997,
+      "avg_cost_per_question": 0.002463313622,
+      "avg_latency_ms": 8740.194469993003
+    },
+    {
+      "system": "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "answer_score": 3.5049999999999994,
+      "avg_cost_per_question": 0.00131066456,
+      "avg_latency_ms": 4936.300339561421
+    },
+    {
+      "system": "hybrid_rerank_default[generator=openrouter:minimax/minimax-m3]",
+      "answer_score": 3.427,
+      "avg_cost_per_question": 0.0020572996,
+      "avg_latency_ms": 3167.498921244405
+    },
+    {
+      "system": "hybrid_rerank_default[generator=gpt-6-luna]",
+      "answer_score": 3.653,
+      "avg_cost_per_question": 0.0010838392000000001,
+      "avg_latency_ms": 2409.6741849649698
+    },
+    {
+      "system": "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "answer_score": 3.972,
+      "avg_cost_per_question": 0.0012284622000000001,
+      "avg_latency_ms": 3860.0598446442746
+    },
+    {
+      "system": "iterative_default[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "answer_score": 3.119999999999999,
+      "avg_cost_per_question": 0.0014602579277000003,
+      "avg_latency_ms": 5170.864741657861
+    },
+    {
+      "system": "iterative_default[generator=openrouter:z-ai/glm-5.3]",
+      "answer_score": 3.545,
+      "avg_cost_per_question": 0.003800365372,
+      "avg_latency_ms": 9066.771559603512
+    },
+    {
+      "system": "iterative_default[generator=openrouter:moonshotai/kimi-k3]",
+      "answer_score": 3.5639999999999996,
+      "avg_cost_per_question": 0.010984414249,
+      "avg_latency_ms": 8752.639449213166
+    },
+    {
+      "system": "iterative_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "answer_score": 3.5042,
+      "avg_cost_per_question": 0.0033750280500000006,
+      "avg_latency_ms": 26402.087218307424
+    },
+    {
+      "system": "iterative_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "answer_score": 3.4059999999999997,
+      "avg_cost_per_question": 0.0015666589000000004,
+      "avg_latency_ms": 16257.928222853225
+    },
+    {
+      "system": "iterative_default[generator=openrouter:minimax/minimax-m3]",
+      "answer_score": 3.597,
+      "avg_cost_per_question": 0.00292091884,
+      "avg_latency_ms": 8972.430133318994
+    },
+    {
+      "system": "iterative_default[generator=gpt-6-luna]",
+      "answer_score": 3.436000000000001,
+      "avg_cost_per_question": 0.0012393426,
+      "avg_latency_ms": 8676.47243847372
+    },
+    {
+      "system": "iterative_default[generator=anthropic:claude-haiku-5-5]",
+      "answer_score": 3.8360000000000003,
+      "avg_cost_per_question": 0.0018122633999999999,
+      "avg_latency_ms": 10307.424744130112
+    },
+    {
+      "system": "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "answer_score": 3.5969999999999995,
+      "avg_cost_per_question": 0.0025029130870200004,
+      "avg_latency_ms": 7613.904455844313
+    },
+    {
+      "system": "agent_search_tools[generator=openrouter:z-ai/glm-5.3]",
+      "answer_score": 3.6280000000000006,
+      "avg_cost_per_question": 0.004741800849,
+      "avg_latency_ms": 7330.495173726231
+    },
+    {
+      "system": "agent_search_tools[generator=openrouter:moonshotai/kimi-k3]",
+      "answer_score": 3.159,
+      "avg_cost_per_question": 0.013148345987000001,
+      "avg_latency_ms": 8198.893738789484
+    },
+    {
+      "system": "agent_search_tools[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "answer_score": 3.5589999999999997,
+      "avg_cost_per_question": 0.005133834718,
+      "avg_latency_ms": 26620.945083016995
+    },
+    {
+      "system": "agent_search_tools[generator=openrouter:qwen/qwen3.8-flash]",
+      "answer_score": 3.514,
+      "avg_cost_per_question": 0.0026942382600000005,
+      "avg_latency_ms": 17102.33949162066
+    },
+    {
+      "system": "agent_search_tools[generator=openrouter:minimax/minimax-m3]",
+      "answer_score": 3.478,
+      "avg_cost_per_question": 0.004914843200000001,
+      "avg_latency_ms": 12371.412255370524
+    },
+    {
+      "system": "agent_search_tools[generator=gpt-6-luna]",
+      "answer_score": 3.4199999999999995,
+      "avg_cost_per_question": 0.0025867124000000003,
+      "avg_latency_ms": 11133.019152940251
+    },
+    {
+      "system": "agent_search_tools[generator=anthropic:claude-haiku-5-5]",
+      "answer_score": 3.9659999999999997,
+      "avg_cost_per_question": 0.003579636399999999,
+      "avg_latency_ms": 10134.46549581131
+    }
+  ]
+}

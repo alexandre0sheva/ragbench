@@ -1,0 +1,63 @@
+# Written by `ragbench optimize` for `hybrid_rerank`: no reliable gain: the base harness is kept. See optimization.md.
+run:
+  name: multihop_rag
+  output_dir: results
+dataset:
+  documents_path: data/multihop-rag/docs
+  questions_path: data/multihop-rag/questions.jsonl
+  qrels_path: data/multihop-rag/qrels.jsonl
+systems:
+- type: bm25
+  name: bm25
+  chunker:
+    type: word
+    chunk_size: 450
+    chunk_overlap: 70
+  retrieval:
+    top_k: 5
+  models:
+    generator: gpt-6-luna
+- type: hybrid
+  name: hybrid
+  chunker:
+    type: word
+    chunk_size: 500
+    chunk_overlap: 80
+  retrieval:
+    vector_store: numpy
+    bm25_top_k: 20
+    vector_top_k: 20
+    final_top_k: 5
+    rrf_k: 60
+  models:
+    embedding: text-embedding-3-small
+    generator: gpt-6-luna
+- type: hybrid_rerank
+  name: hybrid_rerank
+  chunker:
+    type: word
+    chunk_size: 500
+    chunk_overlap: 80
+  retrieval:
+    vector_store: numpy
+    bm25_top_k: 20
+    vector_top_k: 20
+    candidate_top_k: 30
+    final_top_k: 5
+    rrf_k: 60
+    reranker: local_relevance
+  models:
+    embedding: text-embedding-3-small
+    generator: gpt-6-luna
+evaluation:
+  k_values:
+  - 1
+  - 3
+  - 5
+  - 10
+  judge_enabled: true
+  judge_model: anthropic:claude-haiku-5-5
+  max_questions: null
+  max_workers: 4
+limits:
+  tokens_per_minute: 900000

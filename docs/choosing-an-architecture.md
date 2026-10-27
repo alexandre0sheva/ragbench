@@ -71,6 +71,15 @@ The demo dataset (`ragbench demo`) is the documents of a fictional insurance com
 4. **Read it:** in the live report, look at the category heatmap first. If the tool-using agent wins the numeric and date categories while the baselines win the identifier ones, that pattern is the case for `adaptive`; if the baselines tie everywhere, the simplest system is the answer.
 5. **Decide:** `ragbench recommend --run results/<run> --max-cost 0.002` asks the question again under a cost limit, and `--export winner.yaml` writes the winner's config for you to point at your own documents.
 
+**The same plan on real data.** [The MultiHop-RAG benchmark](benchmarks/multihop-rag.md) is this worked example done live on a public dataset: multi-hop inference, comparison and temporal questions over a corpus of news articles far larger than any prompt, with null queries the corpus cannot answer. Every system of `configs/all.yaml` ran there, with GraphRAG, the three frameworks' tutorial pipelines and three agent harnesses, and an independent judge. Read it the way step 4 says: the per-category table first, then which systems are statistically tied with the best, and only then cost. Its open-weight comparison answers the next question, which generator to put in the pipeline you chose.
+
+What that run adds to the advice above ([its patterns](benchmarks/multihop-rag.md#patterns-across-the-runs)):
+
+- **Put null queries in your question set.** On that benchmark they separated the systems more than any other category; a pipeline whose prompt does not make the model say the documents lack the answer will answer them from what it knows, and look worse than its retrieval deserves.
+- **Look at your hardest category on its own.** Temporal questions, which need two articles and their dates, were the weakest category for almost every system; an overall score hides that.
+- **Do not read cost as quality.** The dearer systems were not the better ones; the recommended pipeline tied with the best at a ninth of its cost.
+- **Choose the generator inside the system.** A generator's rank changed from one system to another, so compare generators in the pipeline you will deploy (a `sweep` over `models.generator`), not in isolation.
+
 ## 6. After you choose
 
 - Replace the `dataset:` in `winner.yaml` with your production documents and run it as the system you deploy.

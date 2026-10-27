@@ -1,0 +1,40 @@
+{#- The README's results block, between `<!-- results:multihop-rag:start -->` and `<!-- results:multihop-rag:end -->`. Numbers come from the
+    committed run folders only (`python scripts/check_results.py --write`). -#}
+{% set n = run.summary.dataset.questions %}
+{% set hn = harnesses.summary.dataset.questions %}
+{% set ranked = run.by("answer_score") %}
+{% set shown = [] %}
+{% for row in ranked[:5] %}{% set _ = shown.append(row.system) %}{% endfor %}
+{% macro line(row, note="", mark="") -%}
+| `{{ row.system }}`{{ mark }}{{ note }} | {{ ci(row, "answer_score") }} | {{ row["retrieval_recall@5"] | score(3) }} | {{ row.avg_cost_per_question | money }} |
+{%- endmacro %}
+Every RAG solution RAGBench can run, on {{ n }} questions of the public [MultiHop-RAG](https://github.com/yixuantt/MultiHop-RAG) dataset (multi-hop questions over a corpus of news articles, null queries included), `gpt-6-luna` generating and `claude-haiku-5-5` judging. The top five, the recommended system, the floor and the 50k-token long-context entry, the three framework pipelines and the three agent harnesses:
+
+| System | Answer score | Recall@5 | $ / question |
+| --- | --- | --- | --- |
+{% for row in ranked[:5] %}
+{{ line(row, " (recommended)" if row.system == run.recommendation.winner else "") }}
+{% endfor %}
+{% set winner = run.recommendation.winner %}
+{% for name in [winner, "no_retrieval_floor", "full_context_50k", "langchain_default", "llamaindex_default", "haystack_default"] if name and name not in shown %}
+{% set _ = shown.append(name) %}
+{{ line(run.row(name), " (recommended)" if name == winner else "") }}
+{% endfor %}
+{% for name in ["claude_code", "codex", "opencode_glm"] %}
+{{ line(harnesses.row(name), mark="†", note=" ‡" if name in harnesses.corrections else "") }}
+{% endfor %}
+
+{% set oc_fix = harnesses.corrections["opencode_glm"] %}
+{% set oc_cost = harnesses.row("opencode_glm").avg_cost_per_question %}
+Brackets are 95% confidence intervals. † on a stratified {{ hn }} of the questions in a run of their own, so compare them with the others on [their own table](docs/benchmarks/multihop-rag.md#agent-harnesses). [The full leaderboard](docs/benchmarks/multihop-rag.md) has all {{ run.rows | length + 3 }} entries with significance tests, per-category winners, six open-weight generators and the limitations; [the demo-dataset example](docs/example-run.md) shows what one run produces. ‡ OpenCode's cost is its own estimate at OpenRouter's cheapest catalog price; OpenRouter probably billed {{ "%.2f" | format(oc_fix.factor_low) }}–{{ "%.2f" | format(oc_fix.factor_high) }}× that, about {{ (oc_cost * oc_fix.factor_low) | money(3) }}–{{ (oc_cost * oc_fix.factor_high) | money(3) }} a question ([correction](docs/benchmarks/multihop-rag.md#opencodes-cost)).
+
+{% set pat = run.patterns %}
+{% set cats = run.recommendation.category_scores %}
+{% set retrieving = run.rows | rejectattr("system", "equalto", "no_retrieval_floor") | list %}
+{% set fw_null = ["langchain_default", "llamaindex_default", "haystack_default"] | map("extract", cats["null_query"]) | list %}
+{% set temporal = retrieving | map(attribute="system") | map("extract", cats["temporal_query"]) | list %}
+What the results show beyond the ranking ([patterns](docs/benchmarks/multihop-rag.md#patterns-across-the-runs)):
+
+- **Temporal questions are the hardest**: the retrieving systems average {{ (temporal | sum / temporal | length) | score }} on them, and {{ pat.hard.none_by_category.get("temporal_query", 0) }} of the {{ pat.hard.none }} questions no system answers well are temporal.
+- **The null queries separate the systems most.** The frameworks' tutorial pipelines answer many of them anyway ({{ fw_null | min | score }} to {{ fw_null | max | score }}, against {{ cats["null_query"]["hybrid_default"] | score }} for `hybrid_default`), which is most of their gap.
+- **Spending more per question does not buy a better answer**: across the {{ retrieving | length }} retrieving systems, cost per question and answer score have a rank correlation of {{ rank_correlation(retrieving, "avg_cost_per_question", "answer_score") | score }}.

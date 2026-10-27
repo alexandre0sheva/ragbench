@@ -1,0 +1,866 @@
+[
+  {
+    "system": "bm25_default",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00034248033333333336,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 49.21861236837382,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1712.3547435870084,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "vector_default",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00035652933333333334,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 167.45546573773026,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1684.1535354134005,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_default",
+    "cost": {
+      "retrieve": 1.4898000000000001e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00036542300000000003,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 584.9397760466672,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1686.9288387553145,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "rerank_default",
+    "cost": {
+      "retrieve": 1.4898000000000001e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00037419600000000003,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 529.3817897078892,
+      "rerank": 61.609305148012936,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1732.9073655341442,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hybrid_rerank_default",
+    "cost": {
+      "retrieve": 1.4898000000000001e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00037427766666666665,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 614.4589117526388,
+      "rerank": 29.8280766660658,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1792.8392462587606,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hyde_default",
+    "cost": {
+      "retrieve": 2.3409333333333333e-06,
+      "rerank": 0.0,
+      "llm": 4.359766666666667e-05,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00035647133333333334,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 374.3994518027951,
+      "rerank": 0.0,
+      "llm": 1592.705328759427,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1760.7649597960215,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "parent_doc_default",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0005167446666666667,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 184.51075804575035,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1820.2583440284554,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "llm_heavy_default",
+    "cost": {
+      "retrieve": 1.1463333333333333e-06,
+      "rerank": 0.0,
+      "llm": 0.0013435266666666666,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.007778006666666667,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 664.5055656003145,
+      "rerank": 21.1864373452651,
+      "llm": 4221.216903068125,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 3877.04240970624,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "no_retrieval_floor",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 2.8077666666666667e-05,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1393.9268119695287,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "full_context_50k",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.005065950333333334,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 43.37303054518998,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 23046.644360321417,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "sentence_window_default",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00011931966666666666,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 191.6571510901364,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1877.5864687686164,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "vector_mmr",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0003340226666666667,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 179.09461833847067,
+      "rerank": 0.535115395517399,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 3093.984695040466,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "contextual_default",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0003389143333333334,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 209.8764999032331,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1596.063444573277,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "hierarchical_default",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00021108033333333337,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 16.86555667547509,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1590.7111001278583,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "raptor_collapsed",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00021343133333333333,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 1.6961660026572645,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1598.8526870667313,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "compression_llm_extract",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0007869026666666668,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 6.3006e-05,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 258.0135416518897,
+      "rerank": 0.0,
+      "llm": 3273.9428543206304,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1422.1197898468624,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "late_interaction_rerank",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00021411833333333333,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 252.95755822056285,
+      "rerank": 253.26906195376068,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1523.1542651339744,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "rag_fusion_default",
+    "cost": {
+      "retrieve": 3.2706666666666665e-06,
+      "rerank": 0.0,
+      "llm": 7.232933333333334e-05,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00021522833333333333,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 1161.6516988941778,
+      "rerank": 0.0,
+      "llm": 2065.4374284902588,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1687.3757957100559,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "decompose_default",
+    "cost": {
+      "retrieve": 1.2225333333333333e-06,
+      "rerank": 0.0,
+      "llm": 5.1526e-05,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.000236328,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 624.2797544854693,
+      "rerank": 0.0,
+      "llm": 1909.5930644551602,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 1737.6895110021967,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "corrective_default",
+    "cost": {
+      "retrieve": 1.4716e-06,
+      "rerank": 0.0,
+      "llm": 2.2335666666666667e-05,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.00021624033333333335,
+      "generate": 0.00021471100000000003,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 437.99772053956985,
+      "rerank": 0.0,
+      "llm": 687.1754156968867,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.005806235130876303,
+      "grade": 2132.7211175005264,
+      "generate": 1526.711013066427,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "iterative_default",
+    "cost": {
+      "retrieve": 2.1564000000000002e-06,
+      "rerank": 0.0,
+      "llm": 0.0004369146666666667,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.000238762,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 697.9444434773177,
+      "rerank": 0.0,
+      "llm": 6225.501684194121,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.017975550921012957,
+      "grade": 0.0,
+      "generate": 1510.642839584034,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_plain",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0011288773333333333,
+      "tool": 1.8810666666666667e-06,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0005368946666666666,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 8215.951426504957,
+      "tool": 1028.249100682636,
+      "embed": 0.0,
+      "route": 0.0618458166718483,
+      "grade": 0.0,
+      "generate": 2877.7093576523475,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "agent_search_tools",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0014261933333333335,
+      "tool": 1.7252666666666666e-06,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0005876043333333333,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 7485.12015251986,
+      "tool": 965.3374488923388,
+      "embed": 0.0,
+      "route": 0.060189966267595686,
+      "grade": 0.0,
+      "generate": 2374.183825267634,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "grep_agent_default",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0019891506666666666,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0006536593333333334,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 8519.024826435683,
+      "tool": 193.42101973636696,
+      "embed": 0.0,
+      "route": 0.08328755696614583,
+      "grade": 0.0,
+      "generate": 3110.927897645937,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "adaptive_default",
+    "cost": {
+      "retrieve": 1.0384666666666667e-06,
+      "rerank": 0.0,
+      "llm": 8.044933333333334e-05,
+      "tool": 8.293333333333333e-08,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00023956833333333336,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 348.24223685466376,
+      "rerank": 8.683322245099893,
+      "llm": 930.6294952845201,
+      "tool": 47.08950638926277,
+      "embed": 0.0,
+      "route": 0.16505337630709013,
+      "grade": 0.0,
+      "generate": 1520.8634369603049,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "decision_gate_default",
+    "cost": {
+      "retrieve": 1.4898000000000001e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0010201893333333335,
+      "generate": 0.00022857633333333335,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 553.4858563131032,
+      "rerank": 24.173770574076723,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 3497.456440567815,
+      "generate": 1444.3542426258016,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "decision_gate_strict",
+    "cost": {
+      "retrieve": 1.4898000000000001e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.000994097,
+      "generate": 9.961233333333334e-05,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 580.5220377709096,
+      "rerank": 25.366506963036954,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 3598.6910413981727,
+      "generate": 684.3733710904295,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "graph_rag_local",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0003298306666666667,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 677.5913162607079,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 2295.1553127914667,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "graph_rag_global",
+    "cost": {
+      "retrieve": 1.1572666666666667e-06,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00024031866666666664,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 49.09338898723945,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 3566.721529030086,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "langchain_default",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0002995856666666667,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 691.627887377205,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 3611.3199876551516,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "llamaindex_default",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.0010735693333333335,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 94.78194666666667,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 5682.428333333333,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  },
+  {
+    "system": "haystack_default",
+    "cost": {
+      "retrieve": 0.0,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 0.00045369633333333334,
+      "external": 0.0,
+      "untracked": 0.0
+    },
+    "latency_ms": {
+      "retrieve": 261.43010845795897,
+      "rerank": 0.0,
+      "llm": 0.0,
+      "tool": 0.0,
+      "embed": 0.0,
+      "route": 0.0,
+      "grade": 0.0,
+      "generate": 5515.5941416757805,
+      "external": 0.0,
+      "untracked": 0.0
+    }
+  }
+]

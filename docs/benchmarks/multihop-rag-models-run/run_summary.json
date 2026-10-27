@@ -1,0 +1,133 @@
+{
+  "schema_version": 1,
+  "run_id": "all_solutions_models_multihop",
+  "mode": "live",
+  "models_used": [
+    "claude-haiku-5-5",
+    "gpt-6-luna",
+    "openrouter:deepseek/deepseek-v4.1-flash",
+    "openrouter:minimax/minimax-m3",
+    "openrouter:moonshotai/kimi-k3",
+    "openrouter:qwen/qwen3.8-flash",
+    "openrouter:xiaomi/mimo-v2.6-pro",
+    "openrouter:z-ai/glm-5.3",
+    "text-embedding-3-small"
+  ],
+  "unknown_priced_models": [],
+  "pricing_as_of": "2026-10-24",
+  "run_wall_time_ms": 299961.9895000942,
+  "max_workers": 4,
+  "execution": {
+    "max_workers": 4,
+    "system_workers": 1,
+    "ingest_workers": 4,
+    "latency_probe_questions": 5,
+    "latency_source": "probe",
+    "probe_calls": 5,
+    "probe_cost_usd": 0.010703507999999999
+  },
+  "num_systems": 24,
+  "budget": {
+    "max_cost_usd": 9.4,
+    "spent_usd": 9.093025161871994,
+    "stopped": false,
+    "completed_systems": [
+      "hybrid_rerank_default[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]",
+      "hybrid_rerank_default[generator=openrouter:moonshotai/kimi-k3]",
+      "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "hybrid_rerank_default[generator=openrouter:minimax/minimax-m3]",
+      "hybrid_rerank_default[generator=gpt-6-luna]",
+      "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]",
+      "iterative_default[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "iterative_default[generator=openrouter:z-ai/glm-5.3]",
+      "iterative_default[generator=openrouter:moonshotai/kimi-k3]",
+      "iterative_default[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "iterative_default[generator=openrouter:qwen/qwen3.8-flash]",
+      "iterative_default[generator=openrouter:minimax/minimax-m3]",
+      "iterative_default[generator=gpt-6-luna]",
+      "iterative_default[generator=anthropic:claude-haiku-5-5]",
+      "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]",
+      "agent_search_tools[generator=openrouter:z-ai/glm-5.3]",
+      "agent_search_tools[generator=openrouter:moonshotai/kimi-k3]",
+      "agent_search_tools[generator=openrouter:xiaomi/mimo-v2.6-pro]",
+      "agent_search_tools[generator=openrouter:qwen/qwen3.8-flash]",
+      "agent_search_tools[generator=openrouter:minimax/minimax-m3]",
+      "agent_search_tools[generator=gpt-6-luna]",
+      "agent_search_tools[generator=anthropic:claude-haiku-5-5]"
+    ],
+    "incomplete_systems": {}
+  },
+  "num_question_rows": 2400,
+  "num_errors": 0,
+  "errors_by_system": {},
+  "k_values": [
+    1,
+    3,
+    5,
+    10
+  ],
+  "retrieval_depth": 10,
+  "context_k": 5,
+  "primary_k": 5,
+  "embedding_cache": {
+    "hits": 0,
+    "misses": 5311,
+    "saved_cost_usd": 0.0
+  },
+  "cache": {
+    "enabled": true,
+    "path": ".ragbench_cache/cache.sqlite3",
+    "hits": 5803,
+    "misses": 182,
+    "hit_rate": 0.9695906432748538,
+    "saved_cost_usd": 0.22892435200000025,
+    "by_namespace": {
+      "embeddings": {
+        "hits": 5311,
+        "misses": 0,
+        "saved_cost_usd": 0.03340566000000009
+      },
+      "llm": {
+        "hits": 492,
+        "misses": 182,
+        "saved_cost_usd": 0.19551869200000016
+      }
+    },
+    "size_bytes": 1341472160,
+    "charged_cost_usd": 9.082321653872,
+    "real_spend_usd": 8.864100809872001
+  },
+  "dataset": {
+    "questions": 100,
+    "labeled_questions": 88,
+    "label_free": false,
+    "synthetic_questions": 0,
+    "needs_review_questions": 0,
+    "mock_questions": 0
+  },
+  "notices": [],
+  "judge": {
+    "models": [
+      "anthropic:claude-haiku-5-5",
+      "gpt-6-luna"
+    ],
+    "aggregate": "mean",
+    "independent": true,
+    "agreement": {},
+    "scorers": "first"
+  },
+  "dataset_warnings": [],
+  "document_warnings": [],
+  "outputs": {
+    "leaderboard": "leaderboard.md",
+    "report": "report.html",
+    "qrels_audit": "qrels_audit.md",
+    "stats": "stats.json",
+    "significance": "significance.csv",
+    "pareto": "pareto.json",
+    "stages": "stages.json",
+    "recommendation": "recommendation.md"
+  }
+}

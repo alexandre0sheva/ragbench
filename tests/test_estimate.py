@@ -450,3 +450,12 @@ def test_the_latency_probe_of_a_live_run_is_in_the_estimate(tmp_path, probe, cal
     system = estimate.systems[0]
     assert system.probe_usd == pytest.approx(calls * system.answer_usd_per_question)
     assert system.total_usd == pytest.approx(system.ingestion_usd + system.query_usd + system.judge_usd + system.probe_usd)
+
+
+def test_the_estimate_table_shows_sweep_names_whole(capsys):
+    # Rich reads `[generator=...]` as markup; a swept system's name must print as written, or every sweep row looks the same.
+    from ragbench.evaluation.estimate import Estimate, SystemEstimate
+
+    row = SystemEstimate("hr[generator=openrouter:z-ai/glm-5.3]", "hybrid_rerank", False, 0.1, 0.001, 0.001, 1.0, 1.0, 10)
+    cli.print_estimate(Estimate([row], n_questions=10, n_documents=5, corpus_tokens=100, total_usd=0.12, wall_seconds=10.0, pricing_as_of="2026-10-26"))
+    assert "hr[generator=openrouter:z-ai" in capsys.readouterr().out

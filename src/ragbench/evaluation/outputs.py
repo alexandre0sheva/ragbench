@@ -179,7 +179,8 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
         extra_spend_usd=probe_cost,
     )
     panel = run.judge is not None and run.judge.is_panel
-    agreement = panel_agreement(per_question_rows) if panel else {}
+    first = evaluation.judge.scorers == "first"
+    agreement = panel_agreement(per_question_rows) if panel and not first else {}  # with one judge per answer there is no agreement to measure
     generators = {cfg.resolved_name: answering_model(cfg) for cfg in systems}
     external = external_facts(per_question_rows)
     notices = build_notices(
@@ -191,7 +192,12 @@ def write_outputs(run: BenchmarkEvaluator, rows: RunRows, run_wall_time_ms: floa
         **judge_notices(run.judge, generators, summary_rows, agreement),
     )
     # Only a panel gets a block: a one-judge run's summary stays as it was.
-    judge_block = {"judge": {"models": evaluation.judge_models, "aggregate": evaluation.judge.aggregate, "independent": evaluation.judge.independent, "agreement": agreement}} if panel else {}
+    scorers = {"scorers": "first"} if first else {}
+    judge_block = (
+        {"judge": {"models": evaluation.judge_models, "aggregate": evaluation.judge.aggregate, "independent": evaluation.judge.independent, "agreement": agreement, **scorers}}
+        if panel
+        else {}
+    )
     contrast = _write_contrast(run, out, run_stats.stats.get("baseline"))
     write_leaderboard(
         out / "leaderboard.md",

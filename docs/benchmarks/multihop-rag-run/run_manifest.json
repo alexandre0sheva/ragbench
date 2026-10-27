@@ -1,0 +1,33 @@
+{
+  "ragbench_version": "0.3.0",
+  "python": "3.12.12",
+  "platform": "macOS-27.0.1-arm64-arm-64bit",
+  "dependencies": {
+    "openai": "3.37.0",
+    "pandas": "3.1.0",
+    "numpy": "2.5.4",
+    "scikit-learn": "1.9.1",
+    "pydantic": "2.14.1",
+    "chromadb": "1.5.9",
+    "faiss-cpu": "1.15.1",
+    "qdrant-client": "1.19.1",
+    "rank-bm25": "0.2.2",
+    "tiktoken": "0.14.0",
+    "typer": "0.27.3",
+    "jinja2": "3.1.6"
+  },
+  "git_sha": "35bbfe20f74be28cdbcdf79883dff15ff6c2d17b",
+  "git_dirty": true,
+  "config_hash": "bdf0fabeea22ea9508bc683f27d11f1b57f7667daa86a0809afa8370b9ab439f",
+  "dataset_hash": "022f92e64f06caafdad732486c857e8c60ae3a6eb176843cf4e712f1d710c63c",
+  "mode": "live",
+  "models_used": [
+    "claude-haiku-5-5",
+    "gpt-6-luna",
+    "gpt-6.1-sol",
+    "text-embedding-3-small"
+  ],
+  "seed": null,
+  "started_utc": "2026-10-26T20:17:02Z",
+  "finished_utc": "2026-10-27T00:24:17Z"
+}

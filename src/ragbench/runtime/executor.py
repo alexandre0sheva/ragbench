@@ -7,7 +7,7 @@ decides how the work is spread over threads and keeps results in deterministic (
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any, Literal, Protocol
@@ -92,6 +92,12 @@ class ProbeResult:
     calls: int = 0
 
 
+def answer_key(result: dict[str, Any]) -> tuple[str, int]:
+    """Which question and trial an answered result is for."""
+    per_question = result["per_question"]
+    return str(per_question["question_id"]), int(per_question.get("trial") or 0)
+
+
 def _error_info(exc: BaseException) -> dict[str, str]:
     return {"type": type(exc).__name__, "message": str(exc)[:500]}
 
@@ -113,12 +119,16 @@ class SystemRunner:
 
     # -- main pass ------------------------------------------------------------------------------
 
-    def run_all(self, plan: EvaluationPlan, documents: list[Any]) -> list[SystemOutcome]:
-        """Every system of `plan` on every question of `plan`, `plan.trials` times each, as outcomes in the plan's system order."""
+    def run_all(self, plan: EvaluationPlan, documents: list[Any], earlier: Mapping[str, list[dict[str, Any]]] | None = None) -> list[SystemOutcome]:
+        """Every system of `plan` on every question of `plan`, `plan.trials` times each, as outcomes in the plan's system order.
+
+        `earlier` maps a system name to answers an earlier attempt of the run already gave (its partial checkpoint): those are kept and
+        only the other questions are asked."""
         total = len(plan.systems)
+        earlier = earlier or {}
 
         def run_one(pair: tuple[int, SystemConfig]) -> SystemOutcome:
-            outcome = self.run_system(pair[0], total, pair[1], documents, plan.questions, plan.trials)
+            outcome = self.run_system(pair[0], total, pair[1], documents, plan.questions, plan.trials, earlier.get(pair[1].resolved_name))
             if self.on_system_done is not None:
                 self.on_system_done(outcome)
             return outcome
@@ -131,15 +141,30 @@ class SystemRunner:
         )
 
     def run_system(
-        self, index: int, total: int, system_config: SystemConfig, documents: list[Any], questions: list[Any], trials: int = 1
+        self,
+        index: int,
+        total: int,
+        system_config: SystemConfig,
+        documents: list[Any],
+        questions: list[Any],
+        trials: int = 1,
+        earlier: list[dict[str, Any]] | None = None,
     ) -> SystemOutcome:
         name = system_config.resolved_name
         system_start = perf_counter()
+        work = [(question, trial) for question in questions for trial in range(trials)]  # a question's trials stay next to each other
+        kept = {answer_key(result): result for result in earlier or []}
+        todo = [item for item in work if (str(item[0].id), item[1]) not in kept]
+        resumed_at = len(work) - len(todo)
         self.progress.system_started(name, index, total)
+        if kept:
+            self.progress.system_resumed(name, resumed_at, len(work))
         if self.evaluator.budget_exhausted():
             logger.warning("Skipping system %s: the spending cap (evaluation.max_cost_usd) was already reached.", name)
             self.progress.system_finished(name, 0.0)
-            return SystemOutcome(index, name, system_config.type, None, None, [], {"system": name, "system_type": system_config.type, "num_questions": len(questions)})
+            # The earlier attempt's answers stay counted (and in the partial checkpoint) for the next attempt.
+            results = [kept.get((str(question.id), trial), {"skipped": True}) for question, trial in work] if kept else []
+            return SystemOutcome(index, name, system_config.type, None, None, results, {"system": name, "system_type": system_config.type, "num_questions": len(questions)})
         system = self.evaluator.create_system(system_config)
         ingest_start = perf_counter()
         ingest_error: dict[str, str] | None = None
@@ -166,20 +191,22 @@ class SystemRunner:
         else:
             self.progress.ingestion_finished(system.name, 0, ingestion_wall_time_ms)
         question_start = perf_counter()
-        work = [(question, trial) for question in questions for trial in range(trials)]  # a question's trials stay next to each other
         if ingest_error is not None:
             # A broken system must not take the other systems' (possibly paid-for) results down with it.
-            results = [self.evaluator.error_result(system, system_config, q, ingest_error, trial) for q, trial in work]
-            for done in range(1, len(work) + 1):
-                self.progress.question_finished(system.name, done, len(work))
+            fresh = [self.evaluator.error_result(system, system_config, q, ingest_error, trial) for q, trial in todo]
+            for done in range(1, len(todo) + 1):
+                self.progress.question_finished(system.name, resumed_at + done, len(work))
         else:
-            results = ordered_parallel_map(
+            fresh = ordered_parallel_map(
                 lambda item: self.evaluator.evaluate_single_question(system, system_config, item[0], item[1]),
-                work,
+                todo,
                 workers=self.settings.max_workers,
-                on_done=lambda done, count: self.progress.question_finished(system.name, done, count),
+                on_done=lambda done, count: self.progress.question_finished(system.name, resumed_at + done, len(work)),
                 thread_name_prefix=f"ragbench-{system.name}",
             )
+        answers = iter(fresh)
+        results = [kept[(str(q.id), trial)] if (str(q.id), trial) in kept else next(answers) for q, trial in work]
+        if ingest_error is None:
             results = blank_unscorable_retrieval(results)
         question_wall_time_ms = (perf_counter() - question_start) * 1000
         system_wall_time_ms = (perf_counter() - system_start) * 1000

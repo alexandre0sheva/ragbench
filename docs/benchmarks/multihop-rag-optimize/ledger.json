@@ -1,0 +1,288 @@
+{
+  "version": 1,
+  "k": 2,
+  "mode": "parallel",
+  "expected": {
+    "probes": 8,
+    "proposer_calls": 6
+  },
+  "probes": 8,
+  "proposer_calls": 6,
+  "max_cost_usd": 2.35,
+  "spent_usd": 2.23083358,
+  "real_spend_usd": 1.8684891400000003,
+  "stopped": null,
+  "entries": [
+    {
+      "step": "base",
+      "label": "base",
+      "cost_usd": 0.35624988000000024,
+      "rollouts": 2,
+      "reused": false,
+      "restored": true,
+      "split": "train",
+      "questions": 151,
+      "run_dir": "results/optimize_hybrid_rerank_multihop/probes/train-base",
+      "means": {
+        "base": 3.688079470198675
+      },
+      "harness": {},
+      "fingerprint": "eae3f4e43bc06a17"
+    },
+    {
+      "step": "propose",
+      "label": "p0-inv",
+      "cost_usd": 0.00747545,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "kind": "INV",
+      "parent": "base",
+      "patch": {
+        "top_k": 10
+      },
+      "inherited": false,
+      "attempts": 1,
+      "error": null,
+      "rationale": "Many refusals occur because the generator sees only a few short chunks, and the question asks about multiple named sources or conditions. Increasing the number of chunks the generator reads gives it more opportunities to find all the pieces needed before concluding the answer is unavailable.",
+      "evidence": "results/optimize_hybrid_rerank_multihop/evidence/base-t0",
+      "evidence_trial": 0
+    },
+    {
+      "step": "propose",
+      "label": "p0-dom",
+      "cost_usd": 0.001618,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "kind": "DOM",
+      "parent": "base",
+      "patch": {
+        "grounding": "Use only the provided context. When a question asks about multiple articles or sources, check whether each named source is present; if one is missing, say so explicitly. If the answer requires combining information from different passages, synthesize across them and cite each source used."
+      },
+      "inherited": false,
+      "attempts": 1,
+      "error": null,
+      "rationale": "Many questions in this collection are compound, asking for an entity that satisfies multiple conditions from different articles, but the current prompt only says to answer from context without explicitly telling the model to synthesize across multiple retrieved passages. Adding a collection-specific instruction to combine evidence from multiple sources and to identify when a required source is missing will reduce false refusals and improve multi-hop answers.",
+      "evidence": "results/optimize_hybrid_rerank_multihop/evidence/base-t0",
+      "evidence_trial": 0
+    },
+    {
+      "step": "propose",
+      "label": "p1-inv",
+      "cost_usd": 0.00712986,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "kind": "INV",
+      "parent": "base",
+      "patch": {
+        "top_k": 8,
+        "chunk_size": 800
+      },
+      "inherited": false,
+      "attempts": 1,
+      "error": null,
+      "rationale": "Many failures show the system refusing because the retrieved chunks are only tangentially related to the full question, even when the answer may exist in the collection. Increasing top_k and chunk_size gives the generator more context, making it less likely to miss the relevant passage and refuse prematurely.",
+      "evidence": "results/optimize_hybrid_rerank_multihop/evidence/base-t1",
+      "evidence_trial": 1
+    },
+    {
+      "step": "propose",
+      "label": "p1-dom",
+      "cost_usd": 0.00136697,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "kind": "DOM",
+      "parent": "base",
+      "patch": {
+        "few_shot": [
+          {
+            "question": "Considering the analysis from an article by the BBC and the strategic forecast presented by CNN, which country, identified as a rising regional power in the BBC article and predicted to increase its defense spending according to CNN, has a single-letter stock market index symbol?",
+            "answer": "I could not find the answer in the provided documents."
+          }
+        ]
+      },
+      "inherited": false,
+      "attempts": 1,
+      "error": null,
+      "rationale": "Many questions ask for a single letter or initial derived from names in the documents, but the retrieval and answer often fail because the system treats them as general QA. Adding a few-shot example from a rollout that demonstrates extracting a letter/initial from the provided context teaches the model to focus on this collection's letter-answer pattern and reduces refusals.",
+      "evidence": "results/optimize_hybrid_rerank_multihop/evidence/base-t1",
+      "evidence_trial": 1
+    },
+    {
+      "step": "probe",
+      "label": "p0-inv",
+      "cost_usd": 0.24627489999999988,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "split": "train",
+      "questions": 151,
+      "run_dir": "results/optimize_hybrid_rerank_multihop/probes/train-p0-inv",
+      "means": {
+        "p0-inv": 3.6596026490066227
+      },
+      "harness": {
+        "top_k": 10
+      },
+      "fingerprint": "0e9adb407b0c462f"
+    },
+    {
+      "step": "probe",
+      "label": "p0-dom",
+      "cost_usd": 0.19802029999999993,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "split": "train",
+      "questions": 151,
+      "run_dir": "results/optimize_hybrid_rerank_multihop/probes/train-p0-dom",
+      "means": {
+        "p0-dom": 3.7456953642384105
+      },
+      "harness": {
+        "grounding": "Use only the provided context. When a question asks about multiple articles or sources, check whether each named source is present; if one is missing, say so explicitly. If the answer requires combining information from different passages, synthesize across them and cite each source used."
+      },
+      "fingerprint": "939a0cd7ba8b6878"
+    },
+    {
+      "step": "probe",
+      "label": "p1-inv",
+      "cost_usd": 0.26822556000000014,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "split": "train",
+      "questions": 151,
+      "run_dir": "results/optimize_hybrid_rerank_multihop/probes/train-p1-inv",
+      "means": {
+        "p1-inv": 3.562251655629139
+      },
+      "harness": {
+        "top_k": 8,
+        "chunk_size": 800
+      },
+      "fingerprint": "1871241ea8e02f44"
+    },
+    {
+      "step": "probe",
+      "label": "p1-dom",
+      "cost_usd": 0.19556070000000017,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "split": "train",
+      "questions": 151,
+      "run_dir": "results/optimize_hybrid_rerank_multihop/probes/train-p1-dom",
+      "means": {
+        "p1-dom": 3.7006622516556287
+      },
+      "harness": {
+        "few_shot": [
+          {
+            "question": "Considering the analysis from an article by the BBC and the strategic forecast presented by CNN, which country, identified as a rising regional power in the BBC article and predicted to increase its defense spending according to CNN, has a single-letter stock market index symbol?",
+            "answer": "I could not find the answer in the provided documents."
+          }
+        ]
+      },
+      "fingerprint": "88d3fa7a2a70aef9"
+    },
+    {
+      "step": "compose",
+      "label": "c0",
+      "cost_usd": 0.00783335,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "kind": "COMPOSE",
+      "parent": "base",
+      "patch": {
+        "grounding": "Use only the provided context. When a question asks about multiple articles or sources, check whether each named source is present; if one is missing, say so explicitly. If the answer requires combining information from different passages, synthesize across them and cite each source used.",
+        "top_k": 10,
+        "chunk_size": 800
+      },
+      "inherited": false,
+      "attempts": 1,
+      "error": null,
+      "rationale": "The base system often refuses because it only sees the top 5 chunks, missing pieces needed to answer multi-source and temporal questions. Increasing top_k to 10 and chunk_size to 800 widens the context so more relevant evidence is available, while adding the p0-dom grounding rule makes the model explicitly check for missing named sources and synthesize across passages, reducing premature refusals.",
+      "evidence": "results/optimize_hybrid_rerank_multihop/evidence/compose",
+      "evidence_trial": null
+    },
+    {
+      "step": "compose",
+      "label": "c1",
+      "cost_usd": 0.00152551,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "kind": "COMPOSE",
+      "parent": "base",
+      "patch": {
+        "grounding": "Use only the provided context. When a question asks about multiple articles or sources, check whether each named source is present; if one is missing, say so explicitly. If the answer requires combining information from different passages, synthesize across them and cite each source used.",
+        "top_k": 10
+      },
+      "inherited": false,
+      "attempts": 1,
+      "error": null,
+      "rationale": "The base system refuses many questions because it retrieves too few chunks and the generator does not check whether each named source is actually present. The p0-dom grounding explicitly instructs the model to verify named sources and synthesize across passages, which addresses the recurring refusals where one required source is missing. Increasing top_k to 10 (p0-inv) gives the generator more material to find those sources or confirm their absence.",
+      "evidence": "results/optimize_hybrid_rerank_multihop/evidence/compose",
+      "evidence_trial": null
+    },
+    {
+      "step": "probe",
+      "label": "c0",
+      "cost_usd": 0.30380495999999985,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "split": "train",
+      "questions": 151,
+      "run_dir": "results/optimize_hybrid_rerank_multihop/probes/train-c0",
+      "means": {
+        "c0": 3.6317880794701987
+      },
+      "harness": {
+        "grounding": "Use only the provided context. When a question asks about multiple articles or sources, check whether each named source is present; if one is missing, say so explicitly. If the answer requires combining information from different passages, synthesize across them and cite each source used.",
+        "top_k": 10,
+        "chunk_size": 800
+      },
+      "fingerprint": "20cb994016fd662f"
+    },
+    {
+      "step": "probe",
+      "label": "c1",
+      "cost_usd": 0.2486582,
+      "rollouts": 1,
+      "reused": false,
+      "restored": true,
+      "split": "train",
+      "questions": 151,
+      "run_dir": "results/optimize_hybrid_rerank_multihop/probes/train-c1",
+      "means": {
+        "c1": 3.6675496688741718
+      },
+      "harness": {
+        "grounding": "Use only the provided context. When a question asks about multiple articles or sources, check whether each named source is present; if one is missing, say so explicitly. If the answer requires combining information from different passages, synthesize across them and cite each source used.",
+        "top_k": 10
+      },
+      "fingerprint": "db25324c9fb47789"
+    },
+    {
+      "step": "verify",
+      "label": "test",
+      "cost_usd": 0.38708993999999985,
+      "rollouts": 1,
+      "reused": false,
+      "restored": false,
+      "split": "test",
+      "questions": 149,
+      "run_dir": "results/optimize_hybrid_rerank_multihop/probes/test-verify",
+      "means": {
+        "base": 3.6818791946308727,
+        "p0-dom": 3.64496644295302
+      }
+    }
+  ]
+}

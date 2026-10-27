@@ -1,0 +1,12 @@
+{
+  "opencode_glm": {
+    "metric": "avg_cost_per_question",
+    "recorded_as": "OpenCode's own estimate: its tokens at the OpenRouter catalog price of z-ai/glm-5.3 ($0.07 / $1.40 per 1M tokens)",
+    "factor_low": 2.74,
+    "factor_high": 4.25,
+    "factor_source": "The model comparison (multihop-rag-models-run) called z-ai/glm-5.3 through RAGBench, which records OpenRouter's billed usage.cost: billed generator cost divided by the same tokens at the catalog price was 2.74 in agent_search_tools and 4.25 in hybrid_rerank_default. OpenRouter routes each request to one of ~45 upstream providers, most dearer than the catalog's cheapest; OpenCode never sees the bill.",
+    "also": "OpenCode sends no routing preferences, so its requests did not carry the config's openrouter.provider.data_collection: deny.",
+    "found": "2026-10-27",
+    "fixed_in": "ragbench 0.4.0: the cli_agent opencode preset on openrouter: models records OpenRouter's billed cost through a local relay (src/ragbench/rag_systems/openrouter_relay.py); tested offline, not yet against a live OpenCode run"
+  }
+}

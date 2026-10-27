@@ -36,28 +36,44 @@ Each run writes one directory: a **recommendation** (which system to deploy unde
 
 `report.html` follows the OS theme, has a light/dark toggle, and works on a phone-sized screen.
 
-### An example result
+### Where the results are
 
-A live run of [`configs/all.yaml`](configs/all.yaml) on the bundled demo dataset (60 documents, 163 questions, 24 systems; `gpt-6-luna` generates and judges, `gpt-6.1-sol` for `llm_heavy`, `text-embedding-3-small`), run 7 Oct 2026 with ragbench 0.3.0 plus `decision_gate`; the systems had been run before with the same configuration (the original 22 on 1 Oct for $2.91 of real spend), so the cache served this run for $0.07. Brackets are 95% bootstrap confidence intervals over the questions; the metrics are defined in the [methodology](docs/methodology.md).
+| Looking for | Go to |
+| --- | --- |
+| The current benchmark: every system on one public dataset (October 2026) | [MultiHop-RAG](docs/benchmarks/multihop-rag.md); its top is the table below |
+| Every published run's table, filterable | the docs site's [Leaderboard](https://alexandre0sheva.github.io/ragbench/leaderboard/) |
+| Which page or folder holds what, and how to read a leaderboard | [Where the results are](docs/finding-results.md) |
+| Your own run | `results/<run>/report.html` (open it in a browser) and `leaderboard.md` |
 
-| System | Recall@5 | Answer score | $ / question | p95 latency |
-| --- | --- | --- | --- | --- |
-| `no_retrieval_floor` | — | 1.54 [1.40, 1.68] | $0.00012 | 1430 ms |
-| **`bm25_default`** (recommended) | 0.745 [0.681, 0.808] | 4.69 [4.55, 4.81] | $0.00049 | 1371 ms |
-| `vector_default` | 0.790 [0.733, 0.847] | 4.67 [4.54, 4.79] | $0.00044 | 2374 ms |
-| `hybrid_rerank_default` | 0.774 [0.713, 0.832] | 4.72 [4.59, 4.84] | $0.00053 | 3463 ms |
-| `decision_gate_default` | 0.774 [0.713, 0.832] | 4.80 [4.70, 4.89] | $0.00094 | 4801 ms |
-| `llm_heavy_default` | 0.790 [0.728, 0.848] | 4.72 [4.60, 4.82] | $0.00512 | 7579 ms |
-| `full_context_ceiling` | 0.741 [0.676, 0.804] | 4.78 [4.70, 4.84] | $0.00280 | 2038 ms |
-| `iterative_default` (agent) | 0.799 [0.742, 0.856] | 4.81 [4.71, 4.90] | $0.00057 | 6423 ms |
-| `agent_search_tools` (agent) | 0.821 [0.767, 0.876] | 4.75 [4.63, 4.85] | $0.00082 | 5753 ms |
-| `grep_agent_default` (agent) | 0.791 [0.736, 0.850] | 4.78 [4.69, 4.86] | $0.00109 | 8197 ms |
+### A published result
 
-Ten of the 24 systems are shown; [the full example run](docs/example-run.md) has all of them, the per-category winners and the saved result files, and [the decision gate evaluation](docs/decision-gate-evaluation.md) looks closer at `decision_gate`.
+<!-- results:multihop-rag:start -->
+Every RAG solution RAGBench can run, on 300 questions of the public [MultiHop-RAG](https://github.com/yixuantt/MultiHop-RAG) dataset (multi-hop questions over a corpus of news articles, null queries included), `gpt-6-luna` generating and `claude-haiku-5-5` judging. The top five, the recommended system, the floor and the 50k-token long-context entry, the three framework pipelines and the three agent harnesses:
 
-- **Retrieval is what matters most here.** Without it the model scores 1.54; `bm25_default` scores 3.15 points higher (95% CI +2.95 to +3.35) and wins on 159 of 163 questions.
-- **Past that, quality did not separate the systems.** `bm25_default` and 17 others are statistically tied with the best answer score (`iterative_default`, 4.81) under a paired bootstrap with Holm correction; `bm25_default` is 0.12 lower (CI −0.27 to +0.01). So the recommendation fell to cost and latency: `bm25_default` costs $0.00049 per question, against up to $0.00512 for the tied systems.
-- **How far to trust it.** This is a small, easy corpus (about 23k tokens) with a judge that is also the generator, so scores are probably inflated and the ranking may not carry over to yours (the report says so in its banner). The p95 latency is measured on a five-question probe and moves a lot between runs, so compare it only across large differences. Run it on your own documents with `ragbench auto`.
+| System | Answer score | Recall@5 | $ / question |
+| --- | --- | --- | --- |
+| `llm_heavy_default` | 3.83 [3.73, 3.94] | 0.667 | $0.00983 |
+| `hybrid_rerank_default` (recommended) | 3.73 [3.61, 3.83] | 0.668 | $0.00109 |
+| `compression_llm_extract` | 3.72 [3.57, 3.85] | 0.640 | $0.00112 |
+| `corrective_default` | 3.68 [3.57, 3.79] | 0.637 | $0.00100 |
+| `rerank_default` | 3.65 [3.54, 3.76] | 0.660 | $0.00108 |
+| `no_retrieval_floor` | 1.90 [1.76, 2.05] | — | $0.00021 |
+| `full_context_50k` | 3.41 [3.29, 3.53] | 0.642 | $0.00581 |
+| `langchain_default` | 2.85 [2.73, 2.98] | 0.588 | $0.00088 |
+| `llamaindex_default` | 2.60 [2.46, 2.73] | 0.591 | $0.00176 |
+| `haystack_default` | 2.71 [2.57, 2.84] | 0.579 | $0.00115 |
+| `claude_code`† | 3.55 [3.35, 3.76] | 0.632 | $0.01353 |
+| `codex`† | 2.92 [2.73, 3.12] | 0.473 | $0.01598 |
+| `opencode_glm`† ‡ | 3.64 [3.50, 3.77] | 0.656 | $0.01023 |
+
+Brackets are 95% confidence intervals. † on a stratified 150 of the questions in a run of their own, so compare them with the others on [their own table](docs/benchmarks/multihop-rag.md#agent-harnesses). [The full leaderboard](docs/benchmarks/multihop-rag.md) has all 35 entries with significance tests, per-category winners, six open-weight generators and the limitations; [the demo-dataset example](docs/example-run.md) shows what one run produces. ‡ OpenCode's cost is its own estimate at OpenRouter's cheapest catalog price; OpenRouter probably billed 2.74–4.25× that, about $0.028–$0.043 a question ([correction](docs/benchmarks/multihop-rag.md#opencodes-cost)).
+
+What the results show beyond the ranking ([patterns](docs/benchmarks/multihop-rag.md#patterns-across-the-runs)):
+
+- **Temporal questions are the hardest**: the retrieving systems average 2.77 on them, and 7 of the 11 questions no system answers well are temporal.
+- **The null queries separate the systems most.** The frameworks' tutorial pipelines answer many of them anyway (0.59 to 2.22, against 4.37 for `hybrid_default`), which is most of their gap.
+- **Spending more per question does not buy a better answer**: across the 31 retrieving systems, cost per question and answer score have a rank correlation of 0.02.
+<!-- results:multihop-rag:end -->
 
 ## Systems
 
@@ -110,7 +126,9 @@ Every system implements the same interface and runs on any dataset. Options and 
 - [System wiki](docs/system-wiki.md): how every system, chunker, reranker and agent works, with diagrams
 - [Systems](docs/systems.md) and [tools](docs/tools.md) *(generated tables)*, [command-line reference](docs/cli.md) *(generated)*
 - [Extending RAGBench](docs/extending.md): new systems, tools, chunkers, rerankers, loaders, vector backends and model providers
-- [Example run](docs/example-run.md): the complete live run behind the numbers above, with its result files
+- [Where the results are](docs/finding-results.md): which benchmark is current, which page and folder holds what, and how to read a leaderboard
+- [MultiHop-RAG benchmark](docs/benchmarks/multihop-rag.md): the current published benchmark, every system on one public dataset
+- [Example run](docs/example-run.md): one live run on the demo dataset, end to end with its result files
 - [Decision gate evaluation](docs/decision-gate-evaluation.md): `decision_gate` (OpenAI Decisions API) measured against `hybrid_rerank`, `corrective` and a no-retrieval floor on the demo dataset, and when to try it
 - [Changelog](CHANGELOG.md) and the [release checklist](docs/release-checklist.md)
 

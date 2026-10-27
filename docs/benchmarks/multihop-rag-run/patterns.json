@@ -1,0 +1,78 @@
+{
+  "questions": {
+    "comparison_query": 100,
+    "inference_query": 95,
+    "null_query": 36,
+    "temporal_query": 69
+  },
+  "answerable_score": {
+    "adaptive_default": 3.4981060606060606,
+    "agent_search_plain": 3.2238636363636366,
+    "agent_search_tools": 3.411363636363636,
+    "bm25_default": 3.5231060606060605,
+    "compression_llm_extract": 3.689318181818182,
+    "contextual_default": 3.49280303030303,
+    "corrective_default": 3.6000757575757576,
+    "decision_gate_default": 3.3924242424242426,
+    "decision_gate_strict": 2.290909090909091,
+    "decompose_default": 3.585227272727273,
+    "full_context_50k": 3.2806818181818183,
+    "graph_rag_global": 1.9390151515151515,
+    "graph_rag_local": 3.103030303030303,
+    "grep_agent_default": 3.1083333333333334,
+    "haystack_default": 2.996969696969697,
+    "hierarchical_default": 3.324621212121212,
+    "hybrid_default": 3.0946969696969697,
+    "hybrid_rerank_default": 3.636742424242424,
+    "hyde_default": 3.318030303030303,
+    "iterative_default": 3.3950757575757575,
+    "langchain_default": 3.0079545454545453,
+    "late_interaction_rerank": 3.271287878787879,
+    "llamaindex_default": 2.646590909090909,
+    "llm_heavy_default": 3.7425,
+    "no_retrieval_floor": 1.7204545454545455,
+    "parent_doc_default": 3.2609090909090908,
+    "rag_fusion_default": 3.4775757575757575,
+    "raptor_collapsed": 3.2393939393939393,
+    "rerank_default": 3.556060606060606,
+    "sentence_window_default": 3.2916666666666665,
+    "vector_default": 3.360227272727273,
+    "vector_mmr": 3.2848484848484847
+  },
+  "hard": {
+    "threshold": 4.0,
+    "none": 11,
+    "none_by_category": {
+      "comparison_query": 2,
+      "inference_query": 2,
+      "temporal_query": 7
+    }
+  },
+  "recall_buckets": [
+    {
+      "recall": "none",
+      "answers": 583,
+      "answer_score": 2.363293310463122
+    },
+    {
+      "recall": "some",
+      "answers": 4222,
+      "answer_score": 3.239578398863098
+    },
+    {
+      "recall": "all",
+      "answers": 3379,
+      "answer_score": 3.4389345960343296
+    }
+  ],
+  "failures": {
+    "no_failure": 5258,
+    "insufficient_context": 1589,
+    "answer_hallucination": 1316,
+    "retrieval_miss": 387,
+    "partial_answer": 379,
+    "bad_reranking": 313,
+    "over_refusal": 281,
+    "possible_qrels_gap": 77
+  }
+}

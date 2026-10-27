@@ -1,0 +1,158 @@
+{
+  "winner": "hybrid_rerank_default",
+  "profile": "balanced",
+  "weights": {
+    "quality": 0.6,
+    "cost": 0.2,
+    "latency": 0.2
+  },
+  "constraints": {
+    "max_cost_per_question": null,
+    "max_latency_ms_p95": null,
+    "min_faithfulness": null,
+    "min_answer_score": null,
+    "max_ingestion_cost": null,
+    "require_local_models": false,
+    "require_no_network": false
+  },
+  "quality_metric": "answer_score",
+  "mode": "live",
+  "n_questions": 150,
+  "run_id": "all_solutions_harnesses_multihop",
+  "tied_with_winner": [
+    "agent_search_tools",
+    "opencode_glm",
+    "claude_code"
+  ],
+  "pareto": [
+    "no_retrieval_floor",
+    "hybrid_rerank_default"
+  ],
+  "by_category": {
+    "comparison_query": "hybrid_rerank_default",
+    "inference_query": "claude_code",
+    "null_query": "hybrid_rerank_default",
+    "temporal_query": "opencode_glm"
+  },
+  "category_scores": {
+    "comparison_query": {
+      "no_retrieval_floor": 1.1460000000000001,
+      "hybrid_rerank_default": 3.53,
+      "agent_search_tools": 3.108,
+      "claude_code": 2.912,
+      "codex": 2.5580000000000003,
+      "opencode_glm": 3.502
+    },
+    "inference_query": {
+      "no_retrieval_floor": 2.6416666666666666,
+      "hybrid_rerank_default": 3.9395833333333337,
+      "agent_search_tools": 3.71875,
+      "claude_code": 4.3125,
+      "codex": 3.43125,
+      "opencode_glm": 3.8395833333333336
+    },
+    "null_query": {
+      "no_retrieval_floor": 3.611111111111111,
+      "hybrid_rerank_default": 4.355555555555555,
+      "agent_search_tools": 4.333333333333333,
+      "claude_code": 3.9111111111111114,
+      "codex": 3.9888888888888894,
+      "opencode_glm": 3.7529411764705882
+    },
+    "temporal_query": {
+      "no_retrieval_floor": 1.270588235294118,
+      "hybrid_rerank_default": 3.0647058823529414,
+      "agent_search_tools": 3.047058823529412,
+      "claude_code": 3.241176470588235,
+      "codex": 2.179411764705883,
+      "opencode_glm": 3.4970588235294118
+    }
+  },
+  "ranking": [
+    {
+      "system": "hybrid_rerank_default",
+      "score": 0.98275634144185,
+      "quality": 3.654666666666667,
+      "cost_per_question": 0.0010878358666666665,
+      "latency_ms_p95": 3304.938783019315,
+      "ingestion_cost": 0.03301192,
+      "faithfulness": 4.003333333333333,
+      "llm_calls": 1.0,
+      "steps": 8.053333333333333,
+      "tied": true,
+      "pareto": true
+    },
+    {
+      "system": "agent_search_tools",
+      "score": 0.818540572600861,
+      "quality": 3.4366666666666665,
+      "cost_per_question": 0.002635931866666667,
+      "latency_ms_p95": 16176.52671078685,
+      "ingestion_cost": 0.03340566,
+      "faithfulness": 3.57,
+      "llm_calls": 5.613333333333333,
+      "steps": 16.313333333333333,
+      "tied": true,
+      "pareto": false
+    },
+    {
+      "system": "opencode_glm",
+      "score": 0.7595512382403538,
+      "quality": 3.6382550335570465,
+      "cost_per_question": 0.010229014079865772,
+      "latency_ms_p95": 22541.40008329414,
+      "ingestion_cost": 0.0,
+      "faithfulness": 3.0268456375838926,
+      "llm_calls": 5.402684563758389,
+      "steps": 13.167785234899329,
+      "tied": true,
+      "pareto": false
+    },
+    {
+      "system": "claude_code",
+      "score": 0.6412224414014832,
+      "quality": 3.554666666666667,
+      "cost_per_question": 0.013530883333333335,
+      "latency_ms_p95": 31459.486525086686,
+      "ingestion_cost": 0.0,
+      "faithfulness": 3.5,
+      "llm_calls": 6.513333333333334,
+      "steps": 15.62,
+      "tied": true,
+      "pareto": false
+    },
+    {
+      "system": "no_retrieval_floor",
+      "score": 0.4,
+      "quality": 1.9486666666666663,
+      "cost_per_question": 0.0002086373333333334,
+      "latency_ms_p95": 2150.2071935450654,
+      "ingestion_cost": 0.0,
+      "faithfulness": 2.506666666666667,
+      "llm_calls": 1.0,
+      "steps": 2.0,
+      "tied": false,
+      "pareto": true
+    },
+    {
+      "system": "codex",
+      "score": 0.34279015240328264,
+      "quality": 2.923333333333334,
+      "cost_per_question": 0.015977101666666667,
+      "latency_ms_p95": 40058.07355898431,
+      "ingestion_cost": 0.0,
+      "faithfulness": 2.54,
+      "llm_calls": 1.0,
+      "steps": 6.673333333333333,
+      "tied": false,
+      "pareto": false
+    }
+  ],
+  "infeasible": {},
+  "closest_miss": null,
+  "rationale": [
+    "`hybrid_rerank_default` is recommended under the `balanced` profile (quality first, then the best mix of cost and speed among systems that are equally good): answer score 3.65, $0.00109 per question, p95 latency 3305 ms.",
+    "`hybrid_rerank_default` ties with `agent_search_tools`, `opencode_glm` and `claude_code` on answer score: they are statistically indistinguishable from the best (`hybrid_rerank_default`) by a paired bootstrap on the same questions (Holm-adjusted p \u2265 0.05). Quality does not separate them, so it wins on cost and latency ($0.00109 per question against up to $0.01353; p95 latency 3305 ms against up to 31459 ms).",
+    "hybrid_rerank_default vs no_retrieval_floor (the cheapest feasible system): +1.71 answer score (95% CI +1.49 to +1.91, significant), 5.2\u00d7 cost"
+  ]
+}

@@ -85,6 +85,20 @@ def test_opencode_json_becomes_steps_with_their_tokens_and_costs():
     assert trajectory.final_text() == "HarborShield costs $200 per month for the marine module (docs/doc_001.md)."
 
 
+def test_opencode_prices_its_tokens_reasoning_included_at_the_cheapest_openrouter_list_price():
+    # OpenCode 1.19.4's step cost is its tokens at its own price table, which for `openrouter/z-ai/glm-5.3` held the cheapest upstream's list
+    # price ($0.079 input, $1.40 output and reasoning, $0.078 cache read per 1M tokens) when this was recorded. OpenRouter bills the upstream
+    # it routes to, so this cost is a floor; with an `openrouter:` model the `opencode` preset records OpenRouter's bill instead.
+    finishes = [json.loads(line)["part"] for line in _fixture("opencode_recorded").splitlines() if '"step_finish"' in line]
+    for part in finishes:
+        tokens = part["tokens"]
+        list_price = (tokens["input"] * 0.079 + (tokens["output"] + tokens["reasoning"]) * 1.40 + tokens["cache"]["read"] * 0.078) / 1e6
+        assert part["cost"] == pytest.approx(list_price, rel=1e-6)
+    trajectory = parse("opencode", _fixture("opencode_recorded"))
+    assert [t.completion_tokens for t in trajectory.turns] == [f["tokens"]["output"] + f["tokens"]["reasoning"] for f in finishes]
+    assert trajectory.cost_usd == pytest.approx(0.00658448)
+
+
 def test_text_output_is_the_answer_and_no_trajectory():
     trajectory = parse("text", "banner\nThe answer is $200.\n")
     assert trajectory.answer == "banner\nThe answer is $200." and trajectory.items == [] and trajectory.events is False
@@ -296,7 +310,7 @@ def test_opencode_gets_a_config_that_denies_web_shell_and_edits(tmp_path):
     system.ingest(_documents())
     system._prepare(tmp_path, QUESTION)
     config = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
-    assert config["permission"] == {"edit": "deny", "bash": "deny", "webfetch": "deny"}
+    assert config["permission"] == {"edit": "deny", "bash": "deny", "webfetch": "deny"} and "provider" not in config  # no relay off OpenRouter
 
 
 def test_a_custom_harness_with_network_off_is_warned_about(caplog):

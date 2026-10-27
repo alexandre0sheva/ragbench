@@ -30,6 +30,11 @@ _LINK = re.compile(r"(\]\()([^)\s]+)((?:\s+\"[^\"]*\")?\))|((?:href|src)=\")([^\
 _SCHEME = re.compile(r"([a-z][a-z0-9+.-]*:|#|/)", re.I)
 
 
+LEADERBOARD_GUIDE = (
+    "**Looking for the current benchmark?** It is [MultiHop-RAG](benchmarks/multihop-rag.md), with its analysis; "
+    "[Where the results are](finding-results.md) says which run below is which and how to read them."
+)
+
 def repository_url() -> str:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     return str(project["urls"]["Repository"]).rstrip("/")
@@ -102,12 +107,16 @@ def stage(root: Path, dest: Path) -> None:
     for source, target in files.items():
         destination = dest / target.as_posix()
         destination.parent.mkdir(parents=True, exist_ok=True)
-        if source.suffix == ".md" and "benchmarks" not in source.parts:
+        if source.suffix == ".md" and not any(part.endswith("-run") for part in source.parts):  # a run folder's reports are copied as written
             destination.write_text(rewrite((root / source).read_text(encoding="utf-8"), source, files, root), encoding="utf-8")
         else:
             shutil.copyfile(root / source, destination)  # images, and the result files of committed runs, as they are
     benchmarks = root / "docs" / "benchmarks"
-    (dest / "leaderboard.md").write_text(leaderboard_markdown(benchmarks) + "\n[Filter and sort every system of every run](leaderboard-explorer/index.html){ .md-button }\n" if benchmarks.is_dir() else leaderboard_markdown(benchmarks), encoding="utf-8")
+    leaderboard = leaderboard_markdown(benchmarks)
+    if benchmarks.is_dir():  # under the title: where the current benchmark is, since this page lists every run's table alike
+        leaderboard = leaderboard.replace("\n\n", f"\n\n{LEADERBOARD_GUIDE}\n\n", 1)
+        leaderboard += "\n[Filter and sort every system of every run](leaderboard-explorer/index.html){ .md-button }\n"
+    (dest / "leaderboard.md").write_text(leaderboard, encoding="utf-8")
     if benchmarks.is_dir() and any(benchmarks.glob("*-run")):
         write_site(benchmarks, dest / "leaderboard-explorer", title="RAGBench leaderboard")
 

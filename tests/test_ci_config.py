@@ -50,7 +50,7 @@ def test_every_step_is_a_checkout_setup_or_a_command_and_actions_are_pinned_to_a
 
 def test_the_gate_commands_are_in_the_workflow():
     text = "\n".join(_commands())
-    for needed in ("ruff check .", "mypy", "pytest -n auto --cov", "generate_docs.py --check", "audit_docs.py", "twine check --strict", "pip-audit", "python -m build", "ragbench auto"):
+    for needed in ("ruff check .", "mypy", "pytest -n auto --cov", "generate_docs.py --check", "audit_docs.py", "check_results.py", "twine check --strict", "pip-audit", "python -m build", "ragbench auto"):
         assert needed in text, f"CI does not run `{needed}`"
 
 

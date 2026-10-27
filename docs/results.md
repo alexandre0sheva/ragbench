@@ -1,5 +1,7 @@
 # Result files, schemas and the site
 
+Looking for the published benchmarks rather than the files? See [Where the results are](finding-results.md).
+
 A finished run is a folder of plain files; the [example run](example-run.md) lists what each one holds. This page is about reading them from other tools, putting many runs on one page, and the documentation site that publishes the committed benchmark runs.
 
 ## Reading a run from your own tools
@@ -40,5 +42,7 @@ python -m mkdocs serve                     # after the build script has staged t
 The Markdown stays where GitHub renders it. `scripts/build_site.py` builds from a staged copy: `README.md` is the home page, `docs/` is the root, relative links are rewritten to follow the files, and a link to a file the site does not carry (configs, examples, source) goes to the repository on GitHub. The working plans under `docs/superpowers/` are not published.
 
 **The Leaderboard page is generated.** `leaderboard.md` and its filterable twin are built from the result files committed under `docs/benchmarks/*-run/` (`metrics_summary.csv`, `run_summary.json`, `run_manifest.json`), never from numbers typed into a page. To publish a run, copy its small result files into `docs/benchmarks/<name>-run/` and push: CI rebuilds the page. A run that is mock is labelled as such.
+
+**So are the benchmark pages.** Each `docs/benchmarks/<name>.md`, and the README block between `<!-- results:<name>:start -->` and `<!-- results:<name>:end -->`, is rendered from a template in `scripts/benchmark_templates/` and the run folders `docs/benchmarks/<name>-run/` (plus `-harnesses-run/`, `-models-run/`, `-optimize/`). `python scripts/publish_benchmark.py NAME --run DIR [--harnesses DIR] [--models DIR] [--optimize DIR]` copies a finished run's small files there (never its per-question rows; `patterns.json` keeps the per-question counts and means a page quotes), rebuilds its reports from them and renders the pages; `python scripts/check_results.py` (in CI) fails when a page differs from its rendering or a page has no template, so a published number cannot drift from the CSVs.
 
 **One-time setup for the repository owner:** in GitHub, Settings → Pages → Source: *GitHub Actions*. The `deploy-site` job of the CI workflow then publishes `build/site` on every push to `main`; pull requests only build it (so a broken link fails the review, not the deploy).

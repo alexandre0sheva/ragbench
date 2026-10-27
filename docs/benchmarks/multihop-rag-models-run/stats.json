@@ -1,0 +1,762 @@
+{
+  "method": "percentile bootstrap over questions; paired bootstrap against the baseline with Holm-Bonferroni adjustment per metric",
+  "n_boot": 2000,
+  "seed": 0,
+  "alpha": 0.05,
+  "baseline": "hybrid_rerank_default[generator=gpt-6-luna]",
+  "baseline_source": "cheapest system",
+  "correct_threshold": 4.0,
+  "metrics": [
+    "retrieval_recall@5",
+    "retrieval_mrr@10",
+    "retrieval_ndcg@10",
+    "answer_score",
+    "faithfulness"
+  ],
+  "systems": {
+    "hybrid_rerank_default[generator=openrouter:deepseek/deepseek-v4.1-flash]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6266666666666666,
+          "lo": 0.5624999999999999,
+          "hi": 0.69
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7418333333333333,
+          "lo": 0.6676666666666666,
+          "hi": 0.810175
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6268592824151232,
+          "lo": 0.5688320399510414,
+          "hi": 0.6855284373456458
+        },
+        "answer_score": {
+          "mean": 2.8229999999999995,
+          "lo": 2.526975,
+          "hi": 3.1080249999999996
+        },
+        "faithfulness": {
+          "mean": 4.005,
+          "lo": 3.78,
+          "hi": 4.205
+        }
+      },
+      "cost_per_correct": 0.0030288115675
+    },
+    "hybrid_rerank_default[generator=openrouter:z-ai/glm-5.3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6266666666666666,
+          "lo": 0.5624999999999999,
+          "hi": 0.69
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7418333333333333,
+          "lo": 0.6676666666666666,
+          "hi": 0.810175
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6268592824151232,
+          "lo": 0.5688320399510414,
+          "hi": 0.6855284373456458
+        },
+        "answer_score": {
+          "mean": 3.6060000000000008,
+          "lo": 3.3999749999999995,
+          "hi": 3.7969999999999997
+        },
+        "faithfulness": {
+          "mean": 3.945,
+          "lo": 3.764875,
+          "hi": 4.12
+        }
+      },
+      "cost_per_correct": 0.0057589224000000015
+    },
+    "hybrid_rerank_default[generator=openrouter:moonshotai/kimi-k3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6266666666666666,
+          "lo": 0.5624999999999999,
+          "hi": 0.69
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7418333333333333,
+          "lo": 0.6676666666666666,
+          "hi": 0.810175
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6268592824151232,
+          "lo": 0.5688320399510414,
+          "hi": 0.6855284373456458
+        },
+        "answer_score": {
+          "mean": 3.446,
+          "lo": 3.1859500000000005,
+          "hi": 3.690174999999999
+        },
+        "faithfulness": {
+          "mean": 4.005,
+          "lo": 3.7998749999999997,
+          "hi": 4.195125
+        }
+      },
+      "cost_per_correct": 0.00800711542352941
+    },
+    "hybrid_rerank_default[generator=openrouter:xiaomi/mimo-v2.6-pro]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6266666666666666,
+          "lo": 0.5624999999999999,
+          "hi": 0.69
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7418333333333333,
+          "lo": 0.6676666666666666,
+          "hi": 0.810175
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6268592824151232,
+          "lo": 0.5688320399510414,
+          "hi": 0.6855284373456458
+        },
+        "answer_score": {
+          "mean": 3.5789999999999997,
+          "lo": 3.37795,
+          "hi": 3.774099999999999
+        },
+        "faithfulness": {
+          "mean": 3.94,
+          "lo": 3.749875,
+          "hi": 4.11
+        }
+      },
+      "cost_per_correct": 0.005131903379166668
+    },
+    "hybrid_rerank_default[generator=openrouter:qwen/qwen3.8-flash]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6266666666666666,
+          "lo": 0.5624999999999999,
+          "hi": 0.69
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7418333333333333,
+          "lo": 0.6676666666666666,
+          "hi": 0.810175
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6268592824151232,
+          "lo": 0.5688320399510414,
+          "hi": 0.6855284373456458
+        },
+        "answer_score": {
+          "mean": 3.5049999999999994,
+          "lo": 3.2689749999999993,
+          "hi": 3.7310250000000003
+        },
+        "faithfulness": {
+          "mean": 3.96,
+          "lo": 3.77,
+          "hi": 4.13
+        }
+      },
+      "cost_per_correct": 0.0025699305098039207
+    },
+    "hybrid_rerank_default[generator=openrouter:minimax/minimax-m3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6266666666666666,
+          "lo": 0.5624999999999999,
+          "hi": 0.69
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7418333333333333,
+          "lo": 0.6676666666666666,
+          "hi": 0.810175
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6268592824151232,
+          "lo": 0.5688320399510414,
+          "hi": 0.6855284373456458
+        },
+        "answer_score": {
+          "mean": 3.427,
+          "lo": 3.1979749999999996,
+          "hi": 3.6439999999999997
+        },
+        "faithfulness": {
+          "mean": 3.955,
+          "lo": 3.765,
+          "hi": 4.14
+        }
+      },
+      "cost_per_correct": 0.004675680909090907
+    },
+    "hybrid_rerank_default[generator=gpt-6-luna]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6266666666666666,
+          "lo": 0.5624999999999999,
+          "hi": 0.69
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7418333333333333,
+          "lo": 0.6676666666666666,
+          "hi": 0.810175
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6268592824151232,
+          "lo": 0.5688320399510414,
+          "hi": 0.6855284373456458
+        },
+        "answer_score": {
+          "mean": 3.653,
+          "lo": 3.46795,
+          "hi": 3.8310249999999995
+        },
+        "faithfulness": {
+          "mean": 4.08,
+          "lo": 3.92,
+          "hi": 4.23
+        }
+      },
+      "cost_per_correct": 0.0021251749019607843
+    },
+    "hybrid_rerank_default[generator=anthropic:claude-haiku-5-5]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6266666666666666,
+          "lo": 0.5624999999999999,
+          "hi": 0.69
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7418333333333333,
+          "lo": 0.6676666666666666,
+          "hi": 0.810175
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6268592824151232,
+          "lo": 0.5688320399510414,
+          "hi": 0.6855284373456458
+        },
+        "answer_score": {
+          "mean": 3.972,
+          "lo": 3.76195,
+          "hi": 4.1739999999999995
+        },
+        "faithfulness": {
+          "mean": 4.11,
+          "lo": 3.91,
+          "hi": 4.3
+        }
+      },
+      "cost_per_correct": 0.001754946
+    },
+    "iterative_default[generator=openrouter:deepseek/deepseek-v4.1-flash]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6175,
+          "lo": 0.5433333333333333,
+          "hi": 0.6875
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6786666666666666,
+          "lo": 0.6014875000000001,
+          "hi": 0.7533333333333333
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.5872504345019618,
+          "lo": 0.5218094580930727,
+          "hi": 0.6521538739848146
+        },
+        "answer_score": {
+          "mean": 3.119999999999999,
+          "lo": 2.867,
+          "hi": 3.371025000000001
+        },
+        "faithfulness": {
+          "mean": 4.075,
+          "lo": 3.905,
+          "hi": 4.235
+        }
+      },
+      "cost_per_correct": 0.0033959486690697672
+    },
+    "iterative_default[generator=openrouter:z-ai/glm-5.3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.5925,
+          "lo": 0.52,
+          "hi": 0.6625
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6733333333333335,
+          "lo": 0.595,
+          "hi": 0.7466666666666666
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.5690116496784227,
+          "lo": 0.5017741867739411,
+          "hi": 0.635188003168279
+        },
+        "answer_score": {
+          "mean": 3.545,
+          "lo": 3.3539499999999998,
+          "hi": 3.7239999999999998
+        },
+        "faithfulness": {
+          "mean": 3.84,
+          "lo": 3.65,
+          "hi": 4.02
+        }
+      },
+      "cost_per_correct": 0.008085883770212767
+    },
+    "iterative_default[generator=openrouter:moonshotai/kimi-k3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6066666666666667,
+          "lo": 0.5358333333333334,
+          "hi": 0.6758541666666665
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6560833333333334,
+          "lo": 0.5789583333333332,
+          "hi": 0.7293375000000001
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.5800882551478658,
+          "lo": 0.5174717255369191,
+          "hi": 0.6412408259654878
+        },
+        "answer_score": {
+          "mean": 3.5639999999999996,
+          "lo": 3.338975,
+          "hi": 3.7790000000000004
+        },
+        "faithfulness": {
+          "mean": 3.695,
+          "lo": 3.45,
+          "hi": 3.9151249999999993
+        }
+      },
+      "cost_per_correct": 0.02112387355576923
+    },
+    "iterative_default[generator=openrouter:xiaomi/mimo-v2.6-pro]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6125,
+          "lo": 0.5425,
+          "hi": 0.6824999999999999
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6335000000000001,
+          "lo": 0.5593250000000001,
+          "hi": 0.7071708333333332
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.5661985126221244,
+          "lo": 0.5003456110608654,
+          "hi": 0.6306282196460485
+        },
+        "answer_score": {
+          "mean": 3.5042,
+          "lo": 3.3409999999999997,
+          "hi": 3.668205000000001
+        },
+        "faithfulness": {
+          "mean": 3.98,
+          "lo": 3.81,
+          "hi": 4.15
+        }
+      },
+      "cost_per_correct": 0.00803578107142857
+    },
+    "iterative_default[generator=openrouter:qwen/qwen3.8-flash]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6008333333333333,
+          "lo": 0.5291666666666667,
+          "hi": 0.6683541666666667
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.66525,
+          "lo": 0.5915,
+          "hi": 0.73675625
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.5785303262993106,
+          "lo": 0.5129289369058629,
+          "hi": 0.638278152592666
+        },
+        "answer_score": {
+          "mean": 3.4059999999999997,
+          "lo": 3.179,
+          "hi": 3.622025
+        },
+        "faithfulness": {
+          "mean": 3.74,
+          "lo": 3.53,
+          "hi": 3.95
+        }
+      },
+      "cost_per_correct": 0.0036433927906976745
+    },
+    "iterative_default[generator=openrouter:minimax/minimax-m3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.61,
+          "lo": 0.5383125,
+          "hi": 0.68
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6406666666666666,
+          "lo": 0.5649749999999999,
+          "hi": 0.7156708333333334
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.5773045610500513,
+          "lo": 0.51072046878558,
+          "hi": 0.6419526577417524
+        },
+        "answer_score": {
+          "mean": 3.597,
+          "lo": 3.4029499999999997,
+          "hi": 3.793025
+        },
+        "faithfulness": {
+          "mean": 3.905,
+          "lo": 3.75,
+          "hi": 4.06
+        }
+      },
+      "cost_per_correct": 0.005961058857142857
+    },
+    "iterative_default[generator=gpt-6-luna]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.5825,
+          "lo": 0.51,
+          "hi": 0.6508541666666666
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6793452380952381,
+          "lo": 0.60184375,
+          "hi": 0.7536919642857143
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.5772875205959623,
+          "lo": 0.5100196575838903,
+          "hi": 0.6391283189452754
+        },
+        "answer_score": {
+          "mean": 3.436000000000001,
+          "lo": 3.213975,
+          "hi": 3.6480249999999996
+        },
+        "faithfulness": {
+          "mean": 4.13,
+          "lo": 3.96,
+          "hi": 4.285125
+        }
+      },
+      "cost_per_correct": 0.002581963750000001
+    },
+    "iterative_default[generator=anthropic:claude-haiku-5-5]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.615,
+          "lo": 0.5425,
+          "hi": 0.6850208333333334
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6723571428571428,
+          "lo": 0.5951797619047619,
+          "hi": 0.7448630952380951
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.5832310935823759,
+          "lo": 0.5189086635046679,
+          "hi": 0.6455385245253392
+        },
+        "answer_score": {
+          "mean": 3.8360000000000003,
+          "lo": 3.61,
+          "hi": 4.041999999999999
+        },
+        "faithfulness": {
+          "mean": 4.1,
+          "lo": 3.93,
+          "hi": 4.26
+        }
+      },
+      "cost_per_correct": 0.0031794094736842106
+    },
+    "agent_search_tools[generator=openrouter:deepseek/deepseek-v4.1-flash]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6875,
+          "lo": 0.6116666666666667,
+          "hi": 0.7566666666666667
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.69625,
+          "lo": 0.6195,
+          "hi": 0.7744229166666666
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.656617720365022,
+          "lo": 0.5893099918802024,
+          "hi": 0.7236994187137855
+        },
+        "answer_score": {
+          "mean": 3.5969999999999995,
+          "lo": 3.412,
+          "hi": 3.7760249999999997
+        },
+        "faithfulness": {
+          "mean": 3.205,
+          "lo": 2.9848749999999997,
+          "hi": 3.43
+        }
+      },
+      "cost_per_correct": 0.005441115406565217
+    },
+    "agent_search_tools[generator=openrouter:z-ai/glm-5.3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6758333333333333,
+          "lo": 0.6033333333333334,
+          "hi": 0.7425208333333334
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7016666666666667,
+          "lo": 0.626325,
+          "hi": 0.7716666666666667
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6403232700531584,
+          "lo": 0.5715502879530442,
+          "hi": 0.7045765686565085
+        },
+        "answer_score": {
+          "mean": 3.6280000000000006,
+          "lo": 3.426,
+          "hi": 3.8080250000000007
+        },
+        "faithfulness": {
+          "mean": 3.325,
+          "lo": 3.114875,
+          "hi": 3.525124999999999
+        }
+      },
+      "cost_per_correct": 0.008318948857894738
+    },
+    "agent_search_tools[generator=openrouter:moonshotai/kimi-k3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.42666666666666664,
+          "lo": 0.3391666666666666,
+          "hi": 0.5175
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.43450000000000005,
+          "lo": 0.3436583333333333,
+          "hi": 0.5266666666666666
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.41069041038493254,
+          "lo": 0.3257172665399112,
+          "hi": 0.49760814615067167
+        },
+        "answer_score": {
+          "mean": 3.159,
+          "lo": 2.9179749999999998,
+          "hi": 3.4060249999999996
+        },
+        "faithfulness": {
+          "mean": 3.385,
+          "lo": 3.08,
+          "hi": 3.695
+        }
+      },
+      "cost_per_correct": 0.035536070235135137
+    },
+    "agent_search_tools[generator=openrouter:xiaomi/mimo-v2.6-pro]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.67,
+          "lo": 0.5933124999999999,
+          "hi": 0.74
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7465833333333333,
+          "lo": 0.6682479166666666,
+          "hi": 0.8195895833333333
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6673439546564297,
+          "lo": 0.5957206811495289,
+          "hi": 0.7335784919572802
+        },
+        "answer_score": {
+          "mean": 3.5589999999999997,
+          "lo": 3.353,
+          "hi": 3.758025
+        },
+        "faithfulness": {
+          "mean": 3.165,
+          "lo": 2.934875,
+          "hi": 3.4
+        }
+      },
+      "cost_per_correct": 0.010066342584313723
+    },
+    "agent_search_tools[generator=openrouter:qwen/qwen3.8-flash]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6675,
+          "lo": 0.5966666666666667,
+          "hi": 0.7333749999999997
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7276666666666667,
+          "lo": 0.653,
+          "hi": 0.7980041666666666
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6404421629260968,
+          "lo": 0.573831511482267,
+          "hi": 0.7047282182808341
+        },
+        "answer_score": {
+          "mean": 3.514,
+          "lo": 3.321,
+          "hi": 3.6919999999999997
+        },
+        "faithfulness": {
+          "mean": 3.105,
+          "lo": 2.895,
+          "hi": 3.32
+        }
+      },
+      "cost_per_correct": 0.006414853000000001
+    },
+    "agent_search_tools[generator=openrouter:minimax/minimax-m3]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6491666666666666,
+          "lo": 0.5733333333333334,
+          "hi": 0.7241666666666666
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6907619047619049,
+          "lo": 0.6110910714285714,
+          "hi": 0.7661732142857142
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6282645927969783,
+          "lo": 0.5564398898474743,
+          "hi": 0.698360559641283
+        },
+        "answer_score": {
+          "mean": 3.478,
+          "lo": 3.26995,
+          "hi": 3.691025
+        },
+        "faithfulness": {
+          "mean": 3.325,
+          "lo": 3.125,
+          "hi": 3.530124999999999
+        }
+      },
+      "cost_per_correct": 0.011429867906976745
+    },
+    "agent_search_tools[generator=gpt-6-luna]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6716666666666667,
+          "lo": 0.5983125,
+          "hi": 0.7375
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6871666666666666,
+          "lo": 0.6131583333333334,
+          "hi": 0.7571791666666665
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6296933615295467,
+          "lo": 0.5650904346401213,
+          "hi": 0.6910187408032944
+        },
+        "answer_score": {
+          "mean": 3.4199999999999995,
+          "lo": 3.2069250000000005,
+          "hi": 3.6370000000000005
+        },
+        "faithfulness": {
+          "mean": 3.57,
+          "lo": 3.35,
+          "hi": 3.78
+        }
+      },
+      "cost_per_correct": 0.006309054634146341
+    },
+    "agent_search_tools[generator=anthropic:claude-haiku-5-5]": {
+      "n": 100,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6483333333333333,
+          "lo": 0.5741666666666666,
+          "hi": 0.72
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7011904761904763,
+          "lo": 0.6261860119047619,
+          "hi": 0.770846726190476
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6454216589089975,
+          "lo": 0.5772269285178517,
+          "hi": 0.708337133267528
+        },
+        "answer_score": {
+          "mean": 3.9659999999999997,
+          "lo": 3.782,
+          "hi": 4.14605
+        },
+        "faithfulness": {
+          "mean": 3.89,
+          "lo": 3.7,
+          "hi": 4.07
+        }
+      },
+      "cost_per_correct": 0.005342740895522389
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "maximize": [
+    "answer_score"
+  ],
+  "minimize": [
+    "avg_cost_per_question",
+    "avg_latency_ms"
+  ],
+  "front": [
+    "no_retrieval_floor",
+    "hybrid_rerank_default"
+  ],
+  "dominated_by": {
+    "agent_search_tools": [
+      "hybrid_rerank_default"
+    ],
+    "claude_code": [
+      "hybrid_rerank_default",
+      "opencode_glm"
+    ],
+    "codex": [
+      "hybrid_rerank_default",
+      "agent_search_tools",
+      "claude_code",
+      "opencode_glm"
+    ],
+    "opencode_glm": [
+      "hybrid_rerank_default"
+    ]
+  },
+  "points": [
+    {
+      "system": "no_retrieval_floor",
+      "answer_score": 1.9486666666666663,
+      "avg_cost_per_question": 0.0002086373333333334,
+      "avg_latency_ms": 1402.299183906677
+    },
+    {
+      "system": "hybrid_rerank_default",
+      "answer_score": 3.654666666666667,
+      "avg_cost_per_question": 0.0010878358666666665,
+      "avg_latency_ms": 2484.9291394433626
+    },
+    {
+      "system": "agent_search_tools",
+      "answer_score": 3.4366666666666665,
+      "avg_cost_per_question": 0.002635931866666667,
+      "avg_latency_ms": 11136.401667386914
+    },
+    {
+      "system": "claude_code",
+      "answer_score": 3.554666666666667,
+      "avg_cost_per_question": 0.013530883333333335,
+      "avg_latency_ms": 23101.87709154561
+    },
+    {
+      "system": "codex",
+      "answer_score": 2.923333333333334,
+      "avg_cost_per_question": 0.015977101666666667,
+      "avg_latency_ms": 28509.600744126365
+    },
+    {
+      "system": "opencode_glm",
+      "answer_score": 3.6382550335570465,
+      "avg_cost_per_question": 0.010229014079865772,
+      "avg_latency_ms": 12187.703166576102
+    }
+  ]
+}

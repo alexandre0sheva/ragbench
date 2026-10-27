@@ -20,3 +20,6 @@ chroma/
 .DS_Store
 dist/
 build/
+
+# Datasets pulled with `ragbench datasets pull` (third-party text; the published benchmark commits results only)
+data/multihop-rag*/

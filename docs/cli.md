@@ -73,6 +73,7 @@ $ ragbench run [OPTIONS]
 * `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
 * `--no-cache`: Do not read or write the persistent disk cache for this run.
 * `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
+* `--run-dir <path>`: Write the run into this directory instead of a new timestamped one. Running into it again resumes: systems that finished are kept, unfinished ones keep their answers and run only the missing or failed questions.
 * `--json`: Print one JSON document on stdout when the run ends (progress and messages go to stderr), for scripts and CI.
 * `--help`: Show this message and exit.
 
@@ -100,6 +101,7 @@ $ ragbench compare [OPTIONS]
 * `--system-workers <int range>`: Override evaluation.system_workers: systems evaluated at the same time.  [x>=1]
 * `--no-cache`: Do not read or write the persistent disk cache for this run.
 * `-y, --yes`: Do not ask before a live run whose estimated cost is above evaluation.cost_confirm_threshold_usd.
+* `--run-dir <path>`: Write the run into this directory instead of a new timestamped one. Running into it again resumes: systems that finished are kept, unfinished ones keep their answers and run only the missing or failed questions.
 * `--json`: Print one JSON document on stdout when the run ends (progress and messages go to stderr), for scripts and CI.
 * `--help`: Show this message and exit.
 
@@ -166,7 +168,7 @@ $ ragbench recommend [OPTIONS]
 From a folder of documents to a decision: profile them, write questions if you have none, run the preset, and recommend a system.
 
 Writes everything to one run directory (questions, results, recommendation.md, winner.yaml, report.html). If it stops (budget, a crash, Ctrl-C),
-`--resume RUN_DIR` continues without paying again for the systems that finished.
+`--resume RUN_DIR` continues without paying again for the systems that finished or the questions already answered.
 
 **Usage**:
 
@@ -187,7 +189,7 @@ $ ragbench auto [OPTIONS]
 * `--model <str>`: Model ref that writes the questions (default: the default generator model).
 * `-c, --config <path>`: Take models, providers, pricing, evaluation and selection settings from this config (its systems and dataset are not used).
 * `--output-dir <path>`: Where the run directory is created.  [default: results]
-* `--resume <path>`: Continue an earlier auto run in this directory: finished systems are kept, the rest are run.
+* `--resume <path>`: Continue an earlier auto run in this directory: finished systems are kept, unfinished ones keep their answers and run only the missing or failed questions.
 * `--mock`: Force local mock mode: nothing is paid for and the scores only validate the pipeline.
 * `--no-cache`: Do not read or write the persistent disk cache.
 * `-y, --yes`: Do not ask before spending more than evaluation.cost_confirm_threshold_usd.

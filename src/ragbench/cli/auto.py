@@ -37,7 +37,7 @@ def auto(
     model: str | None = typer.Option(None, "--model", help="Model ref that writes the questions (default: the default generator model)."),
     config: Path | None = typer.Option(None, "--config", "-c", help="Take models, providers, pricing, evaluation and selection settings from this config (its systems and dataset are not used)."),
     output_dir: Path = typer.Option(Path("results"), "--output-dir", help="Where the run directory is created."),
-    resume: Path | None = typer.Option(None, "--resume", help="Continue an earlier auto run in this directory: finished systems are kept, the rest are run."),
+    resume: Path | None = typer.Option(None, "--resume", help="Continue an earlier auto run in this directory: finished systems are kept, unfinished ones keep their answers and run only the missing or failed questions."),
     mock: bool = typer.Option(False, "--mock", help="Force local mock mode: nothing is paid for and the scores only validate the pipeline."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Do not read or write the persistent disk cache."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask before spending more than evaluation.cost_confirm_threshold_usd."),
@@ -47,7 +47,7 @@ def auto(
     """From a folder of documents to a decision: profile them, write questions if you have none, run the preset, and recommend a system.
 
     Writes everything to one run directory (questions, results, recommendation.md, winner.yaml, report.html). If it stops (budget, a crash, Ctrl-C),
-    `--resume RUN_DIR` continues without paying again for the systems that finished.
+    `--resume RUN_DIR` continues without paying again for the systems that finished or the questions already answered.
     """
     import webbrowser
     from datetime import UTC, datetime

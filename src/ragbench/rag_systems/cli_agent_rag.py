@@ -25,15 +25,20 @@ from typing import IO, Any
 from ragbench.documents.schema import Document
 from ragbench.models import cost as pricing
 from ragbench.models.cost import CostBreakdown
+from ragbench.models.errors import ModelInitError
+from ragbench.models.openrouter_catalog import model_info
+from ragbench.models.providers.openrouter import request_settings
 from ragbench.models.refs import parse_model_ref
 from ragbench.models.spend import note_spend
 from ragbench.rag_systems.cli_trajectory import PARSERS, ToolCall, Trajectory, Turn, action_kind, evidence_paths, input_text
 from ragbench.rag_systems.external_http_rag import fill_env
 from ragbench.rag_systems.external_rag import ExternalRAG, ExternalReply
+from ragbench.rag_systems.openrouter_relay import OpenRouterRelay
 from ragbench.rag_systems.options import CliAgentOptions
 from ragbench.rag_systems.spec import SystemSpec
 from ragbench.rag_systems.trace import PREVIEW_CHARS, Step, sum_costs
 from ragbench.registry import SYSTEMS
+from ragbench.runtime.context import current_runtime
 from ragbench.runtime.limiter import RateLimiter
 from ragbench.utils.text import truncate
 
@@ -88,6 +93,10 @@ class CliAgentRAG(ExternalRAG):
         self._limiter = RateLimiter(max_concurrent=limits.max_concurrent_requests, requests_per_minute=limits.requests_per_minute) if limits.is_set else None
         self._corpus: Path | None = None
         self._paths: dict[str, str] = {}  # workspace path under docs/ -> document id
+        # OpenCode on OpenRouter prices its tokens at the cheapest upstream's list price; its requests go through a relay that records the bill.
+        self._relayed = opts.preset == "opencode" and not force_mock and (self.harness_model or "").startswith("openrouter/")
+        self._relay: OpenRouterRelay | None = None
+        self._relay_lock = threading.Lock()
         if opts.preset == "custom" and opts.network == "off" and not force_mock:
             logger.warning("%s: RAGBench cannot switch a custom harness's network off; make sure it cannot reach the web (or set network: on)", self.name)
         for path in [] if force_mock else global_instructions(opts.preset):
@@ -113,18 +122,22 @@ class CliAgentRAG(ExternalRAG):
         if self._corpus is None:
             raise RuntimeError(f"{self.name}: ingest the documents before asking questions")
         workspace = Path(tempfile.mkdtemp(prefix="ragbench-agent-"))
+        relay = self._openrouter_relay() if self._relayed else None
+        key = relay.open() if relay is not None else None
         try:
-            prompt = self._prepare(workspace, question)
+            prompt = self._prepare(workspace, question, relay.base_url(key) if relay is not None and key is not None else None)
             with self._limiter.acquire() if self._limiter is not None else nullcontext():
-                trajectory, stopped = self._run(self._argv(prompt, workspace), workspace)
+                trajectory, stopped = self._run(self._argv(prompt, workspace), workspace, key)
             answer = self._answer(workspace, trajectory)
         finally:
             _remove(workspace)
+            if relay is not None and key is not None:
+                relay.forget(key)
         return self._reply(trajectory, answer, stopped, workspace)
 
     # -- the workspace ------------------------------------------------------------------------------------------------------------------
 
-    def _prepare(self, workspace: Path, question: str) -> str:
+    def _prepare(self, workspace: Path, question: str, openrouter_url: str | None = None) -> str:
         assert self._corpus is not None
         docs = workspace / DOCS_DIR
         shutil.copytree(self._corpus, docs)
@@ -137,7 +150,7 @@ class CliAgentRAG(ExternalRAG):
         if instructions and self.options.preset != "claude_code":
             (workspace / INSTRUCTIONS_FILE).write_text(instructions, encoding="utf-8")
         if self.options.preset == "opencode" and not self.force_mock:
-            (workspace / "opencode.json").write_text(_opencode_config(self.options.network), encoding="utf-8")
+            (workspace / "opencode.json").write_text(_opencode_config(self.options.network, openrouter_url), encoding="utf-8")
         for target, source in self._files.items():
             destination = workspace / target
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -179,8 +192,9 @@ class CliAgentRAG(ExternalRAG):
 
     # -- running the harness ------------------------------------------------------------------------------------------------------------
 
-    def _run(self, argv: list[str], workspace: Path) -> tuple[Trajectory, bool]:
-        """Run the harness, feeding its stdout to the parser line by line. Returns the trajectory and whether the step cap stopped it."""
+    def _run(self, argv: list[str], workspace: Path, relay_key: str | None = None) -> tuple[Trajectory, bool]:
+        """Run the harness, feeding its stdout to the parser line by line. Returns the trajectory and whether the step cap stopped it.
+        With `relay_key`, the cost is what OpenRouter billed for the requests the harness sent through the relay under that key."""
         parser = PARSERS[self.output_format]()
         # `PWD` is the workspace: a harness that trusts it over its real working directory (OpenCode does) would otherwise work in yours.
         env = {**os.environ, "PWD": str(workspace), **{name: fill_env(value) for name, value in self.options.env.items()}}
@@ -215,6 +229,8 @@ class CliAgentRAG(ExternalRAG):
                 _drain(process.stdout)
                 process.wait()
             trajectory = parser.trajectory
+            if relay_key is not None:
+                self._bill(trajectory, relay_key)
             if timed_out.is_set() or (not stopped and (trajectory.error or process.returncode != 0)):
                 self._charge_partial(trajectory)  # the harness was billed for the turns it ran, even though the answer is lost
             if timed_out.is_set():
@@ -229,6 +245,29 @@ class CliAgentRAG(ExternalRAG):
                 tail = stderr.read()[-STDERR_TAIL:].strip()
                 raise RuntimeError(f"{self.name}: `{argv[0]}` exited with code {process.returncode}" + (f": {tail}" if tail else ""))
         return trajectory, stopped
+
+    def _openrouter_relay(self) -> OpenRouterRelay:
+        with self._relay_lock:
+            if self._relay is None:
+                relay = OpenRouterRelay(extra=_openrouter_settings)
+                weakref.finalize(self, relay.close)
+                _openrouter_settings(str(self.harness_model).removeprefix("openrouter/"), strict=True)  # a reasoning effort the model refuses fails now
+                self._relay = relay
+            return self._relay
+
+    def _bill(self, trajectory: Trajectory, key: str) -> None:
+        """Replace the harness's own cost with OpenRouter's bill (spread over the turns by tokens), when the relay saw billed requests."""
+        assert self._relay is not None
+        bill = self._relay.take(key)
+        if not bill.billed:
+            if bill.unbilled or trajectory.turns:
+                logger.warning("%s: no billed OpenRouter request went through the relay; the cost is the harness's own estimate", self.name)
+            return
+        if bill.unbilled:
+            logger.warning("%s: %d OpenRouter responses carried no cost; the question's cost is a lower bound", self.name, bill.unbilled)
+        for turn in trajectory.turns:
+            turn.cost_usd = None
+        trajectory.cost_usd = bill.cost_usd
 
     def _charge_partial(self, trajectory: Trajectory) -> None:
         costs, known = self._turn_costs(trajectory)
@@ -396,11 +435,28 @@ def _fill(argument: str, values: dict[str, str]) -> str:
     return argument
 
 
-def _opencode_config(network: str) -> str:
+def _opencode_config(network: str, openrouter_url: str | None = None) -> str:
     import json
 
     permission = {"edit": "deny", "bash": "deny", "webfetch": "allow" if network == "on" else "deny"}
-    return json.dumps({"$schema": "https://opencode.ai/config.json", "permission": permission}, indent=2)
+    config: dict[str, Any] = {"$schema": "https://opencode.ai/config.json", "permission": permission}
+    if openrouter_url:
+        config["provider"] = {"openrouter": {"options": {"baseURL": openrouter_url}}}
+    return json.dumps(config, indent=2)
+
+
+def _openrouter_settings(model: str, strict: bool = False) -> dict[str, Any]:
+    """The `reasoning` and `provider` parameters of the `openrouter:` section for a harness's request to `model`. The reasoning text is never
+    excluded (the harness may need it back), and a model outside the catalog keeps its own reasoning."""
+    info = model_info(model) if model else None
+    try:
+        settings = request_settings(model, current_runtime().openrouter.for_model(model), info)
+    except ModelInitError:
+        if strict:
+            raise
+        return {}
+    reasoning = {name: value for name, value in settings.pop("reasoning").items() if name != "exclude"}
+    return {**settings, **({"reasoning": reasoning} if info is not None and reasoning else {})}
 
 
 def _workspace_paths(documents: list[Document]) -> list[str]:

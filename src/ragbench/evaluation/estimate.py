@@ -175,7 +175,7 @@ def _estimate_system(system_config: SystemConfig, config: ExperimentConfig, docu
         embedding = refs.embedding[0] if refs.embedding else None
         system = create_rag_system(_for_measuring(system_config), force_mock=True)
         decision = getattr(system, "decision_model_ref", None)
-        judges = scoring_judges(evaluation.judge_models, generator, independent=evaluation.judge.independent)
+        judges = scoring_judges(evaluation.judge_models, generator, independent=evaluation.judge.independent, first=evaluation.judge.scorers == "first")
         with record_usage() as ingestion:
             system.ingest(documents)
         answer_usd = judge_usd = answer_seconds = judge_seconds = answer_tokens = 0.0

@@ -1,0 +1,2359 @@
+{
+ "schema": 1,
+ "run": {
+  "id": "all_solutions_harnesses_multihop",
+  "mode": "live",
+  "started_utc": "2026-10-26T22:33:32Z",
+  "finished_utc": "2026-10-26T23:04:16Z",
+  "wall_time_s": 1843.3889651249629,
+  "ragbench_version": "0.3.0",
+  "python": "3.12.12",
+  "git_sha": "35bbfe20f74be28cdbcdf79883dff15ff6c2d17b",
+  "git_dirty": true,
+  "config_hash": "9fdef040f9f40fd9f6d2088e64a806d943d22803820e568f4dd86a5551d3c6ac",
+  "dataset_hash": "bc328f5df5194f5ff6d5bdd602b0e290deeb193d7d0e6b05905409a882d51928",
+  "models_used": [
+   "claude-haiku-5-5",
+   "gpt-6-luna",
+   "text-embedding-3-small"
+  ],
+  "pricing_as_of": "2026-10-24",
+  "systems": 6,
+  "errors": 1,
+  "latency_source": "probe",
+  "primary_k": 5
+ },
+ "notices": [],
+ "judge": {
+  "panel": {
+   "models": [
+    "anthropic:claude-haiku-5-5",
+    "gpt-6-luna"
+   ],
+   "aggregate": "mean",
+   "independent": true,
+   "agreement": {},
+   "scorers": "first"
+  },
+  "audit": null
+ },
+ "dataset": {
+  "questions": 150,
+  "labeled_questions": 132,
+  "label_free": false,
+  "documents": null,
+  "categories": [],
+  "synthetic": 0,
+  "needs_review": 0,
+  "mock_generated": 0,
+  "warnings": []
+ },
+ "cost": {
+  "charged_usd": 6.606599187900001,
+  "real_spend_usd": 6.7145489737,
+  "saved_usd": 0.0,
+  "cache_hit_rate": 0.0,
+  "cache_hits": 0,
+  "budget": {
+   "max_cost_usd": 7.0,
+   "spent_usd": 6.714548973699999,
+   "stopped": false,
+   "completed_systems": [
+    "no_retrieval_floor",
+    "hybrid_rerank_default",
+    "agent_search_tools",
+    "claude_code",
+    "codex",
+    "opencode_glm"
+   ],
+   "incomplete_systems": {}
+  }
+ },
+ "recommendation": {
+  "winner": "hybrid_rerank_default",
+  "profile": "balanced",
+  "weights": {
+   "quality": 0.6,
+   "cost": 0.2,
+   "latency": 0.2
+  },
+  "constraints": {},
+  "tied_with_winner": [
+   "agent_search_tools",
+   "opencode_glm",
+   "claude_code"
+  ],
+  "pareto": [
+   "no_retrieval_floor",
+   "hybrid_rerank_default"
+  ],
+  "summary": "hybrid_rerank_default is recommended under the balanced profile (quality first, then the best mix of cost and speed among systems that are equally good): answer score 3.65, $0.00109 per question, p95 latency 3305 ms.",
+  "reasons": [
+   "hybrid_rerank_default is recommended under the balanced profile (quality first, then the best mix of cost and speed among systems that are equally good): answer score 3.65, $0.00109 per question, p95 latency 3305 ms.",
+   "hybrid_rerank_default ties with agent_search_tools, opencode_glm and claude_code on answer score: they are statistically indistinguishable from the best (hybrid_rerank_default) by a paired bootstrap on the same questions (Holm-adjusted p ≥ 0.05). Quality does not separate them, so it wins on cost and latency ($0.00109 per question against up to $0.01353; p95 latency 3305 ms against up to 31459 ms).",
+   "hybrid_rerank_default vs no_retrieval_floor (the cheapest feasible system): +1.71 answer score (95% CI +1.49 to +1.91, significant), 5.2× cost"
+  ],
+  "infeasible": {},
+  "closest_miss": null,
+  "quality_metric": "answer_score",
+  "winner_facts": {
+   "answer_score": 3.654666666666667,
+   "cost_per_question": 0.0010878358666666665,
+   "latency_ms_p95": 3304.938783019315,
+   "faithfulness": 4.003333333333333
+  },
+  "winner_yaml": "# The winner of all_solutions_harnesses_multihop: 'hybrid_rerank_default'. Run it with `ragbench run --config <this file>`.\n# `dataset:` is the benchmark's data; replace it with your production documents before deploying.\nrun:\n  name: all_solutions_harnesses_multihop_winner\n  output_dir: results\ndataset:\n  documents_path: data/multihop-rag-150/docs\n  questions_path: data/multihop-rag-150/questions.jsonl\n  qrels_path: data/multihop-rag-150/qrels.jsonl\nsystems:\n- type: hybrid_rerank\n  name: hybrid_rerank_default\n  chunker:\n    type: word\n    chunk_size: 500\n    chunk_overlap: 80\n  retrieval:\n    vector_store: numpy\n    bm25_top_k: 20\n    vector_top_k: 20\n    candidate_top_k: 30\n    final_top_k: 5\n    rrf_k: 60\n    reranker: local_relevance\n    multi_query: true\n    max_query_variants: 4\n  models:\n    embedding: text-embedding-3-small\n    generator: gpt-6-luna\nopenrouter:\n  provider:\n    data_collection: deny\nlimits:\n  tokens_per_minute: 900000\nevaluation:\n  k_values:\n  - 1\n  - 3\n  - 5\n  - 10\n  judge_enabled: true\n  judge:\n    panel:\n    - anthropic:claude-haiku-5-5\n    - gpt-6-luna\n    independent: true\n    scorers: first\n  trials: 1\n  max_questions: null\n  max_workers: 4\n  max_cost_usd: 7.0\n"
+ },
+ "leaderboard": {
+  "columns": [
+   {
+    "key": "retrieval_recall@5",
+    "header": "Recall@5",
+    "higher_is_better": true,
+    "interval": true,
+    "default": true
+   },
+   {
+    "key": "retrieval_mrr@10",
+    "header": "MRR@10",
+    "higher_is_better": true,
+    "interval": true,
+    "default": true
+   },
+   {
+    "key": "retrieval_ndcg@10",
+    "header": "nDCG@10",
+    "higher_is_better": true,
+    "interval": true,
+    "default": true
+   },
+   {
+    "key": "answer_score",
+    "header": "Answer",
+    "higher_is_better": true,
+    "interval": true,
+    "default": true
+   },
+   {
+    "key": "faithfulness",
+    "header": "Faithful",
+    "higher_is_better": true,
+    "interval": true,
+    "default": true
+   },
+   {
+    "key": "token_f1",
+    "header": "F1",
+    "higher_is_better": true,
+    "interval": false,
+    "default": true
+   },
+   {
+    "key": "context_recall",
+    "header": "Ctx recall",
+    "higher_is_better": true,
+    "interval": false,
+    "default": true
+   },
+   {
+    "key": "avg_cost_per_question",
+    "header": "$/Q",
+    "higher_is_better": false,
+    "interval": false,
+    "default": true
+   },
+   {
+    "key": "cost_per_correct",
+    "header": "$/correct",
+    "higher_is_better": false,
+    "interval": false,
+    "default": true
+   },
+   {
+    "key": "avg_latency_ms",
+    "header": "Latency",
+    "higher_is_better": false,
+    "interval": false,
+    "default": true
+   },
+   {
+    "key": "latency_ms_p95",
+    "header": "p95",
+    "higher_is_better": false,
+    "interval": true,
+    "default": true
+   },
+   {
+    "key": "correctness",
+    "header": "Correct",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "completeness",
+    "header": "Complete",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "relevance",
+    "header": "Relevant",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "citation_quality",
+    "header": "Cites",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "exact_match",
+    "header": "EM",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "keyword_recall",
+    "header": "Keywords",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "context_precision",
+    "header": "Ctx prec",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "abstain_precision",
+    "header": "Abstain prec",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "abstain_recall",
+    "header": "Abstain recall",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "false_refusal_rate",
+    "header": "False refusals",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "judge_fallback_rate",
+    "header": "Judge fallback",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "avg_steps",
+    "header": "Steps",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "avg_llm_calls",
+    "header": "LLM calls",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "avg_tool_calls",
+    "header": "Tool calls",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "tool_error_rate",
+    "header": "Tool errors",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "redundant_search_rate",
+    "header": "Redundant searches",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "avg_steps_to_evidence",
+    "header": "Steps to evidence",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "budget_exhausted_rate",
+    "header": "Budget hit",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "n_ok",
+    "header": "Answered",
+    "higher_is_better": true,
+    "interval": false,
+    "default": false
+   },
+   {
+    "key": "n_error",
+    "header": "Failed",
+    "higher_is_better": false,
+    "interval": false,
+    "default": false
+   }
+  ],
+  "rows": [
+   {
+    "system": "hybrid_rerank_default",
+    "type": "hybrid_rerank",
+    "badges": [
+     "recommended",
+     "pareto",
+     "baseline"
+    ],
+    "cells": [
+     {
+      "key": "retrieval_recall@5",
+      "raw": 0.6527777777777777,
+      "text": "0.653",
+      "ci": [
+       0.5972083333333333,
+       0.7088888888888889
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "retrieval_mrr@10",
+      "raw": 0.7369999999999999,
+      "text": "0.737",
+      "ci": [
+       0.6764416666666666,
+       0.7955694444444443
+      ],
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "retrieval_ndcg@10",
+      "raw": 0.6407569515844203,
+      "text": "0.641",
+      "ci": [
+       0.5878514595496646,
+       0.6914526386426963
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "answer_score",
+      "raw": 3.654666666666667,
+      "text": "3.65",
+      "ci": [
+       3.4966666666666666,
+       3.8093333333333326
+      ],
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "faithfulness",
+      "raw": 4.003333333333333,
+      "text": "4.00",
+      "ci": [
+       3.856583333333333,
+       4.1433333333333335
+      ],
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "token_f1",
+      "raw": 0.0727910997128567,
+      "text": "0.07",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_recall",
+      "raw": 0.6868686868686869,
+      "text": "0.69",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_cost_per_question",
+      "raw": 0.0010878358666666665,
+      "text": "$0.00109",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "cost_per_correct",
+      "raw": 0.0021756717333333325,
+      "text": "$0.00218",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "avg_latency_ms",
+      "raw": 2484.9291394433626,
+      "text": "2485 ms",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "latency_ms_p95",
+      "raw": 3304.938783019315,
+      "text": "3305 ms",
+      "ci": [
+       3011.3247071858495,
+       7940.830833278596
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "correctness",
+      "raw": 3.6066666666666665,
+      "text": "3.61",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "completeness",
+      "raw": 3.3233333333333333,
+      "text": "3.32",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "relevance",
+      "raw": 4.01,
+      "text": "4.01",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "citation_quality",
+      "raw": 3.33,
+      "text": "3.33",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "exact_match",
+      "raw": 0.007575757575757576,
+      "text": "0.01",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "keyword_recall",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_precision",
+      "raw": 0.5287878787878788,
+      "text": "0.53",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "abstain_precision",
+      "raw": 0.5483870967741935,
+      "text": "0.55",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "abstain_recall",
+      "raw": 0.9444444444444444,
+      "text": "0.94",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "false_refusal_rate",
+      "raw": 0.10606060606060606,
+      "text": "0.11",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "judge_fallback_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_llm_calls",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_tool_calls",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "tool_error_rate",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "redundant_search_rate",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps_to_evidence",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "budget_exhausted_rate",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "n_ok",
+      "raw": 150.0,
+      "text": "150",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "n_error",
+      "raw": 0.0,
+      "text": "0",
+      "ci": null,
+      "best": true,
+      "sig": null
+     }
+    ]
+   },
+   {
+    "system": "agent_search_tools",
+    "type": "agent_search",
+    "badges": [
+     "tie"
+    ],
+    "cells": [
+     {
+      "key": "retrieval_recall@5",
+      "raw": 0.691111111111111,
+      "text": "0.691",
+      "ci": [
+       0.6366527777777778,
+       0.7466944444444443
+      ],
+      "best": true,
+      "sig": {
+       "symbol": "≈",
+       "verdict": "no clear difference",
+       "tip": "vs hybrid_rerank_default: +0.038 (95% CI +0.003 to +0.074); Holm-adjusted p = 0.114; no clear difference",
+       "p_holm": 0.11394302848575713
+      }
+     },
+     {
+      "key": "retrieval_mrr@10",
+      "raw": 0.6994444444444444,
+      "text": "0.699",
+      "ci": [
+       0.6374361111111111,
+       0.7597999999999999
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "retrieval_ndcg@10",
+      "raw": 0.647202833779578,
+      "text": "0.647",
+      "ci": [
+       0.5959696740077833,
+       0.7013069507585158
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "answer_score",
+      "raw": 3.4366666666666665,
+      "text": "3.44",
+      "ci": [
+       3.25465,
+       3.6147
+      ],
+      "best": false,
+      "sig": {
+       "symbol": "≈",
+       "verdict": "no clear difference",
+       "tip": "vs hybrid_rerank_default: -0.218 (95% CI -0.397 to -0.031); Holm-adjusted p = 0.072; no clear difference",
+       "p_holm": 0.07196401799100449
+      }
+     },
+     {
+      "key": "faithfulness",
+      "raw": 3.57,
+      "text": "3.57",
+      "ci": [
+       3.3833333333333333,
+       3.7534166666666664
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "token_f1",
+      "raw": 0.04775018490825845,
+      "text": "0.05",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_recall",
+      "raw": 0.6931818181818182,
+      "text": "0.69",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_cost_per_question",
+      "raw": 0.002635931866666667,
+      "text": "$0.00264",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "cost_per_correct",
+      "raw": 0.006082919692307693,
+      "text": "$0.00608",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_latency_ms",
+      "raw": 11136.401667386914,
+      "text": "11136 ms",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "latency_ms_p95",
+      "raw": 16176.52671078685,
+      "text": "16177 ms",
+      "ci": [
+       14659.218749031425,
+       18697.9550011456
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "correctness",
+      "raw": 3.486666666666667,
+      "text": "3.49",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "completeness",
+      "raw": 3.1,
+      "text": "3.10",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "relevance",
+      "raw": 3.99,
+      "text": "3.99",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "citation_quality",
+      "raw": 3.0366666666666666,
+      "text": "3.04",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "exact_match",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "keyword_recall",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_precision",
+      "raw": 0.593939393939394,
+      "text": "0.59",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "abstain_precision",
+      "raw": 0.53125,
+      "text": "0.53",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "abstain_recall",
+      "raw": 0.9444444444444444,
+      "text": "0.94",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "false_refusal_rate",
+      "raw": 0.11363636363636363,
+      "text": "0.11",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "judge_fallback_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps",
+      "raw": 4.806666666666667,
+      "text": "4.8",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_llm_calls",
+      "raw": 5.613333333333333,
+      "text": "5.6",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_tool_calls",
+      "raw": 5.28,
+      "text": "5.3",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "tool_error_rate",
+      "raw": 0.0012626262626262627,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "redundant_search_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "avg_steps_to_evidence",
+      "raw": 1.121212121212121,
+      "text": "1.1",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "budget_exhausted_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "n_ok",
+      "raw": 150.0,
+      "text": "150",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "n_error",
+      "raw": 0.0,
+      "text": "0",
+      "ci": null,
+      "best": true,
+      "sig": null
+     }
+    ]
+   },
+   {
+    "system": "opencode_glm",
+    "type": "cli_agent",
+    "badges": [
+     "tie"
+    ],
+    "cells": [
+     {
+      "key": "retrieval_recall@5",
+      "raw": 0.6560402684563759,
+      "text": "0.656",
+      "ci": [
+       0.5956236017897092,
+       0.7142197986577179
+      ],
+      "best": false,
+      "sig": {
+       "symbol": "≈",
+       "verdict": "no clear difference",
+       "tip": "vs hybrid_rerank_default: -0.001 (95% CI -0.054 to +0.050); Holm-adjusted p = 0.964; no clear difference",
+       "p_holm": 0.9635182408795602
+      }
+     },
+     {
+      "key": "retrieval_mrr@10",
+      "raw": 0.7369580270586982,
+      "text": "0.737",
+      "ci": [
+       0.6738743741344413,
+       0.7976710477255778
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "retrieval_ndcg@10",
+      "raw": 0.6702952752788985,
+      "text": "0.670",
+      "ci": [
+       0.61063383570917,
+       0.7263066537260465
+      ],
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "answer_score",
+      "raw": 3.6382550335570465,
+      "text": "3.64",
+      "ci": [
+       3.5,
+       3.773842281879195
+      ],
+      "best": false,
+      "sig": {
+       "symbol": "≈",
+       "verdict": "no clear difference",
+       "tip": "vs hybrid_rerank_default: -0.010 (95% CI -0.179 to +0.154); Holm-adjusted p = 0.903; no clear difference",
+       "p_holm": 0.9025487256371814
+      }
+     },
+     {
+      "key": "faithfulness",
+      "raw": 3.0268456375838926,
+      "text": "3.03",
+      "ci": [
+       2.835570469798658,
+       3.204697986577181
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "token_f1",
+      "raw": 0.026800526189311048,
+      "text": "0.03",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_recall",
+      "raw": 0.9526515151515151,
+      "text": "0.95",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "avg_cost_per_question",
+      "raw": 0.010229014079865772,
+      "text": "$0.01023",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "cost_per_correct",
+      "raw": 0.022748105938805968,
+      "text": "$0.02275",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_latency_ms",
+      "raw": 12187.703166576102,
+      "text": "12188 ms",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "latency_ms_p95",
+      "raw": 22541.40008329414,
+      "text": "22541 ms",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "correctness",
+      "raw": 4.016778523489933,
+      "text": "4.02",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "completeness",
+      "raw": 3.6879194630872485,
+      "text": "3.69",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "relevance",
+      "raw": 4.429530201342282,
+      "text": "4.43",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "citation_quality",
+      "raw": 3.030201342281879,
+      "text": "3.03",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "exact_match",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "keyword_recall",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_precision",
+      "raw": 0.1284900040635347,
+      "text": "0.13",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "abstain_precision",
+      "raw": 1.0,
+      "text": "1.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "abstain_recall",
+      "raw": 0.7058823529411765,
+      "text": "0.71",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "false_refusal_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "judge_fallback_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps",
+      "raw": 5.436241610738255,
+      "text": "5.4",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_llm_calls",
+      "raw": 5.436241610738255,
+      "text": "5.4",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_tool_calls",
+      "raw": 7.731543624161074,
+      "text": "7.7",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "tool_error_rate",
+      "raw": 0.0008680555555555555,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "redundant_search_rate",
+      "raw": 0.0026041666666666665,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps_to_evidence",
+      "raw": 1.9393939393939394,
+      "text": "1.9",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "budget_exhausted_rate",
+      "raw": 0.03355704697986577,
+      "text": "0.03",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "n_ok",
+      "raw": 149.0,
+      "text": "149",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "n_error",
+      "raw": 1.0,
+      "text": "1",
+      "ci": null,
+      "best": false,
+      "sig": null
+     }
+    ]
+   },
+   {
+    "system": "claude_code",
+    "type": "cli_agent",
+    "badges": [
+     "tie"
+    ],
+    "cells": [
+     {
+      "key": "retrieval_recall@5",
+      "raw": 0.6322222222222222,
+      "text": "0.632",
+      "ci": [
+       0.5738749999999999,
+       0.6916666666666667
+      ],
+      "best": false,
+      "sig": {
+       "symbol": "≈",
+       "verdict": "no clear difference",
+       "tip": "vs hybrid_rerank_default: -0.021 (95% CI -0.073 to +0.028); Holm-adjusted p = 0.826; no clear difference",
+       "p_holm": 0.8255872063968016
+      }
+     },
+     {
+      "key": "retrieval_mrr@10",
+      "raw": 0.6934708994708995,
+      "text": "0.693",
+      "ci": [
+       0.6312916666666666,
+       0.7579554232804233
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "retrieval_ndcg@10",
+      "raw": 0.6330175292701054,
+      "text": "0.633",
+      "ci": [
+       0.5788732611976463,
+       0.6869563117485562
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "answer_score",
+      "raw": 3.554666666666667,
+      "text": "3.55",
+      "ci": [
+       3.3533333333333335,
+       3.76
+      ],
+      "best": false,
+      "sig": {
+       "symbol": "≈",
+       "verdict": "no clear difference",
+       "tip": "vs hybrid_rerank_default: -0.100 (95% CI -0.335 to +0.144); Holm-adjusted p = 0.854; no clear difference",
+       "p_holm": 0.8535732133933034
+      }
+     },
+     {
+      "key": "faithfulness",
+      "raw": 3.5,
+      "text": "3.50",
+      "ci": [
+       3.2733333333333334,
+       3.7333333333333334
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "token_f1",
+      "raw": 0.02150842399785907,
+      "text": "0.02",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_recall",
+      "raw": 0.9387626262626262,
+      "text": "0.94",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_cost_per_question",
+      "raw": 0.013530883333333335,
+      "text": "$0.01353",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "cost_per_correct",
+      "raw": 0.026358863636363646,
+      "text": "$0.02636",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_latency_ms",
+      "raw": 23101.87709154561,
+      "text": "23102 ms",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "latency_ms_p95",
+      "raw": 31459.486525086686,
+      "text": "31459 ms",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "correctness",
+      "raw": 3.62,
+      "text": "3.62",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "completeness",
+      "raw": 3.66,
+      "text": "3.66",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "relevance",
+      "raw": 4.526666666666666,
+      "text": "4.53",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "citation_quality",
+      "raw": 2.466666666666667,
+      "text": "2.47",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "exact_match",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "keyword_recall",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_precision",
+      "raw": 0.16935944146508353,
+      "text": "0.17",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "abstain_precision",
+      "raw": 1.0,
+      "text": "1.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "abstain_recall",
+      "raw": 0.9444444444444444,
+      "text": "0.94",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "false_refusal_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "judge_fallback_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps",
+      "raw": 6.513333333333334,
+      "text": "6.5",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_llm_calls",
+      "raw": 6.513333333333334,
+      "text": "6.5",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_tool_calls",
+      "raw": 9.106666666666667,
+      "text": "9.1",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "tool_error_rate",
+      "raw": 0.0007320644216691069,
+      "text": "0.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "redundant_search_rate",
+      "raw": 0.0007320644216691069,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps_to_evidence",
+      "raw": 3.549618320610687,
+      "text": "3.5",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "budget_exhausted_rate",
+      "raw": 0.03333333333333333,
+      "text": "0.03",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "n_ok",
+      "raw": 150.0,
+      "text": "150",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "n_error",
+      "raw": 0.0,
+      "text": "0",
+      "ci": null,
+      "best": true,
+      "sig": null
+     }
+    ]
+   },
+   {
+    "system": "no_retrieval_floor",
+    "type": "no_retrieval",
+    "badges": [
+     "pareto"
+    ],
+    "cells": [
+     {
+      "key": "retrieval_recall@5",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "retrieval_mrr@10",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "retrieval_ndcg@10",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "answer_score",
+      "raw": 1.9486666666666663,
+      "text": "1.95",
+      "ci": [
+       1.7398999999999996,
+       2.1713499999999994
+      ],
+      "best": false,
+      "sig": {
+       "symbol": "▼",
+       "verdict": "worse",
+       "tip": "vs hybrid_rerank_default: -1.706 (95% CI -1.908 to -1.491); Holm-adjusted p = 0.005; worse",
+       "p_holm": 0.004997501249375312
+      }
+     },
+     {
+      "key": "faithfulness",
+      "raw": 2.506666666666667,
+      "text": "2.51",
+      "ci": [
+       2.166583333333333,
+       2.8434999999999993
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "token_f1",
+      "raw": 0.15993619837472392,
+      "text": "0.16",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "context_recall",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_cost_per_question",
+      "raw": 0.0002086373333333334,
+      "text": "$0.00021",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "cost_per_correct",
+      "raw": 0.002407353846153847,
+      "text": "$0.00241",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_latency_ms",
+      "raw": 1402.299183906677,
+      "text": "1402 ms",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "latency_ms_p95",
+      "raw": 2150.2071935450654,
+      "text": "2150 ms",
+      "ci": [
+       2003.331916872412,
+       2482.3144990950823
+      ],
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "correctness",
+      "raw": 2.066666666666667,
+      "text": "2.07",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "completeness",
+      "raw": 1.8233333333333333,
+      "text": "1.82",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "relevance",
+      "raw": 2.7133333333333334,
+      "text": "2.71",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "citation_quality",
+      "raw": 0.6333333333333333,
+      "text": "0.63",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "exact_match",
+      "raw": 0.10606060606060606,
+      "text": "0.11",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "keyword_recall",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_precision",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "abstain_precision",
+      "raw": 0.20967741935483872,
+      "text": "0.21",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "abstain_recall",
+      "raw": 0.7222222222222222,
+      "text": "0.72",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "false_refusal_rate",
+      "raw": 0.3712121212121212,
+      "text": "0.37",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "judge_fallback_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_llm_calls",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_tool_calls",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "tool_error_rate",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "redundant_search_rate",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps_to_evidence",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "budget_exhausted_rate",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "n_ok",
+      "raw": 150.0,
+      "text": "150",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "n_error",
+      "raw": 0.0,
+      "text": "0",
+      "ci": null,
+      "best": true,
+      "sig": null
+     }
+    ]
+   },
+   {
+    "system": "codex",
+    "type": "cli_agent",
+    "badges": [],
+    "cells": [
+     {
+      "key": "retrieval_recall@5",
+      "raw": 0.47333333333333333,
+      "text": "0.473",
+      "ci": [
+       0.41,
+       0.5355555555555557
+      ],
+      "best": false,
+      "sig": {
+       "symbol": "▼",
+       "verdict": "worse",
+       "tip": "vs hybrid_rerank_default: -0.179 (95% CI -0.244 to -0.119); Holm-adjusted p = 0.004; worse",
+       "p_holm": 0.00399800099950025
+      }
+     },
+     {
+      "key": "retrieval_mrr@10",
+      "raw": 0.5143730158730159,
+      "text": "0.514",
+      "ci": [
+       0.44659464285714273,
+       0.5814946428571428
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "retrieval_ndcg@10",
+      "raw": 0.48421089958229657,
+      "text": "0.484",
+      "ci": [
+       0.4247310091580707,
+       0.5441817807588752
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "answer_score",
+      "raw": 2.923333333333334,
+      "text": "2.92",
+      "ci": [
+       2.729983333333333,
+       3.1179999999999994
+      ],
+      "best": false,
+      "sig": {
+       "symbol": "▼",
+       "verdict": "worse",
+       "tip": "vs hybrid_rerank_default: -0.731 (95% CI -0.943 to -0.519); Holm-adjusted p = 0.005; worse",
+       "p_holm": 0.004997501249375312
+      }
+     },
+     {
+      "key": "faithfulness",
+      "raw": 2.54,
+      "text": "2.54",
+      "ci": [
+       2.3066666666666666,
+       2.77
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "token_f1",
+      "raw": 0.04109653956864659,
+      "text": "0.04",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_recall",
+      "raw": 0.8920454545454546,
+      "text": "0.89",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_cost_per_question",
+      "raw": 0.015977101666666667,
+      "text": "$0.01598",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "cost_per_correct",
+      "raw": 0.06145039102564102,
+      "text": "$0.06145",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_latency_ms",
+      "raw": 28509.600744126365,
+      "text": "28510 ms",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "latency_ms_p95",
+      "raw": 40058.07355898431,
+      "text": "40058 ms",
+      "ci": [
+       37863.349582999945,
+       43587.243374902755
+      ],
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "correctness",
+      "raw": 3.4266666666666667,
+      "text": "3.43",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "completeness",
+      "raw": 2.9133333333333336,
+      "text": "2.91",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "relevance",
+      "raw": 3.8333333333333335,
+      "text": "3.83",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "citation_quality",
+      "raw": 1.9033333333333333,
+      "text": "1.90",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "exact_match",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "keyword_recall",
+      "raw": null,
+      "text": "—",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "context_precision",
+      "raw": 0.22553735436732694,
+      "text": "0.23",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "abstain_precision",
+      "raw": 1.0,
+      "text": "1.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "abstain_recall",
+      "raw": 0.16666666666666666,
+      "text": "0.17",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "false_refusal_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "judge_fallback_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps",
+      "raw": 1.0,
+      "text": "1.0",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "avg_llm_calls",
+      "raw": 1.0,
+      "text": "1.0",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "avg_tool_calls",
+      "raw": 5.673333333333333,
+      "text": "5.7",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "tool_error_rate",
+      "raw": 0.0011750881316098707,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "redundant_search_rate",
+      "raw": 0.0011750881316098707,
+      "text": "0.00",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "avg_steps_to_evidence",
+      "raw": 3.356589147286822,
+      "text": "3.4",
+      "ci": null,
+      "best": false,
+      "sig": null
+     },
+     {
+      "key": "budget_exhausted_rate",
+      "raw": 0.0,
+      "text": "0.00",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "n_ok",
+      "raw": 150.0,
+      "text": "150",
+      "ci": null,
+      "best": true,
+      "sig": null
+     },
+     {
+      "key": "n_error",
+      "raw": 0.0,
+      "text": "0",
+      "ci": null,
+      "best": true,
+      "sig": null
+     }
+    ]
+   }
+  ]
+ },
+ "baseline": "hybrid_rerank_default",
+ "scatter": {
+  "x_metric": "cost",
+  "points": [
+   {
+    "name": "hybrid_rerank_default",
+    "x": 0.0010878358666666665,
+    "y": 3.654666666666667,
+    "size": 2484.9291394433626,
+    "kind": "winner",
+    "tip": "hybrid_rerank_default · answer 3.65 · $0.00109/question · 2485 ms"
+   },
+   {
+    "name": "agent_search_tools",
+    "x": 0.002635931866666667,
+    "y": 3.4366666666666665,
+    "size": 11136.401667386914,
+    "kind": "tie",
+    "tip": "agent_search_tools · answer 3.44 · $0.00264/question · 11136 ms"
+   },
+   {
+    "name": "opencode_glm",
+    "x": 0.010229014079865772,
+    "y": 3.6382550335570465,
+    "size": 12187.703166576102,
+    "kind": "tie",
+    "tip": "opencode_glm · answer 3.64 · $0.01023/question · 12188 ms"
+   },
+   {
+    "name": "claude_code",
+    "x": 0.013530883333333335,
+    "y": 3.554666666666667,
+    "size": 23101.87709154561,
+    "kind": "tie",
+    "tip": "claude_code · answer 3.55 · $0.01353/question · 23102 ms"
+   },
+   {
+    "name": "no_retrieval_floor",
+    "x": 0.0002086373333333334,
+    "y": 1.9486666666666663,
+    "size": 1402.299183906677,
+    "kind": "pareto",
+    "tip": "no_retrieval_floor · answer 1.95 · $0.00021/question · 1402 ms"
+   },
+   {
+    "name": "codex",
+    "x": 0.015977101666666667,
+    "y": 2.923333333333334,
+    "size": 28509.600744126365,
+    "kind": "other",
+    "tip": "codex · answer 2.92 · $0.01598/question · 28510 ms"
+   }
+  ]
+ },
+ "heatmap": null,
+ "stages": null,
+ "latency": [
+  {
+   "system": "hybrid_rerank_default",
+   "p50": 2327.4548545014113,
+   "p95": 3304.938783019315,
+   "source": "concurrent"
+  },
+  {
+   "system": "agent_search_tools",
+   "p50": 10922.272916533984,
+   "p95": 16176.52671078685,
+   "source": "concurrent"
+  },
+  {
+   "system": "opencode_glm",
+   "p50": 12196.034624939784,
+   "p95": 22541.40008329414,
+   "source": "probe"
+  },
+  {
+   "system": "claude_code",
+   "p50": 20226.225916994736,
+   "p95": 31459.486525086686,
+   "source": "probe"
+  },
+  {
+   "system": "no_retrieval_floor",
+   "p50": 1357.3204994900152,
+   "p95": 2150.2071935450654,
+   "source": "concurrent"
+  },
+  {
+   "system": "codex",
+   "p50": 27612.94047906995,
+   "p95": 40058.07355898431,
+   "source": "concurrent"
+  }
+ ],
+ "agents": {
+  "rows": [
+   {
+    "system": "agent_search_tools",
+    "avg_steps": 4.806666666666667,
+    "avg_llm_calls": 5.613333333333333,
+    "avg_tool_calls": 5.28,
+    "tool_error_rate": 0.0012626262626262627,
+    "redundant_search_rate": 0.0,
+    "avg_steps_to_evidence": 1.121212121212121,
+    "required_tool_used_rate": null,
+    "budget_exhausted_rate": 0.0,
+    "route_accuracy": null
+   },
+   {
+    "system": "opencode_glm",
+    "avg_steps": 5.436241610738255,
+    "avg_llm_calls": 5.436241610738255,
+    "avg_tool_calls": 7.731543624161074,
+    "tool_error_rate": 0.0008680555555555555,
+    "redundant_search_rate": 0.0026041666666666665,
+    "avg_steps_to_evidence": 1.9393939393939394,
+    "required_tool_used_rate": null,
+    "budget_exhausted_rate": 0.03355704697986577,
+    "route_accuracy": null
+   },
+   {
+    "system": "claude_code",
+    "avg_steps": 6.513333333333334,
+    "avg_llm_calls": 6.513333333333334,
+    "avg_tool_calls": 9.106666666666667,
+    "tool_error_rate": 0.0007320644216691069,
+    "redundant_search_rate": 0.0007320644216691069,
+    "avg_steps_to_evidence": 3.549618320610687,
+    "required_tool_used_rate": null,
+    "budget_exhausted_rate": 0.03333333333333333,
+    "route_accuracy": null
+   },
+   {
+    "system": "codex",
+    "avg_steps": 1.0,
+    "avg_llm_calls": 1.0,
+    "avg_tool_calls": 5.673333333333333,
+    "tool_error_rate": 0.0011750881316098707,
+    "redundant_search_rate": 0.0011750881316098707,
+    "avg_steps_to_evidence": 3.356589147286822,
+    "required_tool_used_rate": null,
+    "budget_exhausted_rate": 0.0,
+    "route_accuracy": null
+   }
+  ],
+  "tools": [
+   {
+    "system": "agent_search_tools",
+    "tool": "search",
+    "calls": 712,
+    "errors": 0,
+    "error_rate": 0.0,
+    "truncated": 32,
+    "questions_using": 150,
+    "avg_latency_ms": 237.66661989352184,
+    "total_cost_usd": 0.00026358
+   },
+   {
+    "system": "agent_search_tools",
+    "tool": "calculator",
+    "calls": 0,
+    "errors": 0,
+    "error_rate": null,
+    "truncated": 0,
+    "questions_using": 0,
+    "avg_latency_ms": null,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "agent_search_tools",
+    "tool": "date_calc",
+    "calls": 0,
+    "errors": 0,
+    "error_rate": null,
+    "truncated": 0,
+    "questions_using": 0,
+    "avg_latency_ms": null,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "agent_search_tools",
+    "tool": "corpus_grep",
+    "calls": 80,
+    "errors": 1,
+    "error_rate": 0.0125,
+    "truncated": 22,
+    "questions_using": 52,
+    "avg_latency_ms": 31.25261190289166,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "claude_code",
+    "tool": "Glob",
+    "calls": 142,
+    "errors": 0,
+    "error_rate": 0.0,
+    "truncated": 0,
+    "questions_using": 142,
+    "avg_latency_ms": 0.0,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "claude_code",
+    "tool": "Grep",
+    "calls": 834,
+    "errors": 1,
+    "error_rate": 0.001199040767386091,
+    "truncated": 0,
+    "questions_using": 150,
+    "avg_latency_ms": 0.0,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "claude_code",
+    "tool": "Read",
+    "calls": 390,
+    "errors": 0,
+    "error_rate": 0.0,
+    "truncated": 0,
+    "questions_using": 131,
+    "avg_latency_ms": 0.0,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "codex",
+    "tool": "shell",
+    "calls": 851,
+    "errors": 1,
+    "error_rate": 0.0011750881316098707,
+    "truncated": 0,
+    "questions_using": 150,
+    "avg_latency_ms": 0.0,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "opencode_glm",
+    "tool": "glob",
+    "calls": 125,
+    "errors": 0,
+    "error_rate": 0.0,
+    "truncated": 0,
+    "questions_using": 122,
+    "avg_latency_ms": 0.0,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "opencode_glm",
+    "tool": "grep",
+    "calls": 647,
+    "errors": 0,
+    "error_rate": 0.0,
+    "truncated": 0,
+    "questions_using": 149,
+    "avg_latency_ms": 0.0,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "opencode_glm",
+    "tool": "read",
+    "calls": 377,
+    "errors": 1,
+    "error_rate": 0.002652519893899204,
+    "truncated": 0,
+    "questions_using": 121,
+    "avg_latency_ms": 0.0,
+    "total_cost_usd": 0.0
+   },
+   {
+    "system": "opencode_glm",
+    "tool": "task",
+    "calls": 3,
+    "errors": 0,
+    "error_rate": 0.0,
+    "truncated": 0,
+    "questions_using": 3,
+    "avg_latency_ms": 0.0,
+    "total_cost_usd": 0.0
+   }
+  ],
+  "routes": []
+ },
+ "failures": null,
+ "failure_other_detail": {},
+ "qrels_audit": {
+  "candidates": 0,
+  "questions": 0,
+  "by_system": {
+   "hybrid_rerank_default": {
+    "high": 0,
+    "medium": 0
+   },
+   "agent_search_tools": {
+    "high": 0,
+    "medium": 0
+   },
+   "opencode_glm": {
+    "high": 0,
+    "medium": 0
+   },
+   "claude_code": {
+    "high": 0,
+    "medium": 0
+   },
+   "no_retrieval_floor": {
+    "high": 0,
+    "medium": 0
+   },
+   "codex": {
+    "high": 0,
+    "medium": 0
+   }
+  }
+ },
+ "questions": null,
+ "reproducibility": {
+  "manifest": {
+   "ragbench_version": "0.3.0",
+   "python": "3.12.12",
+   "platform": "macOS-27.0.1-arm64-arm-64bit",
+   "dependencies": {
+    "openai": "3.37.0",
+    "pandas": "3.1.0",
+    "numpy": "2.5.4",
+    "scikit-learn": "1.9.1",
+    "pydantic": "2.14.1",
+    "chromadb": "1.5.9",
+    "faiss-cpu": "1.15.1",
+    "qdrant-client": "1.19.1",
+    "rank-bm25": "0.2.2",
+    "tiktoken": "0.14.0",
+    "typer": "0.27.3",
+    "jinja2": "3.1.6"
+   },
+   "git_sha": "35bbfe20f74be28cdbcdf79883dff15ff6c2d17b",
+   "git_dirty": true,
+   "config_hash": "9fdef040f9f40fd9f6d2088e64a806d943d22803820e568f4dd86a5551d3c6ac",
+   "dataset_hash": "bc328f5df5194f5ff6d5bdd602b0e290deeb193d7d0e6b05905409a882d51928",
+   "mode": "live",
+   "models_used": [
+    "claude-haiku-5-5",
+    "gpt-6-luna",
+    "text-embedding-3-small"
+   ],
+   "seed": null,
+   "started_utc": "2026-10-26T22:33:32Z",
+   "finished_utc": "2026-10-26T23:04:16Z"
+  },
+  "config_yaml": "# The agent harnesses of the published benchmark (docs/benchmarks/multihop-rag.md), on a stratified 150 of its questions: on this corpus\n# they cost 3-4x what they did on the demo, more than their share of the budget for 300. Three systems of configs/all_solutions.yaml run\n# next to them, configured identically, so the harnesses are compared with the built-ins on the same questions (the disk cache answers\n# those three for the 149 questions the subsets share).\n#\n#   ragbench datasets pull multihop-rag --subset 150 --seed 42 --output data/multihop-rag-150\n#   ragbench run --config configs/all_solutions_harnesses.yaml --mock\n#\n# A live run starts `claude`, `codex` and `opencode` (each with its own key or login); `ragbench estimate` cannot price them.\nrun:\n  name: all_solutions_harnesses_multihop\n  output_dir: results\n\ndataset:\n  documents_path: data/multihop-rag-150/docs\n  questions_path: data/multihop-rag-150/questions.jsonl\n  qrels_path: data/multihop-rag-150/qrels.jsonl\n\nsystems:\n  - type: no_retrieval\n    name: no_retrieval_floor\n    models:\n      generator: gpt-6-luna\n\n  - type: hybrid_rerank\n    name: hybrid_rerank_default\n    chunker:\n      type: word\n      chunk_size: 500\n      chunk_overlap: 80\n    retrieval:\n      vector_store: numpy\n      bm25_top_k: 20\n      vector_top_k: 20\n      candidate_top_k: 30\n      final_top_k: 5\n      rrf_k: 60\n      reranker: local_relevance\n      multi_query: true\n      max_query_variants: 4\n    models:\n      embedding: text-embedding-3-small\n      generator: gpt-6-luna\n\n  - type: agent_search\n    name: agent_search_tools\n    chunker:\n      type: word\n      chunk_size: 250\n      chunk_overlap: 40\n    retrieval:\n      retriever: hybrid\n      vector_store: numpy\n      max_steps: 5\n      max_cost_usd: 0.05\n      top_k: 5\n    tools: [calculator, date_calc, corpus_grep]\n    models:\n      embedding: text-embedding-3-small\n      generator: gpt-6-luna\n\n  - type: cli_agent\n    name: claude_code\n    retrieval:\n      preset: claude_code\n      model: anthropic:claude-haiku-5-5\n      max_steps: 20\n      timeout_s: 300\n      limits: {max_concurrent_requests: 2}\n\n  - type: cli_agent\n    name: codex\n    retrieval:\n      preset: codex\n      model: gpt-6-luna\n      max_steps: 20\n      timeout_s: 300\n      limits: {max_concurrent_requests: 2}\n\n  - type: cli_agent\n    name: opencode_glm\n    retrieval:\n      preset: opencode\n      model: openrouter:z-ai/glm-5.3\n      max_steps: 20\n      timeout_s: 300\n      limits: {max_concurrent_requests: 2}\n\nopenrouter:\n  provider:\n    data_collection: deny\n\nevaluation:\n  k_values: [1, 3, 5, 10]\n  judge_enabled: true\n  # Haiku 5.5 judges every answer, except those of its own family (claude_code), which gpt-6-luna judges: one judge per answer, never its own family.\n  judge:\n    panel: [anthropic:claude-haiku-5-5, gpt-6-luna]\n    independent: true\n    scorers: first\n  trials: 1\n  max_questions: null\n  max_workers: 4\n  max_cost_usd: 7.0   # the published run's cap, raised from 6.0 to finish (charged at standalone prices; Codex's tokens at API rates)\n  stats:\n    baseline: hybrid_rerank_default   # significance.csv: each harness against a built-in pipeline, on the same questions\n\n# MultiHop-RAG is ~1.4M tokens: indexing it at full concurrency can exceed OpenAI's lowest-tier limit of 1M embedding tokens per minute.\nlimits:\n  tokens_per_minute: 900000\n"
+ }
+}

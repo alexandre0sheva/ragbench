@@ -240,8 +240,8 @@ class BenchmarkEvaluator:
             latency_probe_questions=self.config.evaluation.latency_probe_questions,
         )
         runner = SystemRunner(self, settings, self.progress, on_system_done=self._checkpoint if self.checkpoints is not None else None)
-        restored, restored_probes = self._restore_checkpoints(plan)
-        fresh = {outcome.name: outcome for outcome in runner.run_all(plan.without_systems(restored), documents)}
+        restored, restored_probes, earlier = self._restore_checkpoints(plan)
+        fresh = {outcome.name: outcome for outcome in runner.run_all(plan.without_systems(restored), documents, earlier)}
         all_outcomes = [restored[cfg.resolved_name] if cfg.resolved_name in restored else fresh[cfg.resolved_name] for cfg in plan.systems]
         # A system the spending cap stopped partway (or never started) has results over fewer questions than the others: they are
         # set aside rather than compared. Everything below works on the systems that finished.
@@ -299,50 +299,62 @@ class BenchmarkEvaluator:
         return context_hash(system_config, self.config, self.dataset_digest, self.mode, self.split_info)
 
     def _checkpoint(self, outcome: SystemOutcome) -> None:
-        """Save a system that just finished cleanly (every question answered, none failed); anything else is re-run on resume."""
+        """Save a system that just ran: in full when it finished cleanly (every question answered, none failed), else its good answers
+        as a partial checkpoint, so a resumed run asks only the questions it skipped or failed."""
         assert self.checkpoints is not None
-        if outcome.system is None or not outcome.complete or any(result["per_question"]["error"] is not None for result in outcome.results):
+        if outcome.system is None:  # never started (the cap was already reached): a partial checkpoint from before stays as it is
             return
+        good = [result for result in outcome.results if not result.get("skipped") and result["per_question"]["error"] is None]
         system_config = next(cfg for cfg in self.config.systems if cfg.resolved_name == outcome.name)
+        checkpoint = Checkpoint(
+            system=outcome.name,
+            system_type=outcome.system_type,
+            ingestion_row=outcome.ingestion_row,
+            results=good,
+            runtime_row=outcome.runtime_row,
+            models_used=sorted(_model_names(outcome.system)),
+            generator_model=self.generator_models.get(outcome.name),
+        )
         try:
-            self.checkpoints.save(
-                Checkpoint(
-                    system=outcome.name,
-                    system_type=outcome.system_type,
-                    ingestion_row=outcome.ingestion_row,
-                    results=outcome.results,
-                    runtime_row=outcome.runtime_row,
-                    models_used=sorted(_model_names(outcome.system)),
-                    generator_model=self.generator_models.get(outcome.name),
-                ),
-                self._context_hash(system_config),
-            )
+            if outcome.complete and len(good) == len(outcome.results):
+                self.checkpoints.save(checkpoint, self._context_hash(system_config))
+            elif good:
+                self.checkpoints.save_partial(checkpoint, self._context_hash(system_config))
+            else:
+                self.checkpoints.discard_partial(outcome.name)
         except (OSError, TypeError) as exc:  # a checkpoint is a convenience: failing to write one must not fail the run
             logger.warning("Could not checkpoint system %s: %s", outcome.name, exc)
 
-    def _restore_checkpoints(self, plan: EvaluationPlan) -> tuple[dict[str, SystemOutcome], dict[str, ProbeResult]]:
-        """The systems an earlier attempt of this run finished in the same context, as outcomes; the rest must be run."""
+    def _restore_checkpoints(self, plan: EvaluationPlan) -> tuple[dict[str, SystemOutcome], dict[str, ProbeResult], dict[str, list[dict[str, Any]]]]:
+        """What an earlier attempt of this run left in the same context: the systems it finished, as outcomes (not run again), and the
+        answers of the systems it did not finish, by system (only their other questions are run)."""
         restored: dict[str, SystemOutcome] = {}
         probes: dict[str, ProbeResult] = {}
+        earlier: dict[str, list[dict[str, Any]]] = {}
         if self.checkpoints is None:
-            return restored, probes
+            return restored, probes, earlier
         (self.output_dir / "per_question_partial.jsonl").unlink(missing_ok=True)  # left by an earlier budget stop; rewritten if it happens again
         for position, system_config in enumerate(plan.systems, start=1):
             name = system_config.resolved_name
-            checkpoint = self.checkpoints.load(name, self._context_hash(system_config))
-            if checkpoint is None or len(checkpoint.results) != plan.num_answers:
-                continue
-            restored[name] = SystemOutcome(position, name, checkpoint.system_type, None, checkpoint.ingestion_row, checkpoint.results, checkpoint.runtime_row, restored=True)
+            hash_ = self._context_hash(system_config)
+            checkpoint = self.checkpoints.load(name, hash_)
+            if checkpoint is not None and len(checkpoint.results) == plan.num_answers:
+                restored[name] = SystemOutcome(position, name, checkpoint.system_type, None, checkpoint.ingestion_row, checkpoint.results, checkpoint.runtime_row, restored=True)
+                if checkpoint.probe:
+                    probes[name] = ProbeResult(**checkpoint.probe)
+                self.restored_systems.append(name)
+                self.progress.system_restored(name, len(checkpoint.results))
+            else:
+                checkpoint = self.checkpoints.load_partial(name, hash_)
+                if checkpoint is None:
+                    continue
+                earlier[name] = checkpoint.results
             self.models_used.update(checkpoint.models_used)
             if checkpoint.generator_model is not None:
                 self.generator_models[name] = checkpoint.generator_model
-            if checkpoint.probe:
-                probes[name] = ProbeResult(**checkpoint.probe)
             spent = float((checkpoint.ingestion_row or {}).get("total_cost", 0.0)) + sum(float(r["per_question"]["cost"]["total_cost"]) for r in checkpoint.results)
             self.budget.charge(spent)  # the spending cap is a cap on the whole run, so what the earlier attempt charged still counts
-            self.restored_systems.append(name)
-            self.progress.system_restored(name, len(checkpoint.results))
-        return restored, probes
+        return restored, probes, earlier
 
     def budget_summary(self, completed: list[str], incomplete: dict[str, dict[str, int]]) -> dict[str, Any]:
         return {

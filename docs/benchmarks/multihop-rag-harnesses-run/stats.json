@@ -1,0 +1,204 @@
+{
+  "method": "percentile bootstrap over questions; paired bootstrap against the baseline with Holm-Bonferroni adjustment per metric",
+  "n_boot": 2000,
+  "seed": 0,
+  "alpha": 0.05,
+  "baseline": "hybrid_rerank_default",
+  "baseline_source": "config",
+  "correct_threshold": 4.0,
+  "metrics": [
+    "retrieval_recall@5",
+    "retrieval_mrr@10",
+    "retrieval_ndcg@10",
+    "answer_score",
+    "faithfulness"
+  ],
+  "systems": {
+    "no_retrieval_floor": {
+      "n": 150,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": null,
+          "lo": null,
+          "hi": null
+        },
+        "retrieval_mrr@10": {
+          "mean": null,
+          "lo": null,
+          "hi": null
+        },
+        "retrieval_ndcg@10": {
+          "mean": null,
+          "lo": null,
+          "hi": null
+        },
+        "answer_score": {
+          "mean": 1.9486666666666663,
+          "lo": 1.7398999999999996,
+          "hi": 2.1713499999999994
+        },
+        "faithfulness": {
+          "mean": 2.506666666666667,
+          "lo": 2.166583333333333,
+          "hi": 2.8434999999999993
+        }
+      },
+      "cost_per_correct": 0.002407353846153847
+    },
+    "hybrid_rerank_default": {
+      "n": 150,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6527777777777777,
+          "lo": 0.5972083333333333,
+          "hi": 0.7088888888888889
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7369999999999999,
+          "lo": 0.6764416666666666,
+          "hi": 0.7955694444444443
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6407569515844203,
+          "lo": 0.5878514595496646,
+          "hi": 0.6914526386426963
+        },
+        "answer_score": {
+          "mean": 3.654666666666667,
+          "lo": 3.4966666666666666,
+          "hi": 3.8093333333333326
+        },
+        "faithfulness": {
+          "mean": 4.003333333333333,
+          "lo": 3.856583333333333,
+          "hi": 4.1433333333333335
+        }
+      },
+      "cost_per_correct": 0.0021756717333333325
+    },
+    "agent_search_tools": {
+      "n": 150,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.691111111111111,
+          "lo": 0.6366527777777778,
+          "hi": 0.7466944444444443
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6994444444444444,
+          "lo": 0.6374361111111111,
+          "hi": 0.7597999999999999
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.647202833779578,
+          "lo": 0.5959696740077833,
+          "hi": 0.7013069507585158
+        },
+        "answer_score": {
+          "mean": 3.4366666666666665,
+          "lo": 3.25465,
+          "hi": 3.6147
+        },
+        "faithfulness": {
+          "mean": 3.57,
+          "lo": 3.3833333333333333,
+          "hi": 3.7534166666666664
+        }
+      },
+      "cost_per_correct": 0.006082919692307693
+    },
+    "claude_code": {
+      "n": 150,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6322222222222222,
+          "lo": 0.5738749999999999,
+          "hi": 0.6916666666666667
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.6934708994708995,
+          "lo": 0.6312916666666666,
+          "hi": 0.7579554232804233
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6330175292701054,
+          "lo": 0.5788732611976463,
+          "hi": 0.6869563117485562
+        },
+        "answer_score": {
+          "mean": 3.554666666666667,
+          "lo": 3.3533333333333335,
+          "hi": 3.76
+        },
+        "faithfulness": {
+          "mean": 3.5,
+          "lo": 3.2733333333333334,
+          "hi": 3.7333333333333334
+        }
+      },
+      "cost_per_correct": 0.026358863636363646
+    },
+    "codex": {
+      "n": 150,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.47333333333333333,
+          "lo": 0.41,
+          "hi": 0.5355555555555557
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.5143730158730159,
+          "lo": 0.44659464285714273,
+          "hi": 0.5814946428571428
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.48421089958229657,
+          "lo": 0.4247310091580707,
+          "hi": 0.5441817807588752
+        },
+        "answer_score": {
+          "mean": 2.923333333333334,
+          "lo": 2.729983333333333,
+          "hi": 3.1179999999999994
+        },
+        "faithfulness": {
+          "mean": 2.54,
+          "lo": 2.3066666666666666,
+          "hi": 2.77
+        }
+      },
+      "cost_per_correct": 0.06145039102564102
+    },
+    "opencode_glm": {
+      "n": 149,
+      "metrics": {
+        "retrieval_recall@5": {
+          "mean": 0.6560402684563759,
+          "lo": 0.5956236017897092,
+          "hi": 0.7142197986577179
+        },
+        "retrieval_mrr@10": {
+          "mean": 0.7369580270586982,
+          "lo": 0.6738743741344413,
+          "hi": 0.7976710477255778
+        },
+        "retrieval_ndcg@10": {
+          "mean": 0.6702952752788985,
+          "lo": 0.61063383570917,
+          "hi": 0.7263066537260465
+        },
+        "answer_score": {
+          "mean": 3.6382550335570465,
+          "lo": 3.5,
+          "hi": 3.773842281879195
+        },
+        "faithfulness": {
+          "mean": 3.0268456375838926,
+          "lo": 2.835570469798658,
+          "hi": 3.204697986577181
+        }
+      },
+      "cost_per_correct": 0.022748105938805968
+    }
+  }
+}

@@ -9,8 +9,8 @@
           model: gpt-6-luna
 
 Needs `pip install 'ragbench[langchain]'`. The tutorial's defaults: `RecursiveCharacterTextSplitter` (1000 characters, 200 overlap), an in-memory
-vector store, one retrieval, a "use the context" prompt, a chat model at temperature 0. The model and the embeddings are the built-in systems'
-(`gpt-6-luna`, `text-embedding-3-small`); the retrieval depth is RAGBench's `top_k`, so the systems are compared at the same depth.
+vector store, one retrieval, a "use the context" prompt, a chat model at its default temperature (the tutorial's 0 is rejected by GPT-6 models).
+The model and the embeddings are the built-in systems' (`gpt-6-luna`, `text-embedding-3-small`); the retrieval depth is RAGBench's `top_k`, so the systems are compared at the same depth.
 
 With no key, or without `RAGBENCH_REFERENCE_LIVE=1`, it runs on RAGBench's mock models (see `ragbench.adapters.offline`). Live, the chat model is LangChain's own
 `ChatOpenAI`; the embeddings go through RAGBench's client (the same `text-embedding-3-small` vectors), so indexing a large corpus honours the run's
@@ -86,7 +86,8 @@ def ingest(documents: list[Any]) -> None:
         from langchain_openai import ChatOpenAI
 
         embeddings: Embeddings = RagbenchEmbeddings()
-        llm: Any = ChatOpenAI(model=DEFAULT_GENERATOR_MODEL, temperature=0)
+        # No `temperature=0`: GPT-6 models accept only their default and reject 0 (RAGBench's own client drops it the same way).
+        llm: Any = ChatOpenAI(model=DEFAULT_GENERATOR_MODEL)
     else:
         embeddings, llm = OfflineEmbeddings(), OfflineChatModel()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
