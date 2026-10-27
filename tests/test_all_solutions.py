@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -19,6 +20,15 @@ MODELS = ROOT / "configs" / "all_solutions_models.yaml"
 # `external_http` benchmarks an endpoint the user runs; there is no public one to put in a published benchmark.
 NOT_BENCHMARKED = {"external_http"}
 HARNESSES = {"claude_code", "codex", "opencode_glm"}
+# The framework entries import their framework (an optional extra); without it the entry cannot be built, so a run without the extra leaves it out.
+FRAMEWORK_MODULES = {"langchain_default": "langchain_core", "llamaindex_default": "llama_index.core", "haystack_default": "haystack"}
+
+
+def _installed(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:  # the parent package of a dotted name is missing
+        return False
 
 
 @pytest.fixture(scope="module")
@@ -92,6 +102,7 @@ def test_all_solutions_runs_end_to_end_in_mock(tmp_path):
     raw["dataset"] = {"documents_path": str(demo / "docs"), "questions_path": str(demo / "questions.jsonl"), "qrels_path": str(demo / "qrels.jsonl")}
     raw["run"]["output_dir"] = str(tmp_path)
     raw["evaluation"].update(max_questions=2, max_workers=2)
+    raw["systems"] = [system for system in raw["systems"] if _installed(FRAMEWORK_MODULES.get(system["name"], "sys"))]
     for system in raw["systems"]:
         for key in ("target", "ingest_target"):
             if key in system.get("retrieval", {}):
