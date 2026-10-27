@@ -25,6 +25,9 @@ OUT = ROOT / "docs" / "assets" / "auto-to-report.gif"
 REPORT = ROOT / "docs" / "benchmarks" / "multihop-rag-run" / "report-desktop.png"
 COMMAND = "ragbench auto --docs ./my_docs --mock"
 COLUMNS = 100
+REPORT_CUT = 1530  # source pixel row of the report shot just below the recommendation card, so the card is whole
+SCENE_HEIGHT = 900
+PAGE = (249, 249, 247)  # the report's own background, behind the shot when it is narrower than the terminal
 FONT = "/System/Library/Fonts/Menlo.ttc"
 SIZE = 15
 BG, FG, DIM, ACCENT, GREEN = (22, 24, 29), (220, 223, 228), (128, 134, 145), (125, 176, 255), (130, 214, 150)
@@ -87,7 +90,12 @@ def build() -> None:
     rows = story(capture())
     if not any("Recommendation" in text for text, _ in rows):
         raise SystemExit("the run printed no recommendation; nothing to show")
-    height = 16 + (SIZE + 6) * (len(rows) + 3)
+    report = Image.open(REPORT).convert("RGB").crop((0, 0, 1280, REPORT_CUT))
+    width = int(font.getlength("M")) * COLUMNS + 40
+    scaled = report.resize((round(report.width * SCENE_HEIGHT / report.height), SCENE_HEIGHT))
+    shot = Image.new("RGB", (width, SCENE_HEIGHT), PAGE)
+    shot.paste(scaled, ((width - scaled.width) // 2, 0))
+    height = max(16 + (SIZE + 6) * (len(rows) + 3), SCENE_HEIGHT)  # every scene has the size of the tallest: the whole recommendation card
     frames: list[Image.Image] = []
     delays: list[int] = []
     for typed in range(0, len(COMMAND) + 1, 2):
@@ -98,9 +106,6 @@ def build() -> None:
         frames.append(terminal(font, rows[:count], len(COMMAND), height))
         delays.append(700 if rows[count - 1][0].startswith("╭") else 260)
     delays[-1] = 4500
-    report = Image.open(REPORT).convert("RGB")
-    width = frames[0].width
-    shot = report.resize((width, int(report.height * width / report.width))).crop((0, 0, width, height))
     frames.append(shot)
     delays.append(6000)
     palette = [frame.quantize(colors=96, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE) for frame in frames]

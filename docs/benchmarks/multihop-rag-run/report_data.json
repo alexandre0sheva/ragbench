@@ -6,7 +6,7 @@
   "started_utc": "2026-10-26T20:17:02Z",
   "finished_utc": "2026-10-27T00:24:17Z",
   "wall_time_s": 14832.584625624819,
-  "ragbench_version": "0.3.0",
+  "ragbench_version": "0.4.0",
   "python": "3.12.12",
   "git_sha": "35bbfe20f74be28cdbcdf79883dff15ff6c2d17b",
   "git_dirty": true,
@@ -11349,7 +11349,7 @@
  "questions": null,
  "reproducibility": {
   "manifest": {
-   "ragbench_version": "0.3.0",
+   "ragbench_version": "0.4.0",
    "python": "3.12.12",
    "platform": "macOS-27.0.1-arm64-arm-64bit",
    "dependencies": {

@@ -9,7 +9,7 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # ISO date the price table below was last reviewed. Bump it whenever you touch the table.
-PRICING_AS_OF = "2026-10-24"
+PRICING_AS_OF = "2026-10-27"
 
 # A price row: USD per 1M tokens, `{"input": ..., "output": ...}`. A row whose price depends on prompt length also has
 # `tiers`: `[{"max_prompt_tokens": N, "input": ..., "output": ...}, ..., {"input": ..., "output": ...}]`, in increasing order.
@@ -29,7 +29,7 @@ def tiered(*tiers: tuple[int | None, float, float]) -> PriceRow:
 # (or override per run with the `pricing:` config section) before using RAGBench
 # for budgeting or procurement decisions.
 #
-# Sources, fetched 2026-10-24 (re-verify the whole table with docs/release-checklist.md before a release):
+# Sources, fetched 2026-10-27 (re-verify the whole table with docs/release-checklist.md before a release):
 #   OpenAI    https://developers.openai.com/api/docs/pricing  and the per-model pages under /api/docs/models/
 #   Anthropic https://platform.claude.com/docs/en/about-claude/pricing  and /docs/en/about-claude/models/overview
 # OpenRouter models are not in this table: their prices come from the OpenRouter catalog (see `models/openrouter_catalog.py`).
@@ -38,10 +38,11 @@ def tiered(*tiers: tuple[int | None, float, float]) -> PriceRow:
 # cheaper choice). Dated snapshots are covered by prefix matching, so they need no rows. Cached-input and batch discounts
 # are not modelled: every token is billed at the standard input/output rate.
 MODEL_PRICING_USD_PER_1M: dict[str, PriceRow] = {
-    # OpenAI chat: flagship / balanced / cheap. GPT-6 has no mid "terra" model; gpt-6.1-sol ($2/$10) undercuts gpt-5.6-terra ($2/$12).
+    # OpenAI chat: flagship / balanced / cheap. gpt-6.1-terra ($1/$5) and gpt-6.1-sol ($2/$10) undercut gpt-5.6-terra ($2/$12).
     # Prompts over 272K input tokens pay the long-context rates.
     "gpt-6-astra": tiered((272_000, 10.00, 50.00), (None, 20.00, 75.00)),
     "gpt-6.1-sol": tiered((272_000, 2.00, 10.00), (None, 4.00, 15.00)),
+    "gpt-6.1-terra": tiered((272_000, 1.00, 5.00), (None, 2.00, 7.50)),
     "gpt-6-luna": tiered((272_000, 0.10, 0.50), (None, 0.20, 0.75)),
     # OpenAI embeddings (no newer generation has been released).
     "text-embedding-3-small": {"input": 0.02, "output": 0.0},

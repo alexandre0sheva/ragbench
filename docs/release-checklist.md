@@ -4,7 +4,7 @@ Use this before tagging a release. CI runs most of the automatic checks; the man
 
 ## Prepare
 
-- [ ] Rename `## [Unreleased]` in `CHANGELOG.md` to the version and date, and start a new empty `## [Unreleased]`.
+- [ ] Rename `## [Unreleased]` in `CHANGELOG.md` to the version and date. Do not leave an empty `## [Unreleased]` behind; the next change adds it.
 - [ ] Set the version in `pyproject.toml` and `CITATION.cff` (and the date in the latter).
 - [ ] **Refresh model names and prices.** Providers retire and add models every few months, and a stale price table makes every cost number wrong.
   - Re-read the **official** model and pricing pages of OpenAI and Anthropic (fetch them on the day; never work from memory), plus the pages of any other provider with a price row. Note every prompt-length tier (`tiers` in the table).

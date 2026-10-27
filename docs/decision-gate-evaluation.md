@@ -12,7 +12,7 @@
 | Dataset | the [demo dataset](../data/demo): 60 documents, 163 questions, of which 138 are answerable with relevance labels and 25 are unanswerable |
 | Systems | `hybrid_rerank` (same ranking, no gate), `corrective` (nearest design), `no_retrieval` (the floor), and six `decision_gate` variants, each differing from the default in one way |
 | Spend | $1.15 charged at standalone prices, about $0.30 real spend after cache reuse; about $0.9 in total for the whole investigation (probes, a smoke test, and earlier runs of the config as it evolved) |
-| Versions | ragbench 0.3.0 plus this change, Python 3.12.12, prices as of 2026-10-01 |
+| Versions | ragbench 0.4.0, Python 3.12.12, prices as of 2026-10-01 |
 
 Retrieval depth 10, generator context 5 chunks. Every `decision_gate` variant uses the chunker and retrieval options of `hybrid_rerank_default`, so its ranking, and therefore its Recall@5 (0.773), is the same by construction; what changes is what the generator is given and whether it is called at all. The `hybrid_rerank` and `corrective` rows match the [October 1 example run](example-run.md) (answer scores 4.72 and 4.77, the same refusal counts), so that run is the right place to read the other systems; the closest of them are quoted below.
 

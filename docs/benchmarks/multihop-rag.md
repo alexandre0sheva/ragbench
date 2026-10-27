@@ -14,7 +14,7 @@ This is RAGBench's published benchmark. **Every RAG solution RAGBench can run** 
 | Judge | `anthropic:claude-haiku-5-5` scores every answer except Claude Code's, which `gpt-6-luna` scores (`evaluation.judge.scorers: first`): one judge per answer, never of the generator's own family |
 | Settings | `trials: 1`, `full_context` at a 50,000-token budget, prices as of 2026-10-24 |
 | When | 2026-10-26T20:17:02Z to 2026-10-27T00:24:17Z (main run) |
-| Versions | ragbench 0.3.0, Python 3.12.12 |
+| Versions | ragbench 0.4.0, Python 3.12.12 |
 | Spend | main run $21.61 charged at standalone prices (cap $24.00), $20.64 real after the disk cache; harness run $6.61 charged (cap $7.00), $6.71 real; model comparison $9.08 charged (cap $9.40), $8.86 real |
 | Errors | 0 of 9600 question-system pairs in the main run, 1 of 900 in the harness run |
 

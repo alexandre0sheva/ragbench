@@ -13,7 +13,7 @@ A complete live run of [`configs/all.yaml`](../configs/all.yaml) on the bundled 
 | Dataset | 163 questions (138 with relevance labels), 60 documents (about 23k tokens), [`data/demo`](../data/demo) |
 | Systems | 24 |
 | Spend | $3.26 charged at standalone prices; $0.07 real spend for this run after $3.24 of cache reuse, because the same systems had been run before (the original 22 on 1 Oct 2026 for $2.91 of real spend, the gate for under $1 including its exploration); cap $6.00 |
-| Versions | ragbench 0.3.0 plus `decision_gate`, Python 3.12.12, openai 3.26.0 |
+| Versions | ragbench 0.4.0, Python 3.12.12, openai 3.26.0 |
 | Questions that errored | 0 of 3912 question-system pairs (see [the earlier rejected call](#the-earlier-rejected-call)) |
 
 ## Recommendation

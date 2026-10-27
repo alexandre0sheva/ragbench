@@ -1,5 +1,5 @@
 {
-  "ragbench_version": "0.3.0",
+  "ragbench_version": "0.4.0",
   "python": "3.12.12",
   "platform": "macOS-27.0.1-arm64-arm-64bit",
   "dependencies": {

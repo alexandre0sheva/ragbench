@@ -50,7 +50,7 @@ ragbench compare --config configs/all.yaml --mock --max-workers 4
 - Add or update tests for behavior changes (tests first for logic such as metrics, parsing, routing, caching and statistics).
 - Keep demo data fictional and safe to publish. `data/hard` is generated: change `scripts/generate_hard_suite.py` and run it, never the files.
 - Do not commit `results/`, `.env`, caches or local vector-store state.
-- Every change adds a bullet under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
+- Every change adds a bullet to [CHANGELOG.md](CHANGELOG.md), under a `## [Unreleased]` heading above the latest release (add the heading if it is not there).
 
 ## Good first issues
 

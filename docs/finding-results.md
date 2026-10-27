@@ -16,7 +16,7 @@ RAGBench publishes several runs, and each has its own page and folder. This page
 | Which generator model to use, open-weight ones included | [MultiHop-RAG: Open-weight generators](benchmarks/multihop-rag.md#open-weight-generators) |
 | LangChain, LlamaIndex and Haystack out of the box | [MultiHop-RAG: Frameworks](benchmarks/multihop-rag.md#frameworks-out-of-the-box) |
 | Every published run's table on one page, filterable | the docs site's [Leaderboard](https://alexandre0sheva.github.io/ragbench/leaderboard/) and its explorer (built from the run folders when the site is built) |
-| One run's files end to end, on the demo dataset | [Example run](example-run.md) (ragbench 0.3.0, October 2026) |
+| One run's files end to end, on the demo dataset | [Example run](example-run.md) (ragbench 0.4.0, October 2026) |
 | `decision_gate` measured on its own | [Decision gate evaluation](decision-gate-evaluation.md) (demo dataset) |
 | How a number is computed, and what it cannot tell you | [Methodology](methodology.md) |
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ragbench"
-version = "0.3.0"
+version = "0.4.0"
 description = "Evaluation-first RAG benchmark framework for comparing retrieval and generation strategies."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -41,7 +41,7 @@ dependencies = [
   "scikit-learn>=1.9.1",
   "rank-bm25>=0.2.2",
   "tiktoken>=0.14",
-  "openai>=3.37",
+  "openai>=3.39",
   "jinja2>=3.1.6",
   "markdown>=3.11.2",
 ]
@@ -57,8 +57,8 @@ Changelog = "https://github.com/alexandre0sheva/ragbench/blob/main/CHANGELOG.md"
 dev = [
   "pytest>=9.1.1",
   "pytest-xdist>=3.8",  # `pytest -n auto`; the slow tests are marked, see CONTRIBUTING.md
-  "httpx>=0.28",  # the wire-level tests drive the real OpenAI SDK through httpx.MockTransport; the SDK no longer installs it
-  "ruff>=0.17.2",
+  "httpx>=0.28.1",  # the wire-level tests drive the real OpenAI SDK through httpx.MockTransport; the SDK no longer installs it
+  "ruff>=0.17.3",
   "build>=1.6.1",
   "twine>=7",
   "pytest-cov>=7.1",
@@ -74,10 +74,10 @@ anthropic = ["anthropic>=2.3"]
 # Reading the Parquet files of the hub datasets (`ragbench datasets pull hotpotqa`, `galileo-*`).
 hub = ["pyarrow>=26"]
 # Framework adapters (`ragbench.adapters.*`) and the `examples/*_default.py` reference pipelines built with them.
-langchain = ["langchain-core>=1.7", "langchain-text-splitters>=1.1.3", "langchain-openai>=1.7.2"]
+langchain = ["langchain-core>=1.7", "langchain-text-splitters>=1.1.3", "langchain-openai>=1.7.3"]
 # Not llama-index-llms-openai: every release requires openai<3 (0.8.3, 2026-10-12); the reference pipeline reaches OpenAI through RAGBench's client.
 llamaindex = ["llama-index-core>=0.14.25"]
-haystack = ["haystack-ai>=3.3"]
+haystack = ["haystack-ai>=3.4"]
 # MCP tools (`tools: [{type: mcp, ...}]`); 2.x is the Client API the integration uses.
 mcp = ["mcp>=2.3"]
 # Trace export (`ragbench export-traces --format otlp|openinference`): spans sent over OTLP/HTTP to Phoenix, Langfuse or any collector.
@@ -85,7 +85,7 @@ mcp = ["mcp>=2.3"]
 docs = ["mkdocs-material>=9.8"]
 otel = ["opentelemetry-sdk>=1.45.1", "opentelemetry-exporter-otlp-proto-http>=1.45.1"]
 # ColBERT late interaction (`late_interaction`): an in-house loader, because pylate 1.6.0 pins sentence-transformers==5.3.0.
-colbert = ["transformers>=5.20", "torch>=2.14", "safetensors>=0.8"]
+colbert = ["transformers>=5.21", "torch>=2.14.1", "safetensors>=0.8"]
 # Vector backends (`retrieval.vector_store`); the default, `numpy`, needs none of them.
 chroma = ["chromadb>=1.5.9"]
 faiss = ["faiss-cpu>=1.15.1"]
